@@ -10,6 +10,7 @@ use seshat_domain::entities::{Location, StandardLocationKind};
 use seshat_infrastructure::filesystem::{
     GioDeviceMonitor, GioDirectoryReader, GioDirectoryWatcher, GioLauncher, XdgStandardLocations,
 };
+use seshat_infrastructure::persistence::{FileThemeRepository, TomlPreferencesStore};
 use seshat_presentation::AppInit;
 use tracing_subscriber::EnvFilter;
 
@@ -69,6 +70,8 @@ fn run_app() -> ExitCode {
         directory_watcher: Rc::new(GioDirectoryWatcher::new()),
         device_monitor: Rc::new(GioDeviceMonitor::new()),
         launcher: Rc::new(GioLauncher::new()),
+        preferences: Rc::new(TomlPreferencesStore::default_location()),
+        themes: Rc::new(FileThemeRepository::default_location()),
     };
     seshat_presentation::run(APP_ID, init);
     ExitCode::SUCCESS

@@ -37,7 +37,7 @@ When a location is shown, it is watched *before* it is listed, so changes made b
 
 Each navigation increments a view generation. Events and listings from superseded views are dropped.
 
-**Known limitation:** a reload replaces the whole list, which resets scroll position and selection. Phase 3 (selection, sorting) will switch to incremental updates.
+Reloads keep the selection (matched by location) and the scroll position. Filtering, search and sorting run in memory on the last listing (`view::arrange`), so changing them never re-reads the disk.
 
 ## Devices
 

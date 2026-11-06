@@ -16,8 +16,14 @@ const SHORTCUTS: &[Shortcut] = &[
     ("<Alt>Up", || Msg::GoUp),
     ("F5", || Msg::Refresh),
     ("<Control>r", || Msg::Refresh),
-    ("<Control>h", || Msg::ToggleHiddenShortcut),
+    ("<Control>h", || Msg::ToggleHidden),
     ("<Control>l", || Msg::EditAddress),
+    ("<Control>f", || Msg::StartSearch),
+    ("<Control>1", || Msg::SetViewMode("list".to_owned())),
+    ("<Control>2", || Msg::SetViewMode("grid".to_owned())),
+    ("<Control><Shift>c", || Msg::CopyPaths),
+    ("<Shift>F10", || Msg::KeyboardContextMenu),
+    ("Menu", || Msg::KeyboardContextMenu),
 ];
 
 pub fn install(window: &gtk::Window, sender: &ComponentSender<App>) {

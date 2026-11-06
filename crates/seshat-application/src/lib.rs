@@ -5,7 +5,9 @@
 
 pub mod navigation;
 pub mod ports;
+pub mod preferences;
 pub mod use_cases;
+pub mod view;
 
 use std::future::Future;
 use std::pin::Pin;

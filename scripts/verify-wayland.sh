@@ -8,7 +8,8 @@
 #      xdg_toplevel surface on the Wayland connection;
 #   3. confirms the check fails when no Wayland compositor is reachable.
 #
-# Run inside `nix develop`. Exits non-zero on any failure.
+# Run inside `nix develop`. Exits non-zero on any failure. Uses a throwaway
+# XDG_CONFIG_HOME so the run never writes to the real Seshat settings.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -42,6 +43,7 @@ done
 # Isolated environment: no X11 display, Wayland only.
 run() {
     env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="$RUNTIME_DIR" \
+        XDG_CONFIG_HOME="$RUNTIME_DIR/config" \
         WAYLAND_DISPLAY="$SOCKET" XDG_SESSION_TYPE=wayland GDK_BACKEND=wayland \
         XDG_DATA_DIRS="${XDG_DATA_DIRS:-}" RUST_LOG=info "$@"
 }
@@ -64,6 +66,7 @@ echo "xdg_toplevel created on $SOCKET"
 
 echo "== 3. check fails without a Wayland compositor"
 if env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="$RUNTIME_DIR" \
+        XDG_CONFIG_HOME="$RUNTIME_DIR/config" \
     WAYLAND_DISPLAY="missing-$$" GDK_BACKEND=wayland "$BIN" --check-backend >/dev/null 2>&1; then
     fail "--check-backend succeeded without a compositor"
 fi

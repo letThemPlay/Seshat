@@ -10,7 +10,7 @@ use super::gio_file::gio_file;
 
 /// Only metadata is queried; file contents are never read.
 const ATTRIBUTES: &str = "standard::name,standard::type,standard::size,\
-                          standard::is-hidden,standard::display-name,standard::is-symlink,time::modified,\
+                          standard::is-hidden,standard::display-name,standard::fast-content-type,standard::is-symlink,time::modified,\
                           trash::orig-path,trash::deletion-date";
 
 /// Entries are fetched in batches so large directories don't need one huge
@@ -102,6 +102,9 @@ fn to_entry(parent: &Location, info: &gio::FileInfo) -> FileEntry {
             .modification_date_time()
             .and_then(|dt| system_time(&dt)),
         hidden: info.is_hidden(),
+        content_type: info
+            .attribute_string("standard::fast-content-type")
+            .map(|s| s.to_string()),
         trash_info: trash_info(info),
     }
 }

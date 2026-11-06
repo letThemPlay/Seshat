@@ -37,6 +37,7 @@ fn lists_files_directories_symlinks_and_hidden_entries() {
     assert_eq!(file.size, Some(5));
     assert_eq!(file.local_path(), Some(dir.path().join("a.txt").as_path()));
     assert!(file.modified.is_some());
+    assert_eq!(file.content_type.as_deref(), Some("text/plain"));
 
     let sub = find(&entries, OsStr::new("sub"));
     assert_eq!(sub.kind, EntryKind::Directory);

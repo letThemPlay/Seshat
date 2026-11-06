@@ -3,9 +3,10 @@
 //! Renders application state and forwards user intent to application use
 //! cases. Never performs filesystem I/O directly.
 
+mod actions;
 mod app;
-mod content;
 pub mod diagnostics;
+mod files;
 mod pathbar;
 mod sidebar;
 pub mod theme;

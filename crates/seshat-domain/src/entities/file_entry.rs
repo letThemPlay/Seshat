@@ -42,6 +42,8 @@ pub struct FileEntry {
     pub size: Option<u64>,
     pub modified: Option<SystemTime>,
     pub hidden: bool,
+    /// MIME type guessed from the name (never from contents), if known.
+    pub content_type: Option<String>,
     /// Present only for top-level items in the Trash.
     pub trash_info: Option<TrashInfo>,
 }
@@ -88,6 +90,7 @@ mod tests {
             size: Some(1),
             modified: None,
             hidden: false,
+            content_type: None,
             trash_info: None,
         }
     }

@@ -175,6 +175,81 @@ window.seshat {{
   background-color: @seshat_selected;
 }}
 
+.seshat-content gridview {{
+  background-color: @seshat_surface;
+  padding: {padding}px;
+}}
+
+.seshat-content gridview child {{
+  color: @seshat_text_primary;
+  padding: {padding}px;
+  border-radius: {radius}px;
+}}
+
+.seshat-content gridview child:hover {{
+  background-color: @seshat_hover;
+}}
+
+.seshat-content gridview child:selected {{
+  background-color: @seshat_selected;
+}}
+
+.seshat-search,
+.seshat-search > revealer > box {{
+  background-color: @seshat_surface;
+  border-color: @seshat_border;
+  box-shadow: none;
+}}
+
+.seshat-search > revealer > box {{
+  border-bottom: 1px solid @seshat_border;
+}}
+
+.seshat-search entry image,
+.seshat-pathbar entry image {{
+  color: @seshat_text_muted;
+}}
+
+.seshat-search button {{
+  color: @seshat_text_secondary;
+  background-color: transparent;
+}}
+
+.seshat-search entry {{
+  background-color: @seshat_app_background;
+  color: @seshat_text_primary;
+  border-radius: {radius}px;
+}}
+
+window.seshat popover > contents,
+window.seshat popover > arrow {{
+  background-color: @seshat_surface;
+  color: @seshat_text_primary;
+  border: 1px solid @seshat_border;
+  border-radius: {radius}px;
+}}
+
+window.seshat popover modelbutton {{
+  color: @seshat_text_primary;
+  border-radius: {radius}px;
+}}
+
+window.seshat popover modelbutton:hover,
+window.seshat popover modelbutton:selected {{
+  background-color: @seshat_hover;
+}}
+
+window.seshat popover check:checked,
+window.seshat popover radio:checked {{
+  background-color: @seshat_accent;
+  color: @seshat_surface;
+  border-color: @seshat_accent;
+}}
+
+window.seshat popover separator {{
+  background-color: @seshat_border;
+}}
+
 .seshat-content .dim-label,
 .seshat-status {{
   color: @seshat_text_muted;

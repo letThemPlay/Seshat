@@ -2,7 +2,7 @@
 
 A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4.
 
-> **Status:** Phases 1–2 (foundation, filesystem integration) are complete. You can browse with back/forward history, breadcrumbs and a typed address bar, see live directory updates, browse the Trash, and use mounted devices with mount and eject. File operations, the D-Bus progress service, sorting, search and grid view come in later phases. See `spec.md` §17.
+> **Status:** Phases 1–3 are complete: foundation, filesystem integration, and the UI and theming. You can browse with history, breadcrumbs and an address bar; use list and grid views, natural sorting, search, multi-selection, context menus and drag-out; see live updates; browse the Trash and devices; and use light, dark and custom themes. Preferences are saved between sessions. File operations (copy, move, rename, delete) and the D-Bus progress service come in Phases 4–5. See `spec.md` §17.
 
 ## Keyboard
 
@@ -13,6 +13,11 @@ A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4.
 | F5, Ctrl+R | Refresh |
 | Ctrl+H | Show hidden files |
 | Ctrl+L | Type a location (`~/…`, `/…`, `trash:`), Esc to cancel |
+| Ctrl+F, or start typing | Search this folder |
+| Ctrl+1 / Ctrl+2 | List / grid view |
+| Ctrl+A | Select all |
+| Ctrl+Shift+C | Copy selected paths |
+| Shift+F10, Menu | Context menu |
 | Enter | Open folder or file |
 
 ## Build and run
@@ -42,6 +47,7 @@ cargo run -p seshat -- --check-backend
 - [Filesystem integration](docs/architecture/filesystem.md)
 - [ADR 0001: UI framework](docs/decisions/0001-ui-framework.md)
 - [Wayland verification](docs/development/wayland-verification.md)
+- [Writing themes](docs/development/themes.md)
 
 ## Layout
 

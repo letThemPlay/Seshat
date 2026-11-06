@@ -2,12 +2,14 @@
 
 use gtk::prelude::*;
 use relm4::ComponentSender;
-use relm4::typed_view::list::TypedListView;
+use seshat_application::view::ViewMode;
 
 use super::{App, Msg};
-use crate::content::FileRow;
+use crate::actions;
+use crate::files::FileView;
 use crate::pathbar::PathBar;
 
+/// Widgets only touched from `update_view`.
 #[derive(Debug)]
 pub struct AppWidgets {
     pub back_button: gtk::Button,
@@ -17,11 +19,19 @@ pub struct AppWidgets {
     /// Location the breadcrumbs were last rendered for.
     pub rendered_crumbs: Option<seshat_domain::entities::Location>,
     pub editing_address: bool,
-    pub hidden_toggle: gtk::ToggleButton,
-    pub theme_button: gtk::Button,
     pub stack: gtk::Stack,
     pub status_title: gtk::Label,
     pub status_bar: gtk::Label,
+}
+
+/// Widgets the model drives directly from `update`.
+#[derive(Debug, Clone)]
+pub struct Handles {
+    pub file_view: FileView,
+    pub theme_button: gtk::MenuButton,
+    pub search_bar: gtk::SearchBar,
+    pub search_entry: gtk::SearchEntry,
+    pub context_menu: gtk::PopoverMenu,
 }
 
 fn icon_button(
@@ -39,15 +49,30 @@ fn icon_button(
     button
 }
 
-/// Builds the window content. Returns the widgets plus the parts the model
-/// keeps (the file list).
+fn action_toggle(
+    icon: &str,
+    tooltip: &str,
+    action: &str,
+    target: Option<&str>,
+) -> gtk::ToggleButton {
+    let button = gtk::ToggleButton::builder()
+        .icon_name(icon)
+        .tooltip_text(tooltip)
+        .action_name(format!("{}.{action}", actions::GROUP))
+        .build();
+    if let Some(target) = target {
+        button.set_action_target_value(Some(&target.to_variant()));
+    }
+    button
+}
+
 pub fn build(
     root: &gtk::Window,
     sidebar: &gtk::ScrolledWindow,
-    entries: &TypedListView<FileRow, gtk::MultiSelection>,
+    file_view: FileView,
     sender: &ComponentSender<App>,
-) -> AppWidgets {
-    // Toolbar
+) -> (AppWidgets, Handles) {
+    // ── Toolbar ──
     let header = gtk::HeaderBar::new();
     header.add_css_class("seshat-toolbar");
     let back_button = icon_button("go-previous-symbolic", "Back (Alt+Left)", sender, || {
@@ -87,43 +112,84 @@ pub fn build(
     pathbar.entry.add_controller(escape);
     header.set_title_widget(Some(&pathbar.root));
 
+    let theme_button = gtk::MenuButton::builder()
+        .icon_name("preferences-desktop-appearance-symbolic")
+        .tooltip_text("Theme")
+        .build();
+    let sort_button = gtk::MenuButton::builder()
+        .icon_name("view-sort-ascending-symbolic")
+        .tooltip_text("Sort")
+        .menu_model(&actions::sort_menu())
+        .build();
+    let view_toggles = gtk::Box::builder().css_classes(["linked"]).build();
+    view_toggles.append(&action_toggle(
+        "view-list-symbolic",
+        "List view (Ctrl+1)",
+        "view-mode",
+        Some(ViewMode::List.id()),
+    ));
+    view_toggles.append(&action_toggle(
+        "view-grid-symbolic",
+        "Grid view (Ctrl+2)",
+        "view-mode",
+        Some(ViewMode::Grid.id()),
+    ));
+    let hidden_toggle = action_toggle(
+        "view-reveal-symbolic",
+        "Show hidden files (Ctrl+H)",
+        "show-hidden",
+        None,
+    );
+    let search_toggle = gtk::ToggleButton::builder()
+        .icon_name("system-search-symbolic")
+        .tooltip_text("Search (Ctrl+F)")
+        .build();
     let edit_button = icon_button(
         "document-edit-symbolic",
         "Type a location (Ctrl+L)",
         sender,
         || Msg::EditAddress,
     );
-    let theme_button = gtk::Button::new();
-    theme_button.connect_clicked({
-        let sender = sender.clone();
-        move |_| sender.input(Msg::CycleTheme)
-    });
-    let hidden_toggle = gtk::ToggleButton::builder()
-        .icon_name("view-reveal-symbolic")
-        .tooltip_text("Show hidden files (Ctrl+H)")
-        .build();
-    hidden_toggle.connect_toggled({
-        let sender = sender.clone();
-        move |b| sender.input(Msg::ToggleHidden(b.is_active()))
-    });
     header.pack_end(&theme_button);
+    header.pack_end(&sort_button);
+    header.pack_end(&view_toggles);
     header.pack_end(&hidden_toggle);
+    header.pack_end(&search_toggle);
     header.pack_end(&edit_button);
     root.set_titlebar(Some(&header));
 
-    // Content pane
-    entries
-        .view
-        .update_property(&[gtk::accessible::Property::Label("Files")]);
-    entries.view.connect_activate({
-        let sender = sender.clone();
-        move |_, position| sender.input(Msg::Activate(position))
-    });
-    let list_scroll = gtk::ScrolledWindow::builder()
-        .child(&entries.view)
-        .vexpand(true)
+    // ── Search ──
+    let search_entry = gtk::SearchEntry::builder()
+        .placeholder_text("Search this folder")
+        .hexpand(true)
         .build();
+    let search_bar = gtk::SearchBar::builder()
+        .child(&search_entry)
+        .show_close_button(true)
+        .css_classes(["seshat-search"])
+        .build();
+    search_bar.connect_entry(&search_entry);
+    // Typing in the file list starts a search.
+    search_bar.set_key_capture_widget(Some(&file_view.root));
+    search_bar
+        .bind_property("search-mode-enabled", &search_toggle, "active")
+        .bidirectional()
+        .sync_create()
+        .build();
+    search_entry.connect_search_changed({
+        let sender = sender.clone();
+        move |entry| sender.input(Msg::Search(entry.text().to_string()))
+    });
+    search_bar.connect_search_mode_enabled_notify({
+        let sender = sender.clone();
+        move |bar| {
+            if !bar.is_search_mode() {
+                sender.input(Msg::Search(String::new()));
+            }
+        }
+    });
 
+    // ── Content ──
     let status_title = gtk::Label::builder()
         .wrap(true)
         .justify(gtk::Justification::Center)
@@ -135,13 +201,20 @@ pub fn build(
     status_page.append(&status_title);
 
     let stack = gtk::Stack::new();
-    stack.add_named(&list_scroll, Some("list"));
+    stack.add_named(&file_view.root, Some("files"));
     stack.add_named(&status_page, Some("status"));
+
+    let context_menu = gtk::PopoverMenu::builder()
+        .has_arrow(false)
+        .halign(gtk::Align::Start)
+        .build();
+    context_menu.set_parent(&file_view.root);
 
     let content = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .css_classes(["seshat-content"])
         .build();
+    content.append(&search_bar);
     content.append(&stack);
 
     let paned = gtk::Paned::builder()
@@ -166,17 +239,24 @@ pub fn build(
     layout.append(&status_bar);
     root.set_child(Some(&layout));
 
-    AppWidgets {
-        back_button,
-        forward_button,
-        up_button,
-        pathbar,
-        rendered_crumbs: None,
-        editing_address: false,
-        hidden_toggle,
-        theme_button,
-        stack,
-        status_title,
-        status_bar,
-    }
+    (
+        AppWidgets {
+            back_button,
+            forward_button,
+            up_button,
+            pathbar,
+            rendered_crumbs: None,
+            editing_address: false,
+            stack,
+            status_title,
+            status_bar,
+        },
+        Handles {
+            file_view,
+            theme_button,
+            search_bar,
+            search_entry,
+            context_menu,
+        },
+    )
 }

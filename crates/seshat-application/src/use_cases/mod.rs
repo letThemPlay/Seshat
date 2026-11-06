@@ -1,3 +1,3 @@
 mod list_directory;
 
-pub use list_directory::{ListDirectory, ListingOptions};
+pub use list_directory::ListDirectory;

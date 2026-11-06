@@ -8,24 +8,26 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gtk::prelude::*;
-use relm4::typed_view::list::TypedListView;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
 };
 use seshat_application::navigation::{NavigationHistory, breadcrumbs, parse_address};
 use seshat_application::ports::{
     DeviceError, DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError,
-    WatchGuard, location_lost,
+    ThemeRepository, WatchGuard, location_lost,
 };
-use seshat_application::use_cases::{ListDirectory, ListingOptions};
+use seshat_application::preferences::{Preferences, PreferencesStore, ThemeChoice};
+use seshat_application::use_cases::ListDirectory;
+use seshat_application::view::{SortKey, ViewMode, ViewOptions, arrange};
 use seshat_domain::entities::{Device, DeviceId, FileEntry, Location, StandardLocation};
 
-use crate::content::FileRow;
+use crate::actions::{self, Actions};
 use crate::diagnostics;
+use crate::files::{FileView, FileViewEvent};
 use crate::pathbar::address_text;
 use crate::sidebar::{Sidebar, SidebarInit, SidebarInput, SidebarOutput};
-use crate::theme::{ThemePreference, render_css};
-use view::AppWidgets;
+use crate::theme::{ThemeRegistry, render_css};
+use view::{AppWidgets, Handles};
 
 /// Seshat owns its look through its own theme system, so its stylesheet must
 /// win over a desktop-wide `~/.config/gtk-4.0/gtk.css` (USER priority);
@@ -37,6 +39,9 @@ const THEME_PROVIDER_PRIORITY: u32 = gtk::STYLE_PROVIDER_PRIORITY_USER + 1;
 /// into one reload.
 const RELOAD_DEBOUNCE: Duration = Duration::from_millis(300);
 
+/// Opening many files at once from one action is almost always a mistake.
+const MAX_FILES_TO_OPEN: usize = 20;
+
 /// Dependencies supplied by the composition root.
 pub struct AppInit {
     pub home: PathBuf,
@@ -45,6 +50,8 @@ pub struct AppInit {
     pub directory_watcher: Rc<dyn DirectoryWatcher>,
     pub device_monitor: Rc<dyn DeviceMonitor>,
     pub launcher: Rc<dyn Launcher>,
+    pub preferences: Rc<dyn PreferencesStore>,
+    pub themes: Rc<dyn ThemeRepository>,
 }
 
 impl std::fmt::Debug for AppInit {
@@ -61,9 +68,26 @@ pub enum Msg {
     GoUp,
     Refresh,
     Activate(u32),
-    ToggleHidden(bool),
-    ToggleHiddenShortcut,
-    CycleTheme,
+    OpenSelection,
+    CopyPaths,
+    /// Context menu from the keyboard (Menu key, Shift+F10).
+    KeyboardContextMenu,
+    ContextMenu {
+        on_item: bool,
+        x: f64,
+        y: f64,
+    },
+    SelectionChanged,
+    ToggleHidden,
+    SetViewMode(String),
+    SetSortKey(String),
+    ToggleSortDescending,
+    StartSearch,
+    Search(String),
+    SetTheme(String),
+    ReloadThemes,
+    ThemesChanged,
+    OpenThemesFolder,
     SystemColorSchemeChanged,
     EditAddress,
     CancelAddress,
@@ -104,6 +128,7 @@ enum ContentState {
     Loading,
     Ready,
     Empty,
+    NoResults,
     Error(String),
 }
 
@@ -113,13 +138,22 @@ pub struct App {
     directory_watcher: Rc<dyn DirectoryWatcher>,
     device_monitor: Rc<dyn DeviceMonitor>,
     launcher: Rc<dyn Launcher>,
+    preferences_store: Rc<dyn PreferencesStore>,
+    theme_repository: Rc<dyn ThemeRepository>,
     sidebar: Controller<Sidebar>,
+    actions: Actions,
+    ui: Handles,
 
     history: NavigationHistory,
     devices: Vec<Device>,
-    show_hidden: bool,
+    /// The current location's full listing; what is shown is derived from
+    /// it with `arrange`, so filtering/sorting never re-reads the disk.
+    listing: Vec<FileEntry>,
+    view: ViewOptions,
+    view_mode: ViewMode,
     state: ContentState,
-    entries: TypedListView<FileRow, gtk::MultiSelection>,
+    /// Status bar text derived from the selection.
+    selection_summary: Option<String>,
     /// Transient message for the status bar (errors, device events).
     notice: Option<String>,
     editing_address: bool,
@@ -128,11 +162,16 @@ pub struct App {
     view_generation: u64,
     /// Incremented per listing; stale listing results are dropped.
     load_generation: u64,
+    /// Whether the pending listing is a reload of the shown location.
+    reloading: bool,
     load_started: Option<Instant>,
     watch: Option<WatchGuard>,
     reload_pending: bool,
 
-    theme_preference: ThemePreference,
+    theme_choice: ThemeChoice,
+    themes: ThemeRegistry,
+    themes_watch: Option<WatchGuard>,
+    themes_reload_pending: bool,
     css_provider: gtk::CssProvider,
 }
 
@@ -202,32 +241,64 @@ impl SimpleComponent for App {
                 SidebarOutput::Eject(id) => Msg::Eject(id),
             });
 
-        let entries: TypedListView<FileRow, gtk::MultiSelection> = TypedListView::new();
-        let widgets = view::build(&root, sidebar.widget(), &entries, &sender);
+        let actions = Actions::new(&sender);
+        root.insert_action_group(actions::GROUP, Some(&actions.group));
+
+        let file_view = FileView::new({
+            let sender = sender.clone();
+            move |event| match event {
+                FileViewEvent::Activate(position) => sender.input(Msg::Activate(position)),
+                FileViewEvent::ContextMenu { position, x, y } => sender.input(Msg::ContextMenu {
+                    on_item: position.is_some(),
+                    x,
+                    y,
+                }),
+                FileViewEvent::SelectionChanged => sender.input(Msg::SelectionChanged),
+            }
+        });
+        let (widgets, ui) = view::build(&root, sidebar.widget(), file_view, &sender);
         shortcuts::install(&root, &sender);
 
+        let prefs = init.preferences.load();
         let mut model = App {
             home: init.home,
             list_directory: init.list_directory,
             directory_watcher: init.directory_watcher,
             device_monitor: init.device_monitor,
             launcher: init.launcher,
+            preferences_store: init.preferences,
+            theme_repository: init.themes,
             sidebar,
+            actions,
+            ui,
             history: NavigationHistory::default(),
             devices,
-            show_hidden: false,
+            listing: Vec::new(),
+            view: ViewOptions {
+                show_hidden: prefs.show_hidden,
+                sort: prefs.sort,
+                query: String::new(),
+            },
+            view_mode: prefs.view_mode,
             state: ContentState::Loading,
-            entries,
+            selection_summary: None,
             notice: None,
             editing_address: false,
             view_generation: 0,
             load_generation: 0,
+            reloading: false,
             load_started: None,
             watch: None,
             reload_pending: false,
-            theme_preference: ThemePreference::System,
+            theme_choice: prefs.theme,
+            themes: ThemeRegistry::default(),
+            themes_watch: None,
+            themes_reload_pending: false,
             css_provider,
         };
+        model.ui.file_view.set_mode(model.view_mode);
+        model.load_themes();
+        model.watch_themes(&sender);
         model.apply_theme();
         model.go(Location::Path(model.home.clone()), &sender);
 
@@ -253,15 +324,100 @@ impl SimpleComponent for App {
                 }
             }
             Msg::Refresh => self.show_current(&sender),
-            Msg::Activate(position) => self.activate(position, &sender),
-            Msg::ToggleHidden(show) => self.set_show_hidden(show, &sender),
-            Msg::ToggleHiddenShortcut => self.set_show_hidden(!self.show_hidden, &sender),
-            Msg::CycleTheme => {
-                self.theme_preference = self.theme_preference.next();
+            Msg::Activate(position) => {
+                if let Some(entry) = self.ui.file_view.entry(position) {
+                    self.open_entries(vec![entry], &sender);
+                }
+            }
+            Msg::OpenSelection => {
+                let selected = self.ui.file_view.selected();
+                self.open_entries(selected, &sender);
+            }
+            Msg::CopyPaths => self.copy_paths(),
+            Msg::KeyboardContextMenu => {
+                let on_item = !self.ui.file_view.selected().is_empty();
+                let root = &self.ui.file_view.root;
+                let (x, y) = (
+                    f64::from(root.width()) / 2.0,
+                    f64::from(root.height()) / 3.0,
+                );
+                sender.input(Msg::ContextMenu { on_item, x, y });
+            }
+            Msg::ContextMenu { on_item, x, y } => {
+                let menu = if on_item {
+                    actions::item_menu()
+                } else {
+                    actions::background_menu()
+                };
+                let popover = &self.ui.context_menu;
+                popover.set_menu_model(Some(&menu));
+                popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+                popover.popup();
+            }
+            Msg::SelectionChanged => self.update_selection_summary(),
+            Msg::ToggleHidden => {
+                self.view.show_hidden = !self.view.show_hidden;
+                self.rearrange(true);
+                self.save_preferences();
+            }
+            Msg::SetViewMode(id) => {
+                if let Some(mode) = ViewMode::from_id(&id) {
+                    self.view_mode = mode;
+                    self.ui.file_view.set_mode(mode);
+                    // Keep keyboard focus on the visible view (the hidden one
+                    // would swallow shortcuts like Ctrl+A).
+                    self.ui.file_view.focus();
+                    self.save_preferences();
+                }
+            }
+            Msg::SetSortKey(id) => {
+                if let Some(key) = SortKey::from_id(&id) {
+                    self.view.sort.key = key;
+                    self.rearrange(true);
+                    self.save_preferences();
+                }
+            }
+            Msg::ToggleSortDescending => {
+                self.view.sort.descending = !self.view.sort.descending;
+                self.rearrange(true);
+                self.save_preferences();
+            }
+            Msg::StartSearch => {
+                self.ui.search_bar.set_search_mode(true);
+                self.ui.search_entry.grab_focus();
+            }
+            Msg::Search(query) => {
+                if query != self.view.query {
+                    self.view.query = query;
+                    self.rearrange(false);
+                }
+            }
+            Msg::SetTheme(id) => {
+                if let Some(choice) = ThemeChoice::from_id(&id) {
+                    self.theme_choice = choice;
+                    self.apply_theme();
+                    self.save_preferences();
+                }
+            }
+            Msg::ReloadThemes => {
+                self.themes_reload_pending = false;
+                self.load_themes();
                 self.apply_theme();
             }
+            Msg::ThemesChanged if !self.themes_reload_pending => {
+                self.themes_reload_pending = true;
+                let sender = sender.clone();
+                gtk::glib::timeout_add_local_once(RELOAD_DEBOUNCE, move || {
+                    sender.input(Msg::ReloadThemes);
+                });
+            }
+            Msg::ThemesChanged => {}
+            Msg::OpenThemesFolder => match self.theme_repository.ensure_directory() {
+                Ok(directory) => self.go(Location::Path(directory), &sender),
+                Err(err) => self.notice = Some(format!("Cannot open the themes folder: {err}")),
+            },
             Msg::SystemColorSchemeChanged => {
-                if self.theme_preference == ThemePreference::System {
+                if self.theme_choice == ThemeChoice::System {
                     self.apply_theme();
                 }
             }
@@ -285,7 +441,7 @@ impl SimpleComponent for App {
                 if view == self.view_generation
                     && let Some(location) = self.history.current().cloned()
                 {
-                    self.start_listing(location, &sender);
+                    self.start_listing(location, true, &sender);
                 }
             }
             Msg::DevicesChanged => self.devices_changed(&sender),
@@ -309,13 +465,19 @@ impl SimpleComponent for App {
                         .emit(SidebarInput::SetCurrent(self.history.current().cloned()));
                 }
             },
-            Msg::OpenFailed(err) => self.notice = Some(format!("Could not open the file: {err}")),
+            Msg::OpenFailed(err) => self.notice = Some(format!("Could not open: {err}")),
         }
     }
 
     fn update_view(&self, widgets: &mut AppWidgets, sender: ComponentSender<Self>) {
         let current = self.history.current();
 
+        self.actions.sync(
+            self.view.show_hidden,
+            self.view_mode,
+            self.view.sort,
+            &self.theme_choice,
+        );
         widgets
             .back_button
             .set_sensitive(self.history.can_go_back());
@@ -348,47 +510,38 @@ impl SimpleComponent for App {
             }
         }
 
-        widgets
-            .theme_button
-            .set_label(&format!("Theme: {}", self.theme_preference.label()));
-        if widgets.hidden_toggle.is_active() != self.show_hidden {
-            widgets.hidden_toggle.set_active(self.show_hidden);
-        }
-
         widgets.status_title.remove_css_class("seshat-error");
-        let (page, message, status) = match &self.state {
-            ContentState::Loading => ("status", "Loading…".to_owned(), "Loading…".to_owned()),
-            ContentState::Empty => (
+        let (page, message) = match &self.state {
+            ContentState::Loading => ("status", "Loading…".to_owned()),
+            ContentState::Empty if current.is_some_and(Location::is_trash) => {
+                ("status", "Trash is empty".to_owned())
+            }
+            ContentState::Empty => ("status", "This folder is empty".to_owned()),
+            ContentState::NoResults => (
                 "status",
-                if current.is_some_and(Location::is_trash) {
-                    "Trash is empty".to_owned()
-                } else {
-                    "This folder is empty".to_owned()
-                },
-                "0 items".to_owned(),
+                format!("No items match “{}”", self.view.query.trim()),
             ),
             ContentState::Error(err) => {
                 widgets.status_title.add_css_class("seshat-error");
-                ("status", err.clone(), "Error".to_owned())
+                ("status", err.clone())
             }
-            ContentState::Ready => {
-                let count = self.entries.len();
-                let plural = if count == 1 { "" } else { "s" };
-                ("list", String::new(), format!("{count} item{plural}"))
-            }
+            ContentState::Ready => ("files", String::new()),
         };
         widgets.stack.set_visible_child_name(page);
         widgets.status_title.set_label(&message);
 
-        match &self.notice {
-            Some(notice) => {
-                widgets.status_bar.set_label(notice);
-                widgets.status_bar.add_css_class("seshat-notice");
-            }
-            None => {
-                widgets.status_bar.set_label(&status);
-                widgets.status_bar.remove_css_class("seshat-notice");
-            }
+        let status = match (&self.notice, &self.selection_summary, &self.state) {
+            (Some(notice), _, _) => notice.clone(),
+            (None, Some(summary), _) => summary.clone(),
+            (None, None, ContentState::Loading) => "Loading…".to_owned(),
+            (None, None, ContentState::Error(_)) => "Error".to_owned(),
+            (None, None, _) => item_count(self.ui.file_view.len(), self.listing.len()),
+        };
+        widgets.status_bar.set_label(&status);
+        if self.notice.is_some() {
+            widgets.status_bar.add_css_class("seshat-notice");
+        } else {
+            widgets.status_bar.remove_css_class("seshat-notice");
         }
     }
 }
@@ -404,7 +557,7 @@ impl App {
     }
 
     /// Shows the history's current location from scratch: new watch, new
-    /// listing.
+    /// listing, search cleared.
     fn show_current(&mut self, sender: &ComponentSender<Self>) {
         let Some(location) = self.history.current().cloned() else {
             return;
@@ -413,8 +566,15 @@ impl App {
         self.view_generation += 1;
         self.reload_pending = false;
         self.notice = None;
+        self.selection_summary = None;
         self.state = ContentState::Loading;
-        self.entries.clear();
+        self.listing.clear();
+        self.ui.file_view.replace(Vec::new(), false);
+        if self.ui.search_bar.is_search_mode() {
+            self.ui.search_bar.set_search_mode(false);
+        }
+        self.ui.search_entry.set_text("");
+        self.view.query.clear();
 
         // Watch before listing so changes between the two aren't missed.
         self.watch = None;
@@ -430,22 +590,20 @@ impl App {
 
         self.sidebar
             .emit(SidebarInput::SetCurrent(Some(location.clone())));
-        self.start_listing(location, sender);
+        self.start_listing(location, false, sender);
     }
 
-    /// Starts an asynchronous listing. The UI keeps running; the result
-    /// arrives as [`Msg::Loaded`]. The visible list is kept until then.
-    fn start_listing(&mut self, location: Location, sender: &ComponentSender<Self>) {
+    /// Starts an asynchronous listing; the result arrives as
+    /// [`Msg::Loaded`]. A `reload` keeps selection and scroll position.
+    fn start_listing(&mut self, location: Location, reload: bool, sender: &ComponentSender<Self>) {
         self.load_generation += 1;
+        self.reloading = reload;
         self.load_started = Some(Instant::now());
         let generation = self.load_generation;
         let use_case = self.list_directory.clone();
-        let options = ListingOptions {
-            show_hidden: self.show_hidden,
-        };
         let sender = sender.clone();
         relm4::spawn_local(async move {
-            let result = use_case.execute(&location, options).await;
+            let result = use_case.execute(&location).await;
             sender.input(Msg::Loaded {
                 generation,
                 result: ListingResult(result),
@@ -458,22 +616,105 @@ impl App {
             return; // superseded by a newer listing
         }
         let elapsed = self.load_started.take().map(|t| t.elapsed());
-        self.entries.clear();
         match result {
             Ok(entries) => {
                 tracing::debug!(count = entries.len(), ?elapsed, "listing loaded");
-                self.state = if entries.is_empty() {
-                    ContentState::Empty
-                } else {
-                    ContentState::Ready
-                };
-                self.entries
-                    .extend_from_iter(entries.into_iter().map(FileRow));
+                self.listing = entries;
+                self.state = ContentState::Ready;
+                self.rearrange(self.reloading);
+                if !self.reloading {
+                    self.ui.file_view.focus();
+                }
             }
             Err(err) => {
                 tracing::warn!(error = %err, "listing failed");
+                self.listing.clear();
+                self.ui.file_view.replace(Vec::new(), false);
                 self.state = ContentState::Error(error_message(&err));
             }
+        }
+    }
+
+    /// Re-derives the shown entries from the listing and view options.
+    fn rearrange(&mut self, preserve: bool) {
+        let initial_load_pending = self.load_started.is_some() && !self.reloading;
+        if initial_load_pending || matches!(self.state, ContentState::Error(_)) {
+            return; // nothing to arrange yet
+        }
+        let shown = arrange(&self.listing, &self.view);
+        self.state = match (shown.is_empty(), self.view.query.trim().is_empty()) {
+            (false, _) => ContentState::Ready,
+            (true, false) => ContentState::NoResults,
+            (true, true) => ContentState::Empty,
+        };
+        self.ui.file_view.replace(shown, preserve);
+        self.update_selection_summary();
+    }
+
+    fn update_selection_summary(&mut self) {
+        let selected = self.ui.file_view.selected();
+        self.selection_summary = match selected.len() {
+            0 => None,
+            n => {
+                let bytes: u64 = selected.iter().filter_map(|e| e.size).sum();
+                let total = self.ui.file_view.len();
+                let size = if bytes > 0 {
+                    format!(" ({})", gtk::glib::format_size(bytes))
+                } else {
+                    String::new()
+                };
+                Some(format!("{n} of {total} selected{size}"))
+            }
+        };
+    }
+
+    fn open_entries(&mut self, entries: Vec<FileEntry>, sender: &ComponentSender<Self>) {
+        if let [single] = entries.as_slice()
+            && single.is_browsable()
+        {
+            self.go(single.location.clone(), sender);
+            return;
+        }
+        let files: Vec<Location> = entries
+            .into_iter()
+            .filter(|e| !e.is_browsable())
+            .map(|e| e.location)
+            .collect();
+        if files.len() > MAX_FILES_TO_OPEN {
+            self.notice = Some(format!(
+                "Select at most {MAX_FILES_TO_OPEN} files to open at once."
+            ));
+            return;
+        }
+        for location in files {
+            let launcher = self.launcher.clone();
+            let sender = sender.clone();
+            relm4::spawn_local(async move {
+                if let Err(err) = launcher.open(&location).await {
+                    sender.input(Msg::OpenFailed(err));
+                }
+            });
+        }
+    }
+
+    /// Copies the selected entries' paths (one per line) to the clipboard.
+    fn copy_paths(&mut self) {
+        let paths: Vec<String> = self
+            .ui
+            .file_view
+            .selected()
+            .iter()
+            .map(|e| address_text(&e.location))
+            .collect();
+        if paths.is_empty() {
+            return;
+        }
+        if let Some(display) = gtk::gdk::Display::default() {
+            display.clipboard().set_text(&paths.join("\n"));
+            self.notice = Some(match paths.len() {
+                1 => "Copied path to the clipboard.".to_owned(),
+                n => format!("Copied {n} paths to the clipboard."),
+            });
         }
     }
 
@@ -545,40 +786,86 @@ impl App {
         self.notice = Some(reason.to_owned());
     }
 
-    fn activate(&mut self, position: u32, sender: &ComponentSender<Self>) {
-        let Some((location, browsable)) = self.entries.get(position).map(|item| {
-            let row = item.borrow();
-            (row.0.location.clone(), row.0.is_browsable())
-        }) else {
-            return;
+    fn load_themes(&mut self) {
+        self.themes = ThemeRegistry::from_sources(self.theme_repository.load_all());
+        self.ui
+            .theme_button
+            .set_menu_model(Some(&actions::theme_menu(&self.themes)));
+        if let Some(error) = self.themes.errors().first() {
+            self.notice = Some(format!(
+                "Theme “{}” could not be loaded: {}",
+                error.id, error.message
+            ));
+        }
+    }
+
+    /// Reloads themes when files in the themes folder change.
+    fn watch_themes(&mut self, sender: &ComponentSender<Self>) {
+        let directory = match self.theme_repository.ensure_directory() {
+            Ok(directory) => directory,
+            Err(err) => {
+                tracing::debug!(error = %err, "cannot create themes folder; not watching");
+                return;
+            }
         };
-        if browsable {
-            self.go(location, sender);
-        } else {
-            let launcher = self.launcher.clone();
-            let sender = sender.clone();
-            relm4::spawn_local(async move {
-                if let Err(err) = launcher.open(&location).await {
-                    sender.input(Msg::OpenFailed(err));
-                }
-            });
-        }
+        let sender = sender.clone();
+        self.themes_watch = self
+            .directory_watcher
+            .watch(
+                &Location::Path(directory),
+                Box::new(move |_| sender.input(Msg::ThemesChanged)),
+            )
+            .ok();
     }
 
-    fn set_show_hidden(&mut self, show: bool, sender: &ComponentSender<Self>) {
-        if show == self.show_hidden {
-            return;
+    fn apply_theme(&mut self) {
+        let system_dark = system_prefers_dark();
+        let theme = match self.themes.resolve(&self.theme_choice, system_dark) {
+            Some(theme) => theme,
+            None => {
+                self.notice = Some(format!(
+                    "Theme “{}” is not available; following the system theme.",
+                    self.theme_choice.id().trim_start_matches("custom:")
+                ));
+                self.themes
+                    .resolve(&ThemeChoice::System, system_dark)
+                    .expect("built-in themes always resolve")
+            }
+        };
+        if let ThemeChoice::Custom(id) = &self.theme_choice
+            && let Some(custom) = self.themes.custom(id)
+            && !custom.warnings.is_empty()
+        {
+            self.notice = Some(format!(
+                "Theme “{}” has {} issue(s); see the log for details.",
+                custom.theme.name,
+                custom.warnings.len()
+            ));
         }
-        self.show_hidden = show;
-        if let Some(location) = self.history.current().cloned() {
-            self.start_listing(location, sender);
-        }
-    }
-
-    fn apply_theme(&self) {
-        let theme = self.theme_preference.resolve(system_prefers_dark());
-        tracing::debug!(theme = %theme.name, preference = ?self.theme_preference, "applying theme");
+        tracing::debug!(theme = %theme.name, choice = ?self.theme_choice, "applying theme");
         self.css_provider.load_from_string(&render_css(&theme));
+    }
+
+    fn save_preferences(&self) {
+        let prefs = Preferences {
+            theme: self.theme_choice.clone(),
+            show_hidden: self.view.show_hidden,
+            view_mode: self.view_mode,
+            sort: self.view.sort,
+        };
+        if let Err(err) = self.preferences_store.save(&prefs) {
+            tracing::warn!(error = %err, "preferences not saved");
+        }
+    }
+}
+
+fn item_count(shown: u32, total: usize) -> String {
+    let plural = |n: usize| if n == 1 { "" } else { "s" };
+    let shown = shown as usize;
+    if shown == total {
+        format!("{total} item{}", plural(total))
+    } else {
+        format!("{shown} of {total} item{}", plural(total))
     }
 }
 

@@ -14,6 +14,7 @@ gdk4-wayland.workspace = true
 gdk4-x11.workspace = true
 relm4.workspace = true
 tracing.workspace = true
+toml.workspace = true
 
 [lints]
 workspace = true
