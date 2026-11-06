@@ -46,8 +46,8 @@ fn compare_entries(a: &FileEntry, b: &FileEntry) -> Ordering {
     b.is_directory()
         .cmp(&a.is_directory())
         .then_with(|| {
-            let a_name = a.name.to_string_lossy().to_lowercase();
-            let b_name = b.name.to_string_lossy().to_lowercase();
+            let a_name = a.display_name.to_lowercase();
+            let b_name = b.display_name.to_lowercase();
             a_name.cmp(&b_name)
         })
         .then_with(|| a.name.cmp(&b.name))
@@ -91,16 +91,18 @@ mod tests {
     fn entry(name: &str, kind: EntryKind, hidden: bool) -> FileEntry {
         FileEntry {
             name: OsString::from(name),
-            path: PathBuf::from("/x").join(name),
+            display_name: name.to_owned(),
+            location: Location::Path(PathBuf::from("/x").join(name)),
             kind,
             size: None,
             modified: None,
             hidden,
+            trash_info: None,
         }
     }
 
     fn names(entries: &[FileEntry]) -> Vec<String> {
-        entries.iter().map(FileEntry::display_name).collect()
+        entries.iter().map(|e| e.display_name.clone()).collect()
     }
 
     #[test]
@@ -112,7 +114,7 @@ mod tests {
             entry("alpha", EntryKind::Directory, false),
         ]));
         let use_case = ListDirectory::new(Rc::new(reader));
-        let result = block_on(use_case.execute(&Location::Trash, ListingOptions::default()));
+        let result = block_on(use_case.execute(&Location::trash_root(), ListingOptions::default()));
         assert_eq!(names(&result.unwrap()), ["alpha", "Zeta", "A.txt", "b.txt"]);
     }
 
@@ -124,18 +126,21 @@ mod tests {
         ])));
         let use_case = ListDirectory::new(reader);
 
-        let visible = block_on(use_case.execute(&Location::Trash, ListingOptions::default()));
+        let visible =
+            block_on(use_case.execute(&Location::trash_root(), ListingOptions::default()));
         assert_eq!(names(&visible.unwrap()), ["notes"]);
 
-        let all =
-            block_on(use_case.execute(&Location::Trash, ListingOptions { show_hidden: true }));
+        let all = block_on(use_case.execute(
+            &Location::trash_root(),
+            ListingOptions { show_hidden: true },
+        ));
         assert_eq!(names(&all.unwrap()), [".config", "notes"]);
     }
 
     #[test]
     fn propagates_errors() {
         let use_case = ListDirectory::new(Rc::new(FakeReader(Err(ListingError::PermissionDenied))));
-        let result = block_on(use_case.execute(&Location::Trash, ListingOptions::default()));
+        let result = block_on(use_case.execute(&Location::trash_root(), ListingOptions::default()));
         assert_eq!(result, Err(ListingError::PermissionDenied));
     }
 }

@@ -23,10 +23,10 @@ Seshat follows Clean Architecture. Dependencies point inwards and are enforced b
 
 | Crate | Owns | May depend on |
 |---|---|---|
-| `seshat-domain` | `FileEntry`, `Location`, `StandardLocation`, `OperationId`, `OperationStatus` (lifecycle with explicit transitions), `Progress` (determinate/indeterminate), `DomainError` | `thiserror`, `uuid` |
-| `seshat-application` | Ports: `DirectoryReader`, `StandardLocations`. Use cases: `ListDirectory` (filtering, sorting) | domain |
-| `seshat-infrastructure` | `GioDirectoryReader`, `XdgStandardLocations` | application, domain, gio/glib |
-| `seshat-presentation` | Window, navigation pane, content pane, theme system, display-backend diagnostics | application, domain, gtk4, relm4 |
+| `seshat-domain` | `FileEntry`, `Location` (path or Trash-relative), `Device`, `StandardLocation`, `OperationId`, `OperationStatus` (lifecycle with explicit transitions), `Progress` (determinate/indeterminate), `DomainError` | `thiserror`, `uuid` |
+| `seshat-application` | Ports: `DirectoryReader`, `DirectoryWatcher`, `DeviceMonitor`, `StandardLocations`, `Launcher`. Use cases: `ListDirectory`. Navigation: `NavigationHistory`, `breadcrumbs`, `parse_address` | domain |
+| `seshat-infrastructure` | GIO implementations of every port (see [filesystem.md](filesystem.md)) | application, domain, gio/glib |
+| `seshat-presentation` | Window (`app/`), sidebar component, path bar, content pane, shortcuts, theme system, display-backend diagnostics | application, domain, gtk4, relm4 |
 | `seshat` | `main`, CLI flags, logging setup, dependency wiring | everything |
 
 The four layers are separate crates. Anything smaller (views, theme, diagnostics) is a module, to avoid unnecessary crate boundaries.

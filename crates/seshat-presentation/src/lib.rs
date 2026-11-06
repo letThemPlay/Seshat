@@ -6,6 +6,7 @@
 mod app;
 mod content;
 pub mod diagnostics;
+mod pathbar;
 mod sidebar;
 pub mod theme;
 

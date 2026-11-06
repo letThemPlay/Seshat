@@ -3,6 +3,7 @@
 //! Defines the ports (traits) infrastructure must implement and the use cases
 //! presentation invokes. Presentation never touches the filesystem directly.
 
+pub mod navigation;
 pub mod ports;
 pub mod use_cases;
 

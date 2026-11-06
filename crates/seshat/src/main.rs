@@ -6,7 +6,10 @@ use std::rc::Rc;
 
 use seshat_application::ports::StandardLocations;
 use seshat_application::use_cases::ListDirectory;
-use seshat_infrastructure::filesystem::{GioDirectoryReader, XdgStandardLocations};
+use seshat_domain::entities::{Location, StandardLocationKind};
+use seshat_infrastructure::filesystem::{
+    GioDeviceMonitor, GioDirectoryReader, GioDirectoryWatcher, GioLauncher, XdgStandardLocations,
+};
 use seshat_presentation::AppInit;
 use tracing_subscriber::EnvFilter;
 
@@ -50,9 +53,22 @@ fn main() -> ExitCode {
 }
 
 fn run_app() -> ExitCode {
+    let locations = XdgStandardLocations::new().standard_locations();
+    let home = locations
+        .iter()
+        .find_map(|l| match (&l.kind, &l.location) {
+            (StandardLocationKind::Home, Location::Path(path)) => Some(path.clone()),
+            _ => None,
+        })
+        .expect("standard locations always include Home");
+
     let init = AppInit {
+        home,
         list_directory: ListDirectory::new(Rc::new(GioDirectoryReader::new())),
-        locations: XdgStandardLocations::new().standard_locations(),
+        locations,
+        directory_watcher: Rc::new(GioDirectoryWatcher::new()),
+        device_monitor: Rc::new(GioDeviceMonitor::new()),
+        launcher: Rc::new(GioLauncher::new()),
     };
     seshat_presentation::run(APP_ID, init);
     ExitCode::SUCCESS

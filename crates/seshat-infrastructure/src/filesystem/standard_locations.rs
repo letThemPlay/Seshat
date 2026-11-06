@@ -55,7 +55,7 @@ impl StandardLocations for XdgStandardLocations {
         locations.push(StandardLocation {
             kind: StandardLocationKind::Trash,
             label: "Trash".to_owned(),
-            location: Location::Trash,
+            location: Location::trash_root(),
         });
         locations
     }

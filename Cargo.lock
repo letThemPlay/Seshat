@@ -848,6 +848,7 @@ name = "seshat"
 version = "0.1.0"
 dependencies = [
  "seshat-application",
+ "seshat-domain",
  "seshat-infrastructure",
  "seshat-presentation",
  "tracing",

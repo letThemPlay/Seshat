@@ -2,7 +2,18 @@
 
 A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4.
 
-> **Status:** Phase 1 (research and foundation) is complete. The app browses directories and switches themes, and it has been verified to run as a native Wayland client. File operations, the D-Bus progress service, Trash and devices come in later phases. See `spec.md` §17.
+> **Status:** Phases 1–2 (foundation, filesystem integration) are complete. You can browse with back/forward history, breadcrumbs and a typed address bar, see live directory updates, browse the Trash, and use mounted devices with mount and eject. File operations, the D-Bus progress service, sorting, search and grid view come in later phases. See `spec.md` §17.
+
+## Keyboard
+
+| Keys | Action |
+|---|---|
+| Alt+Left / Alt+Right, mouse back/forward | Back / Forward |
+| Alt+Up | Parent folder |
+| F5, Ctrl+R | Refresh |
+| Ctrl+H | Show hidden files |
+| Ctrl+L | Type a location (`~/…`, `/…`, `trash:`), Esc to cancel |
+| Enter | Open folder or file |
 
 ## Build and run
 
@@ -28,6 +39,7 @@ cargo run -p seshat -- --check-backend
 ## Documentation
 
 - [Architecture overview](docs/architecture/overview.md)
+- [Filesystem integration](docs/architecture/filesystem.md)
 - [ADR 0001: UI framework](docs/decisions/0001-ui-framework.md)
 - [Wayland verification](docs/development/wayland-verification.md)
 

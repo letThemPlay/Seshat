@@ -18,7 +18,7 @@ thiserror = "2"
 uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-gio = "0.22"
+gio = { version = "0.22", features = ["v2_86"] }
 glib = "0.22"
 gtk = { package = "gtk4", version = "0.11", features = ["v4_20"] }
 gdk4-wayland = "0.11"

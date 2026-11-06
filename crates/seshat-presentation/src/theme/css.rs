@@ -110,6 +110,50 @@ window.seshat {{
   -gtk-icon-size: {icon_size}px;
 }}
 
+.seshat-sidebar row.seshat-sidebar-heading,
+.seshat-sidebar row.seshat-sidebar-heading:hover {{
+  min-height: 0;
+  margin-top: {spacing}px;
+  background-color: transparent;
+  color: @seshat_text_muted;
+  font-size: smaller;
+  font-weight: bold;
+}}
+
+.seshat-sidebar .seshat-eject {{
+  min-height: 0;
+  min-width: 0;
+  padding: 2px;
+  color: @seshat_text_muted;
+}}
+
+.seshat-pathbar button {{
+  padding: 2px 6px;
+  border-radius: {radius}px;
+  background-color: transparent;
+}}
+
+.seshat-pathbar button label {{
+  color: @seshat_text_secondary;
+}}
+
+.seshat-pathbar button.current label {{
+  color: @seshat_text_primary;
+  font-weight: bold;
+}}
+
+.seshat-pathbar button:hover {{
+  background-color: @seshat_hover;
+}}
+
+.seshat-pathbar entry {{
+  min-width: 360px;
+  border-radius: {radius}px;
+  background-color: @seshat_surface;
+  color: @seshat_text_primary;
+  box-shadow: inset 0 0 0 1px @seshat_border;
+}}
+
 .seshat-content,
 .seshat-content scrolledwindow,
 .seshat-content listview {{
@@ -138,6 +182,10 @@ window.seshat {{
 
 .seshat-error {{
   color: @seshat_error;
+}}
+
+.seshat-status.seshat-notice {{
+  color: @seshat_warning;
 }}
 
 .seshat-status {{
