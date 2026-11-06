@@ -1,0 +1,19 @@
+[package]
+name = "seshat-presentation"
+description = "Seshat presentation layer: GTK4/Relm4 UI and theming."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+seshat-domain.workspace = true
+seshat-application.workspace = true
+gtk.workspace = true
+gdk4-wayland.workspace = true
+gdk4-x11.workspace = true
+relm4.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

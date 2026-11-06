@@ -1,0 +1,14 @@
+[package]
+name = "seshat-domain"
+description = "Seshat domain layer: entities, value objects and invariants. Framework-free."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

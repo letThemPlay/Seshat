@@ -1,0 +1,34 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+rust-version = "1.93"
+
+[workspace.dependencies]
+seshat-domain = { path = "crates/seshat-domain" }
+seshat-application = { path = "crates/seshat-application" }
+seshat-infrastructure = { path = "crates/seshat-infrastructure" }
+seshat-presentation = { path = "crates/seshat-presentation" }
+
+thiserror = "2"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+gio = "0.22"
+glib = "0.22"
+gtk = { package = "gtk4", version = "0.11", features = ["v4_20"] }
+gdk4-wayland = "0.11"
+gdk4-x11 = "0.11"
+relm4 = { version = "0.11", features = ["gnome_49"] }
+tempfile = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
