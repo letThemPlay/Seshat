@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Seshat
+GenericName=File Manager
+Comment=Browse and manage your files
+Exec=seshat %U
+Icon=com.example.Seshat
+Terminal=false
+Categories=GTK;System;FileTools;FileManager;Core;
+Keywords=folder;manager;explore;disk;filesystem;files;
+MimeType=inode/directory;
+StartupNotify=true
+DBusActivatable=false

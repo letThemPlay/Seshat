@@ -153,6 +153,22 @@ impl FileSystem for MemoryFs {
         }
     }
 
+    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FsError> {
+        // Resolves links in any component (absolute link targets only).
+        let nodes = self.nodes.lock().unwrap();
+        let mut real = PathBuf::from("/");
+        for component in path.components().skip(1) {
+            real.push(component);
+            if let Some(Node::Link(target)) = nodes.get(&real) {
+                real = target.clone();
+            }
+            if !nodes.contains_key(&real) {
+                return Err(err(FsErrorKind::NotFound, "no such file"));
+            }
+        }
+        Ok(real)
+    }
+
     fn create_dir(&self, path: &Path) -> Result<(), FsError> {
         let mut nodes = self.nodes.lock().unwrap();
         if nodes.contains_key(path) {

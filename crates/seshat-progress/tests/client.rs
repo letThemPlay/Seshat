@@ -22,18 +22,50 @@ impl Drop for Killed {
     }
 }
 
-fn private_bus() -> Option<(Killed, String)> {
-    let mut daemon = Command::new("dbus-daemon")
-        .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
+/// A minimal session-bus configuration, so tests do not depend on the
+/// host's `/etc/dbus-1` (absent in build sandboxes).
+const BUS_CONFIG: &str = r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:path=SOCKET</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+"#;
+
+/// `None` when `dbus-daemon` is not installed (the tests then skip). The
+/// daemon is dropped before its directory.
+fn private_bus() -> Option<((Killed, tempfile::TempDir), String)> {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("bus.conf");
+    let socket = dir.path().join("bus");
+    std::fs::write(
+        &config,
+        BUS_CONFIG.replace("SOCKET", &socket.to_string_lossy()),
+    )
+    .unwrap();
+    let mut daemon = match Command::new("dbus-daemon")
+        .arg(format!("--config-file={}", config.display()))
+        .args(["--nofork", "--nopidfile", "--print-address=1"])
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
         .spawn()
-        .ok()?;
+    {
+        Ok(daemon) => daemon,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(err) => panic!("cannot run dbus-daemon: {err}"),
+    };
     let mut line = String::new();
-    BufReader::new(daemon.stdout.take()?)
+    BufReader::new(daemon.stdout.take().unwrap())
         .read_line(&mut line)
-        .ok()?;
-    Some((Killed(daemon), line.trim().to_owned()))
+        .unwrap();
+    let address = line.trim().to_owned();
+    assert!(!address.is_empty(), "dbus-daemon did not start");
+    Some(((Killed(daemon), dir), address))
 }
 
 /// Lines the client prints, readable with a timeout.

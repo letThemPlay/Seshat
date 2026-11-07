@@ -1,8 +1,9 @@
 # Testing
 
-Run everything inside `nix develop`.
+Run everything inside `nix develop`. `scripts/check.sh --ui` runs all of the following.
 
 ```sh
+scripts/check-architecture.sh          # layer dependency rules
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --workspace                 # unit + integration tests
@@ -46,3 +47,12 @@ The Wayland matrix (GNOME, KDE, scaling, multi-monitor) is in `wayland-verificat
 - drag and drop between applications
 - removable devices (plug in, mount, eject, unplug while viewing)
 - the real session Trash and restoring from it
+
+## Performance measurements
+
+```sh
+cargo test --release -p seshat-infrastructure --test perf -- --ignored --nocapture
+SESHAT_RELEASE=1 scripts/ui-session.sh <script>   # UI timings: "view updated" debug lines
+```
+
+Results and their interpretation are in [review/performance.md](../review/performance.md).

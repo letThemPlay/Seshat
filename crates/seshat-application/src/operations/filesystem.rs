@@ -68,6 +68,11 @@ pub trait FileSystem: Send + Sync {
     /// Names of the directory's entries (unsorted).
     fn read_dir(&self, path: &Path) -> Result<Vec<OsString>, FsError>;
 
+    /// Resolves symlinks and `.`/`..` to the real path (like `realpath`).
+    /// Used for operation destinations, which users often reach through
+    /// symlinks, and for detecting aliases of a source.
+    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FsError>;
+
     /// Creates one directory; fails with `AlreadyExists` if present.
     fn create_dir(&self, path: &Path) -> Result<(), FsError>;
 

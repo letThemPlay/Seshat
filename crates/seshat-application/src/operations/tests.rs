@@ -591,3 +591,32 @@ fn create_folder_and_file() {
     assert_eq!(file.status(), OperationStatus::Completed);
     assert_eq!(h.fs.content("/d/notes.txt").as_deref(), Some(""));
 }
+
+// ── Symlinked destinations ──────────────────────────────────────────────────
+
+#[test]
+fn copying_into_a_symlinked_folder_uses_the_real_folder() {
+    let h = harness(1);
+    tree(&h.fs);
+    h.fs.dir("/real");
+    h.fs.link("/shortcut", "/real");
+    let op = h.run(copy(&["/src/docs/a.txt"], "/shortcut"));
+    assert_eq!(op.status(), OperationStatus::Completed, "{:?}", op.error);
+    assert_eq!(h.fs.content("/real/a.txt").as_deref(), Some("hello world"));
+}
+
+#[test]
+fn copying_a_folder_into_an_alias_of_itself_is_refused() {
+    let h = harness(1);
+    tree(&h.fs);
+    h.fs.dir("/src/docs/inner");
+    // Lexically /alias is not inside /src/docs, but it resolves there.
+    h.fs.link("/alias", "/src/docs/inner");
+    let op = h.run(copy(&["/src/docs"], "/alias"));
+    assert_eq!(op.status(), OperationStatus::Failed);
+    assert!(op.error.unwrap().contains("into itself"));
+    assert!(
+        h.fs.get("/src/docs/inner/docs").is_none(),
+        "nothing was copied"
+    );
+}

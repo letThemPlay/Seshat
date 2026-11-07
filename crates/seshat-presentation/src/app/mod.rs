@@ -44,6 +44,7 @@ const THEME_PROVIDER_PRIORITY: u32 = gtk::STYLE_PROVIDER_PRIORITY_USER + 1;
 /// Bursts of filesystem events (e.g. extracting an archive) are coalesced
 /// into one reload.
 const RELOAD_DEBOUNCE: Duration = Duration::from_millis(300);
+const MAX_RELOAD_DEBOUNCE: Duration = Duration::from_secs(3);
 
 /// Opening many files at once from one action is almost always a mistake.
 const MAX_FILES_TO_OPEN: usize = 20;
@@ -203,6 +204,8 @@ pub struct App {
     load_started: Option<Instant>,
     watch: Option<WatchGuard>,
     reload_pending: bool,
+    /// How long the last view rebuild took; sets the reload debounce.
+    last_rebuild: Duration,
 
     theme_choice: ThemeChoice,
     themes: ThemeRegistry,
@@ -394,6 +397,7 @@ impl SimpleComponent for App {
             load_started: None,
             watch: None,
             reload_pending: false,
+            last_rebuild: Duration::ZERO,
             theme_choice: prefs.theme,
             themes: ThemeRegistry::default(),
             themes_watch: None,
@@ -817,7 +821,10 @@ impl App {
         if initial_load_pending || matches!(self.state, ContentState::Error(_)) {
             return; // nothing to arrange yet
         }
+        let started = Instant::now();
         let shown = arrange(&self.listing, &self.view);
+        let arranged = started.elapsed();
+        let count = shown.len();
         self.state = match (shown.is_empty(), self.view.query.trim().is_empty()) {
             (false, _) => ContentState::Ready,
             (true, false) => ContentState::NoResults,
@@ -825,6 +832,15 @@ impl App {
         };
         self.ui.file_view.replace(shown, preserve);
         self.update_selection_summary();
+        self.last_rebuild = started.elapsed();
+        tracing::debug!(count, ?arranged, total = ?self.last_rebuild, "view updated");
+    }
+
+    /// Live-reload debounce: at least [`RELOAD_DEBOUNCE`], and three times the
+    /// last rebuild so a huge, constantly changing folder (e.g. 100k files
+    /// while downloading) cannot keep the UI busy rebuilding.
+    fn reload_delay(&self) -> Duration {
+        (self.last_rebuild * 3).clamp(RELOAD_DEBOUNCE, MAX_RELOAD_DEBOUNCE)
     }
 
     fn update_selection_summary(&mut self) {
@@ -910,7 +926,7 @@ impl App {
             DirectoryChange::Modified if !self.reload_pending => {
                 self.reload_pending = true;
                 let sender = sender.clone();
-                gtk::glib::timeout_add_local_once(RELOAD_DEBOUNCE, move || {
+                gtk::glib::timeout_add_local_once(self.reload_delay(), move || {
                     sender.input_sender().emit(Msg::ReloadNow { view });
                 });
             }

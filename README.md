@@ -2,7 +2,7 @@
 
 A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4.
 
-> **Status:** Phases 1–5 are complete: foundation, filesystem integration, UI and theming, file operations, and D-Bus IPC. File operations run through a central Operation Manager with progress, cancellation, conflict resolution and partial-failure reporting, and they keep running if the window is closed. Other applications can follow and cancel them over D-Bus ([protocol](docs/ipc/protocol.md), example client `cargo run -p seshat-progress`). Phase 6 covers quality, packaging and release. See `spec.md` §17.
+> **Status:** 0.1.0, all six phases of `spec.md` §17 are complete. See [Definition of Done](docs/definition-of-done.md) for what is verified and what still needs manual checks (GNOME and KDE sessions, removable devices).
 
 ## Keyboard
 
@@ -24,6 +24,15 @@ A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4.
 | Shift+F10, Menu | Context menu |
 | Enter | Open folder or file |
 
+## Install
+
+```sh
+nix run .                       # try it
+nix profile install .#seshat    # install for your user
+```
+
+See [packaging](docs/packaging.md) for contents, dependencies and Wayland requirements. [Setup](docs/development/setup.md) covers building without Nix.
+
 ## Build and run
 
 The toolchain comes from the Nix flake (Rust, GTK 4.20+, Weston for tests):
@@ -38,6 +47,7 @@ Other distributions need Rust ≥ 1.93, `pkg-config`, GTK ≥ 4.20 and GLib ≥ 
 ## Checks
 
 ```sh
+scripts/check.sh --ui                # everything below, plus the UI end-to-end test
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --workspace
@@ -52,10 +62,15 @@ cargo run -p seshat -- --check-backend
 - [Filesystem integration](docs/architecture/filesystem.md)
 - [File operations](docs/architecture/operations.md)
 - [D-Bus protocol](docs/ipc/protocol.md)
-- [ADR 0001: UI framework](docs/decisions/0001-ui-framework.md)
 - [Wayland verification](docs/development/wayland-verification.md)
 - [Writing themes](docs/development/themes.md)
 - [Testing](docs/development/testing.md)
+- [Linux and Wayland setup](docs/development/setup.md)
+- [Packaging](docs/packaging.md)
+- [Definition of Done](docs/definition-of-done.md)
+- Reviews: [security](docs/review/security.md), [performance](docs/review/performance.md), [architecture](docs/review/architecture.md)
+- ADRs: [0001 UI framework](docs/decisions/0001-ui-framework.md), [0002 IPC](docs/decisions/0002-ipc.md), [0003 packaging](docs/decisions/0003-packaging.md)
+- [Changelog](CHANGELOG.md)
 
 ## Layout
 

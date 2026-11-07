@@ -205,3 +205,62 @@ fn available_space_is_reported() {
     let dir = tempfile::tempdir().unwrap();
     assert!(LocalFileSystem::new().available_space(dir.path()).is_some());
 }
+
+#[test]
+fn copies_drop_setuid_and_setgid() {
+    let dir = tempfile::tempdir().unwrap();
+    let tool = dir.path().join("tool");
+    fs::write(&tool, b"#!/bin/sh\n").unwrap();
+    // Some environments cannot create setuid files at all: build sandboxes
+    // (seccomp rejects the chmod) or nosuid filesystems. Nothing to test then.
+    if fs::set_permissions(&tool, fs::Permissions::from_mode(0o6755)).is_err()
+        || fs::metadata(&tool).unwrap().mode() & 0o6000 == 0
+    {
+        eprintln!("cannot create setuid files here; skipping");
+        return;
+    }
+    let dst = dir.path().join("dst");
+    fs::create_dir(&dst).unwrap();
+    let op = run(copy(&[&tool], &dst));
+    assert_eq!(op.status(), OperationStatus::Completed);
+    assert_eq!(
+        fs::metadata(dst.join("tool")).unwrap().mode() & 0o7777,
+        0o755
+    );
+}
+
+#[test]
+fn copy_into_symlinked_folder_and_alias_refusal() {
+    let dir = tempfile::tempdir().unwrap();
+    let real = dir.path().join("real");
+    fs::create_dir(&real).unwrap();
+    symlink(&real, dir.path().join("shortcut")).unwrap();
+    fs::write(dir.path().join("a.txt"), b"a").unwrap();
+    let op = run(copy(
+        &[&dir.path().join("a.txt")],
+        &dir.path().join("shortcut"),
+    ));
+    assert_eq!(op.status(), OperationStatus::Completed, "{:?}", op.error);
+    assert_eq!(fs::read(real.join("a.txt")).unwrap(), b"a");
+
+    // /alias -> real/inner: copying `real` into it would recurse forever.
+    fs::create_dir(real.join("inner")).unwrap();
+    symlink(real.join("inner"), dir.path().join("alias")).unwrap();
+    let op = run(copy(&[&real], &dir.path().join("alias")));
+    assert_eq!(op.status(), OperationStatus::Failed);
+    assert!(!real.join("inner/real").exists());
+}
+
+#[test]
+fn listing_refuses_to_follow_a_symlinked_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("target")).unwrap();
+    fs::write(dir.path().join("target/precious"), b"x").unwrap();
+    symlink(dir.path().join("target"), dir.path().join("link")).unwrap();
+    let fs_ops = LocalFileSystem::new();
+    assert!(fs_ops.read_dir(&dir.path().join("link")).is_err());
+    assert_eq!(
+        fs_ops.read_dir(&dir.path().join("target")).unwrap().len(),
+        1
+    );
+}

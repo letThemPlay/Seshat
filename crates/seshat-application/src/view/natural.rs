@@ -3,46 +3,44 @@ use std::cmp::Ordering;
 /// Case-insensitive "natural" comparison: runs of digits compare by numeric
 /// value, so `file2` sorts before `file10`.
 pub fn natural_cmp(a: &str, b: &str) -> Ordering {
-    let mut a = a.chars().flat_map(char::to_lowercase).peekable();
-    let mut b = b.chars().flat_map(char::to_lowercase).peekable();
-    loop {
-        match (a.peek().copied(), b.peek().copied()) {
-            (None, None) => return Ordering::Equal,
-            (None, Some(_)) => return Ordering::Less,
-            (Some(_), None) => return Ordering::Greater,
-            (Some(x), Some(y)) if x.is_ascii_digit() && y.is_ascii_digit() => {
-                let na = take_number(&mut a);
-                let nb = take_number(&mut b);
-                let ord = compare_digits(&na, &nb);
-                if ord != Ordering::Equal {
-                    return ord;
-                }
-            }
-            (Some(x), Some(y)) => {
-                if x != y {
-                    return x.cmp(&y);
-                }
-                a.next();
-                b.next();
-            }
-        }
-    }
+    natural_cmp_folded(&a.to_lowercase(), &b.to_lowercase())
 }
 
-fn take_number(chars: &mut std::iter::Peekable<impl Iterator<Item = char>>) -> String {
-    let mut digits = String::new();
-    while let Some(c) = chars.peek().copied().filter(char::is_ascii_digit) {
-        digits.push(c);
-        chars.next();
+/// [`natural_cmp`] for strings that are already lowercased. Allocation-free:
+/// works on bytes, which is sound because ASCII digits never occur inside
+/// multi-byte UTF-8 sequences and UTF-8 byte order is code point order.
+pub fn natural_cmp_folded(a: &str, b: &str) -> Ordering {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let (mut i, mut j) = (0, 0);
+    while i < a.len() && j < b.len() {
+        if a[i].is_ascii_digit() && b[j].is_ascii_digit() {
+            let (start_i, start_j) = (i, j);
+            while i < a.len() && a[i].is_ascii_digit() {
+                i += 1;
+            }
+            while j < b.len() && b[j].is_ascii_digit() {
+                j += 1;
+            }
+            let ord = compare_digits(&a[start_i..i], &b[start_j..j]);
+            if ord != Ordering::Equal {
+                return ord;
+            }
+        } else {
+            if a[i] != b[j] {
+                return a[i].cmp(&b[j]);
+            }
+            i += 1;
+            j += 1;
+        }
     }
-    digits
+    (a.len() - i).cmp(&(b.len() - j))
 }
 
 /// Compares digit strings numerically without overflow: strip leading zeros,
 /// then longer is larger, then lexicographic. Ties prefer fewer leading zeros.
-fn compare_digits(a: &str, b: &str) -> Ordering {
-    let ta = a.trim_start_matches('0');
-    let tb = b.trim_start_matches('0');
+fn compare_digits(a: &[u8], b: &[u8]) -> Ordering {
+    let trim = |s: &[u8]| -> usize { s.iter().take_while(|&&c| c == b'0').count() };
+    let (ta, tb) = (&a[trim(a)..], &b[trim(b)..]);
     ta.len()
         .cmp(&tb.len())
         .then_with(|| ta.cmp(tb))

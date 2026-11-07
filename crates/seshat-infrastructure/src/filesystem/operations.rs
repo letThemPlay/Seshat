@@ -4,7 +4,7 @@
 use std::ffi::OsString;
 use std::fs::{self, File, FileTimes, OpenOptions};
 use std::io::{self, Read};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use gio::prelude::*;
@@ -13,6 +13,12 @@ use seshat_domain::operation::EntryType;
 
 use super::gio_file::gio_file;
 use seshat_domain::entities::Location;
+
+/// Mode bits kept on copies. setuid/setgid are dropped (like `cp` when
+/// ownership changes): a copy must never gain privileges. Folders keep the
+/// sticky bit.
+const COPIED_FILE_BITS: u32 = 0o777;
+const COPIED_DIR_BITS: u32 = 0o1777;
 
 /// Copy granularity: progress and cancellation are checked between chunks.
 /// Within a chunk the kernel copies directly (`copy_file_range`).
@@ -108,11 +114,40 @@ impl FileSystem for LocalFileSystem {
         })
     }
 
+    /// Refuses to list through a symlink (`O_NOFOLLOW`). Recursive operations
+    /// check an entry with `lstat` and then list it; if it was swapped for a
+    /// symlink in between (e.g. in a shared folder like /tmp), following it
+    /// would make a delete empty the link's target.
     fn read_dir(&self, path: &Path) -> Result<Vec<OsString>, FsError> {
-        fs::read_dir(path)
-            .map_err(|e| io_error(&e))?
-            .map(|entry| entry.map(|e| e.file_name()).map_err(|e| io_error(&e)))
-            .collect()
+        use rustix::fs::{Dir, Mode, OFlags};
+        let fd = rustix::fs::open(
+            path,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(|errno| match errno {
+            rustix::io::Errno::LOOP | rustix::io::Errno::NOTDIR => FsError::new(
+                FsErrorKind::Other,
+                "Not a folder (it may have been replaced by a link).",
+            ),
+            other => rustix_error(other),
+        })?;
+        let mut names = Vec::new();
+        for entry in Dir::read_from(&fd).map_err(rustix_error)? {
+            let entry = entry.map_err(rustix_error)?;
+            let name = entry.file_name().to_bytes();
+            if name != b"." && name != b".." {
+                names.push(
+                    <std::ffi::OsStr as std::os::unix::ffi::OsStrExt>::from_bytes(name)
+                        .to_os_string(),
+                );
+            }
+        }
+        Ok(names)
+    }
+
+    fn canonicalize(&self, path: &Path) -> Result<PathBuf, FsError> {
+        fs::canonicalize(path).map_err(|e| io_error(&e))
     }
 
     fn create_dir(&self, path: &Path) -> Result<(), FsError> {
@@ -155,7 +190,7 @@ impl FileSystem for LocalFileSystem {
             }
         }
         target
-            .set_permissions(meta.permissions())
+            .set_permissions(fs::Permissions::from_mode(meta.mode() & COPIED_FILE_BITS))
             .map_err(|e| io_error(&e))?;
         if let Ok(modified) = meta.modified() {
             let _ = target.set_times(FileTimes::new().set_modified(modified));
@@ -170,7 +205,11 @@ impl FileSystem for LocalFileSystem {
 
     fn copy_dir_attributes(&self, from: &Path, to: &Path) -> Result<(), FsError> {
         let meta = fs::metadata(from).map_err(|e| io_error(&e))?;
-        fs::set_permissions(to, meta.permissions()).map_err(|e| io_error(&e))?;
+        fs::set_permissions(
+            to,
+            fs::Permissions::from_mode(meta.mode() & COPIED_DIR_BITS),
+        )
+        .map_err(|e| io_error(&e))?;
         if let Ok(modified) = meta.modified()
             && let Ok(dir) = File::open(to)
         {

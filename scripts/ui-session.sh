@@ -19,8 +19,11 @@ set -euo pipefail
 
 DRIVER=${1:?usage: $0 <ui-test-script> [artifact-dir]}
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cargo build -q -p seshat -p seshat-progress --manifest-path "$ROOT/Cargo.toml"
-BIN="$ROOT/target/debug/seshat"
+# SESHAT_RELEASE=1 tests an optimised build (for performance runs).
+PROFILE_DIR=debug
+if [[ -n "${SESHAT_RELEASE:-}" ]]; then PROFILE_DIR=release; fi
+cargo build -q -p seshat -p seshat-progress ${SESHAT_RELEASE:+--release} --manifest-path "$ROOT/Cargo.toml"
+BIN="$ROOT/target/$PROFILE_DIR/seshat"
 
 SESSION="$(mktemp -d -t seshat-ui-XXXXXX)"
 ARTIFACTS="${2:-$SESSION/artifacts}"
@@ -143,7 +146,7 @@ check() {
 
 seshat_running() { kill -0 "$SESHAT_PID" 2>/dev/null; }
 # The example D-Bus client, on the session's private bus.
-progress() { in_session "$ROOT/target/debug/seshat-progress" "$@"; }
+progress() { in_session "$ROOT/target/$PROFILE_DIR/seshat-progress" "$@"; }
 # Seshat's D-Bus service answers on the session bus.
 ipc_published() { progress --exit-when-idle | grep -q "active operation"; }
 window_open() { in_session swaymsg -t get_tree | grep -q "\"name\": \"$1\""; }

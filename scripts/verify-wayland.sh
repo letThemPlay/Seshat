@@ -13,8 +13,11 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-cargo build -q -p seshat
-BIN="$PWD/target/debug/seshat"
+# SESHAT_BIN tests an installed build (e.g. ./result/bin/seshat).
+if [[ -z "${SESHAT_BIN:-}" ]]; then
+    cargo build -q -p seshat
+fi
+BIN="$(realpath "${SESHAT_BIN:-$PWD/target/debug/seshat}")"
 
 RUNTIME_DIR="$(mktemp -d)"
 chmod 700 "$RUNTIME_DIR"

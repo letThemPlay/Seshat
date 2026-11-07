@@ -4,7 +4,7 @@
 mod natural;
 mod options;
 
-pub use natural::natural_cmp;
+pub use natural::{natural_cmp, natural_cmp_folded};
 pub use options::{SortKey, SortOrder, ViewMode, ViewOptions};
 
 use std::cmp::Ordering;
@@ -17,20 +17,20 @@ use seshat_domain::entities::FileEntry;
 /// direction. Equal keys fall back to the name, so the order is stable.
 pub fn arrange(entries: &[FileEntry], options: &ViewOptions) -> Vec<FileEntry> {
     let query = SearchQuery::new(&options.query);
-    let mut visible: Vec<FileEntry> = entries
+    // Case-fold each name once; search and every sort comparison reuse it.
+    let mut visible: Vec<(&FileEntry, String)> = entries
         .iter()
         .filter(|e| options.show_hidden || !e.hidden)
-        .filter(|e| query.matches(&e.display_name))
-        .cloned()
+        .map(|e| (e, e.display_name.to_lowercase()))
+        .filter(|(_, folded)| query.matches(folded))
         .collect();
-    visible.sort_by(|a, b| compare(a, b, options.sort));
-    visible
+    visible.sort_by(|(a, fa), (b, fb)| compare(a, fa, b, fb, options.sort));
+    visible.into_iter().map(|(e, _)| e.clone()).collect()
 }
 
-fn compare(a: &FileEntry, b: &FileEntry, sort: SortOrder) -> Ordering {
+fn compare(a: &FileEntry, fa: &str, b: &FileEntry, fb: &str, sort: SortOrder) -> Ordering {
     let folders_first = b.is_browsable().cmp(&a.is_browsable());
-    let by_name =
-        || natural_cmp(&a.display_name, &b.display_name).then_with(|| a.name.cmp(&b.name));
+    let by_name = || natural_cmp_folded(fa, fb).then_with(|| a.name.cmp(&b.name));
     let by_key = match sort.key {
         SortKey::Name => by_name(),
         SortKey::Size => a.size.cmp(&b.size).then_with(by_name),
@@ -56,12 +56,9 @@ impl SearchQuery {
         }
     }
 
-    fn matches(&self, name: &str) -> bool {
-        if self.terms.is_empty() {
-            return true;
-        }
-        let name = name.to_lowercase();
-        self.terms.iter().all(|t| name.contains(t.as_str()))
+    /// `folded` is the lowercased name.
+    fn matches(&self, folded: &str) -> bool {
+        self.terms.iter().all(|t| folded.contains(t.as_str()))
     }
 }
 

@@ -28,6 +28,12 @@ pub(crate) fn run(
     destination: &Path,
     mode: Mode,
 ) -> JobResult {
+    // Destinations are often reached through symlinks (e.g. ~/Projects ->
+    // /data/projects): work on the real folder.
+    let destination = &job
+        .fs
+        .canonicalize(destination)
+        .map_err(|e| JobError::Fatal(format!("The destination is not available: {e}")))?;
     let dest = job
         .fs
         .metadata(destination)
@@ -36,6 +42,28 @@ pub(crate) fn run(
         return Err(JobError::Fatal(
             "The destination is not a folder.".to_owned(),
         ));
+    }
+
+    // The request was checked lexically; aliases (a symlinked destination
+    // inside a source folder) only show up on the real paths. Copying a
+    // folder into itself would recurse until the disk is full.
+    for source in sources {
+        if job
+            .fs
+            .metadata(source)
+            .is_ok_and(|m| m.entry_type == EntryType::Directory)
+            && let Ok(real) = job.fs.canonicalize(source)
+            && destination.starts_with(&real)
+        {
+            return Err(JobError::Fatal(format!(
+                "Cannot {} “{}” into itself.",
+                if mode == Mode::Copy { "copy" } else { "move" },
+                source
+                    .file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_default()
+            )));
+        }
     }
 
     // Plan: same-device moves are single renames; everything else is

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.example.Seshat</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Seshat</name>
+  <summary>Browse and manage your files</summary>
+  <description>
+    <p>
+      Seshat is a native Wayland file manager for Linux. It focuses on reliable file
+      operations that you can follow, cancel and recover from, and on a clean interface
+      that adapts to your theme.
+    </p>
+    <ul>
+      <li>List and grid views, search, natural sorting and multi-selection</li>
+      <li>Copy, move, rename, Trash and restore with progress, cancellation and conflict resolution</li>
+      <li>Operations keep running when the window is closed</li>
+      <li>Other applications can follow file operations over D-Bus</li>
+      <li>Light, dark and custom themes</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">com.example.Seshat.desktop</launchable>
+  <provides>
+    <binary>seshat</binary>
+    <dbus type="user">com.example.Seshat.Operations</dbus>
+  </provides>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-07"/>
+  </releases>
+</component>
