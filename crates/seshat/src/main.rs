@@ -13,6 +13,7 @@ use seshat_infrastructure::filesystem::{
     GioDeviceMonitor, GioDirectoryReader, GioDirectoryWatcher, GioLauncher, LocalFileSystem,
     XdgStandardLocations,
 };
+use seshat_infrastructure::ipc::{IpcConfig, IpcService};
 use seshat_infrastructure::persistence::{FileThemeRepository, TomlPreferencesStore};
 use seshat_presentation::AppInit;
 use tracing_subscriber::EnvFilter;
@@ -69,6 +70,9 @@ fn run_app() -> ExitCode {
         })
         .expect("standard locations always include Home");
 
+    let operations =
+        OperationManager::new(Arc::new(LocalFileSystem::new()), MAX_CONCURRENT_OPERATIONS);
+
     let init = AppInit {
         home,
         list_directory: ListDirectory::new(Rc::new(GioDirectoryReader::new())),
@@ -78,10 +82,17 @@ fn run_app() -> ExitCode {
         launcher: Rc::new(GioLauncher::new()),
         preferences: Rc::new(TomlPreferencesStore::default_location()),
         themes: Rc::new(FileThemeRepository::default_location()),
-        operations: OperationManager::new(
-            Arc::new(LocalFileSystem::new()),
-            MAX_CONCURRENT_OPERATIONS,
-        ),
+        operations: operations.clone(),
+    };
+
+    // Other applications observe operations over D-Bus. Seshat works
+    // without it (no session bus, or another instance owns the name).
+    let _ipc = match IpcService::start(operations, IpcConfig::default()) {
+        Ok(service) => Some(service),
+        Err(err) => {
+            tracing::warn!(error = %err, "D-Bus service unavailable; operations are not published");
+            None
+        }
     };
     seshat_presentation::run(APP_ID, init);
     ExitCode::SUCCESS

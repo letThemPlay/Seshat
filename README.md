@@ -2,7 +2,7 @@
 
 A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4.
 
-> **Status:** Phases 1–4 are complete: foundation, filesystem integration, the UI and theming, and file operations. File operations (copy, move, rename, trash, restore, delete, new folder/file) run through a central Operation Manager with progress, cancellation, conflict resolution and partial-failure reporting, and they keep running if the window is closed. Clipboard cut/copy/paste works with other file managers, and you can drop files in. Phase 5 exposes the Operation Manager over D-Bus. See `spec.md` §17.
+> **Status:** Phases 1–5 are complete: foundation, filesystem integration, UI and theming, file operations, and D-Bus IPC. File operations run through a central Operation Manager with progress, cancellation, conflict resolution and partial-failure reporting, and they keep running if the window is closed. Other applications can follow and cancel them over D-Bus ([protocol](docs/ipc/protocol.md), example client `cargo run -p seshat-progress`). Phase 6 covers quality, packaging and release. See `spec.md` §17.
 
 ## Keyboard
 
@@ -51,6 +51,7 @@ cargo run -p seshat -- --check-backend
 - [Architecture overview](docs/architecture/overview.md)
 - [Filesystem integration](docs/architecture/filesystem.md)
 - [File operations](docs/architecture/operations.md)
+- [D-Bus protocol](docs/ipc/protocol.md)
 - [ADR 0001: UI framework](docs/decisions/0001-ui-framework.md)
 - [Wayland verification](docs/development/wayland-verification.md)
 - [Writing themes](docs/development/themes.md)
@@ -65,4 +66,5 @@ crates/
   seshat-infrastructure/  GIO-backed filesystem and XDG locations
   seshat-presentation/    GTK4/Relm4 UI, theme system, backend diagnostics
   seshat/                 binary (composition root)
+  seshat-progress/        example D-Bus client (independent of the other crates)
 ```

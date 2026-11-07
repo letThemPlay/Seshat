@@ -16,7 +16,8 @@ scripts/ui-session.sh scripts/ui/file-operations.sh [artifact-dir]   # UI end-to
 |---|---|---|
 | Domain | `crates/seshat-domain` | lifecycle transitions, progress, locations, entities |
 | Application | `crates/seshat-application` | navigation, view arrangement, validation, and the **operation manager on an in-memory filesystem** (`MemoryFs`: two devices, a Trash, quotas, failure injection, a gate for deterministic cancellation and queueing tests) |
-| Infrastructure | `crates/seshat-infrastructure/tests` | real temp directories: listing, watcher events, the manager with `LocalFileSystem` (permissions, mtime, symlinks, no-replace rename, permission errors, cancelling large copies) |
+| Infrastructure | `crates/seshat-infrastructure/tests` | real temp directories: listing, watcher events, the manager with `LocalFileSystem` (permissions, mtime, symlinks, no-replace rename, permission errors, cancelling large copies); **D-Bus** on a private `dbus-daemon`: discovery, snapshots, ordered signals without gaps, cancellation, structured errors, queueing, client reconnects, name release and no hijacking |
+| IPC consumer | `crates/seshat-progress/tests` | runs the example client binary against the real service on a private bus: discovery, completion, service stop and restart |
 | Presentation | unit tests | theme rendering and validation, clipboard parsing, action rules, progress text |
 
 The tests never touch the real Trash (GIO would use the session's). Trash behaviour is covered by `MemoryFs` and by the UI test.

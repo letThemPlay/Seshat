@@ -25,9 +25,10 @@ Seshat follows Clean Architecture. Dependencies point inwards and are enforced b
 |---|---|---|
 | `seshat-domain` | `FileEntry`, `Location` (path or Trash-relative), `Device`, `StandardLocation`, `OperationId`, `OperationStatus` (lifecycle with explicit transitions), `Progress` (determinate/indeterminate), `DomainError` | `thiserror`, `uuid` |
 | `seshat-application` | Ports: `DirectoryReader`, `DirectoryWatcher`, `DeviceMonitor`, `StandardLocations`, `Launcher`. Use cases: `ListDirectory`. Navigation: `NavigationHistory`, `breadcrumbs`, `parse_address`. View: `arrange` (filter, search, natural sort). `Preferences` + `PreferencesStore` port, `ThemeRepository` port | domain |
-| `seshat-infrastructure` | GIO implementations of the filesystem ports (see [filesystem.md](filesystem.md)); TOML settings store and theme file repository (`persistence`) | application, domain, gio/glib |
+| `seshat-infrastructure` | GIO implementations of the filesystem ports (see [filesystem.md](filesystem.md)); `LocalFileSystem` for operations; TOML settings and theme files (`persistence`); the D-Bus service (`ipc`, see [protocol](../ipc/protocol.md)) | application, domain, gio/glib |
 | `seshat-presentation` | Window (`app/`), sidebar component, path bar, list/grid file views (`files`), actions and menus, shortcuts, theme system, display-backend diagnostics | application, domain, gtk4, relm4 |
-| `seshat` | `main`, CLI flags, logging setup, dependency wiring | everything |
+| `seshat` | `main`, CLI flags, logging setup, dependency wiring, starts the D-Bus service | everything |
+| `seshat-progress` | Example D-Bus client; speaks only the protocol | zbus |
 
 The four layers are separate crates. Anything smaller (views, theme, diagnostics) is a module, to avoid unnecessary crate boundaries.
 

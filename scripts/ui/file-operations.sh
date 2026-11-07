@@ -8,6 +8,7 @@ mkdir "$H/many"; (cd "$H/many" && head -c 60M /dev/urandom | split -b 2k -a 5 - 
 
 # Search → results → copy → paste
 launch
+check "D-Bus service is published"            ipc_published
 type_text file1
 press Return                      # leave the search box for the results
 chord ctrl c

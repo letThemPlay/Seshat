@@ -19,13 +19,21 @@ set -euo pipefail
 
 DRIVER=${1:?usage: $0 <ui-test-script> [artifact-dir]}
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cargo build -q -p seshat --manifest-path "$ROOT/Cargo.toml"
+cargo build -q -p seshat -p seshat-progress --manifest-path "$ROOT/Cargo.toml"
 BIN="$ROOT/target/debug/seshat"
 
 SESSION="$(mktemp -d -t seshat-ui-XXXXXX)"
 ARTIFACTS="${2:-$SESSION/artifacts}"
 mkdir -p "$SESSION/runtime" "$SESSION/home" "$SESSION/config" "$SESSION/data" "$ARTIFACTS"
 chmod 700 "$SESSION/runtime"
+
+# A private session bus, so the app can publish its D-Bus service without
+# touching the user's bus.
+dbus-daemon --session --nofork --nopidfile --print-address=1 >"$SESSION/bus-address" 2>"$SESSION/dbus.log" &
+DBUS_PID=$!
+for _ in $(seq 50); do [[ -s "$SESSION/bus-address" ]] && break; sleep 0.1; done
+DBUS_ADDRESS=$(head -1 "$SESSION/bus-address")
+[[ -n "$DBUS_ADDRESS" ]] || { echo "dbus-daemon did not start"; exit 1; }
 
 cat > "$SESSION/sway.conf" <<'EOF'
 output HEADLESS-1 resolution 1280x800 scale 1
@@ -40,6 +48,7 @@ clean_env=(
     XDG_RUNTIME_DIR="$SESSION/runtime"
     XDG_CONFIG_HOME="$SESSION/config"
     XDG_DATA_HOME="$SESSION/data"
+    DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDRESS"
     XDG_DATA_DIRS="${XDG_DATA_DIRS:-}"
     LANG="${LANG:-C.UTF-8}"
 )
@@ -55,6 +64,7 @@ cleanup() {
     sleep 0.5
     [[ -n "$SESHAT_PID" ]] && kill -9 "$SESHAT_PID" 2>/dev/null || true
     kill -- -"$SWAY_PID" 2>/dev/null || kill "$SWAY_PID" 2>/dev/null || true
+    kill "$DBUS_PID" 2>/dev/null || true
     cp "$SESSION"/*.log "$ARTIFACTS"/ 2>/dev/null || true
     echo "artifacts: $ARTIFACTS"
 }
@@ -132,6 +142,10 @@ check() {
 }
 
 seshat_running() { kill -0 "$SESHAT_PID" 2>/dev/null; }
+# The example D-Bus client, on the session's private bus.
+progress() { in_session "$ROOT/target/debug/seshat-progress" "$@"; }
+# Seshat's D-Bus service answers on the session bus.
+ipc_published() { progress --exit-when-idle | grep -q "active operation"; }
 window_open() { in_session swaymsg -t get_tree | grep -q "\"name\": \"$1\""; }
 not() { ! "$@"; }
 

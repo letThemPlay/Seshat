@@ -27,7 +27,9 @@ relm4 = { version = "0.11", features = ["gnome_49"] }
 tempfile = "3"
 serde = { version = "1", features = ["derive"] }
 toml = "1"
-rustix = { version = "1", features = ["fs"] }
+rustix = { version = "1", features = ["fs", "process"] }
+zbus = "6"
+async-channel = "2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
