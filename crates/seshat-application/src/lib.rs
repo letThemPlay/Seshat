@@ -4,6 +4,7 @@
 //! presentation invokes. Presentation never touches the filesystem directly.
 
 pub mod navigation;
+pub mod operations;
 pub mod ports;
 pub mod preferences;
 pub mod use_cases;

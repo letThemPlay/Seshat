@@ -34,6 +34,10 @@
 
           packages = with pkgs; [
             weston
+            sway
+            wtype
+            grim
+            bubblewrap
             wayland-utils
           ];
 

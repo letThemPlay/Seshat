@@ -1,0 +1,283 @@
+//! Modal dialogs: conflicts, names, confirmations.
+//!
+//! Dialogs carry the `seshat` class so the active theme styles them.
+
+use std::cell::Cell;
+use std::path::Path;
+use std::rc::Rc;
+
+use gtk::prelude::*;
+use seshat_application::operations::validate_name;
+use seshat_domain::operation::{Conflict, ConflictDecision, ConflictResolution, EntryType};
+
+fn dialog_window(parent: &gtk::Window, title: &str) -> gtk::Window {
+    let window = gtk::Window::builder()
+        .title(title)
+        .transient_for(parent)
+        .modal(true)
+        .resizable(false)
+        .default_width(440)
+        .css_classes(["seshat", "seshat-dialog"])
+        // A dialog left open must not keep the app alive after the main
+        // window closes.
+        .destroy_with_parent(true)
+        .build();
+    // Escape dismisses, like closing the window (conflicts: Cancel).
+    let escape = gtk::ShortcutController::new();
+    escape.add_shortcut(gtk::Shortcut::new(
+        gtk::ShortcutTrigger::parse_string("Escape"),
+        Some(gtk::NamedAction::new("window.close")),
+    ));
+    window.add_controller(escape);
+    window
+}
+
+fn name_of(path: &Path) -> String {
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string_lossy().into_owned())
+}
+
+fn button_row(buttons: &[&gtk::Button]) -> gtk::Box {
+    let row = gtk::Box::builder()
+        .spacing(8)
+        .halign(gtk::Align::End)
+        .margin_top(12)
+        .build();
+    for button in buttons {
+        row.append(*button);
+    }
+    row
+}
+
+fn content_box() -> gtk::Box {
+    gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(10)
+        .margin_top(18)
+        .margin_bottom(18)
+        .margin_start(18)
+        .margin_end(18)
+        .build()
+}
+
+/// Asks how to resolve a conflict. `on_answer` is called exactly once
+/// (Cancel if the window is closed). Returns the window so the caller can
+/// close it if the operation ends first.
+pub fn conflict(
+    parent: &gtk::Window,
+    conflict: &Conflict,
+    on_answer: impl Fn(ConflictDecision) + 'static,
+) -> gtk::Window {
+    let window = dialog_window(parent, "Item already exists");
+    let content = content_box();
+
+    let what = |t: EntryType| {
+        if t == EntryType::Directory {
+            "folder"
+        } else {
+            "file"
+        }
+    };
+    let folder = conflict.target.parent().map(name_of).unwrap_or_default();
+    let heading = gtk::Label::builder()
+        .label(format!(
+            "A {} named “{}” already exists in “{}”.",
+            what(conflict.target_type),
+            name_of(&conflict.target),
+            folder
+        ))
+        .wrap(true)
+        .xalign(0.0)
+        .css_classes(["title-4"])
+        .build();
+    let merge = conflict.source_type == EntryType::Directory
+        && conflict.target_type == EntryType::Directory;
+    let body = gtk::Label::builder()
+        .label(if merge {
+            "Merging adds the incoming items to the existing folder; files with the same name are asked about individually."
+        } else {
+            "Replacing overwrites its contents. This cannot be undone."
+        })
+        .wrap(true)
+        .xalign(0.0)
+        .build();
+    let apply_all = gtk::CheckButton::with_label("Apply this choice to all conflicts");
+
+    let cancel = gtk::Button::with_label("Cancel Operation");
+    let skip = gtk::Button::with_label("Skip");
+    let rename = gtk::Button::with_label("Keep Both");
+    let replace = gtk::Button::with_label(if merge { "Merge" } else { "Replace" });
+    replace.add_css_class("destructive-action");
+    skip.add_css_class("suggested-action");
+
+    content.append(&heading);
+    content.append(&body);
+    content.append(&apply_all);
+    content.append(&button_row(&[&cancel, &skip, &rename, &replace]));
+    window.set_child(Some(&content));
+    window.set_default_widget(Some(&skip));
+
+    let answered = Rc::new(Cell::new(false));
+    let on_answer = Rc::new(on_answer);
+    let respond = {
+        let window = window.clone();
+        let answered = answered.clone();
+        let on_answer = on_answer.clone();
+        move |resolution| {
+            if answered.replace(true) {
+                return;
+            }
+            on_answer(ConflictDecision {
+                resolution,
+                apply_to_all: apply_all.is_active(),
+            });
+            window.close();
+        }
+    };
+    for (button, resolution) in [
+        (&cancel, ConflictResolution::Cancel),
+        (&skip, ConflictResolution::Skip),
+        (&rename, ConflictResolution::Rename),
+        (&replace, ConflictResolution::Overwrite),
+    ] {
+        let respond = respond.clone();
+        button.connect_clicked(move |_| respond(resolution));
+    }
+    window.connect_close_request(move |_| {
+        if !answered.replace(true) {
+            on_answer(ConflictDecision {
+                resolution: ConflictResolution::Cancel,
+                apply_to_all: false,
+            });
+        }
+        gtk::glib::Propagation::Proceed
+    });
+    window.present();
+    skip.grab_focus();
+    window
+}
+
+/// Asks for a file name, validating as the user types.
+pub fn name_prompt(
+    parent: &gtk::Window,
+    title: &str,
+    confirm: &str,
+    initial: &str,
+    select_stem: bool,
+    on_ok: impl Fn(String) + 'static,
+) {
+    let window = dialog_window(parent, title);
+    let content = content_box();
+    let heading = gtk::Label::builder()
+        .label(title)
+        .xalign(0.0)
+        .css_classes(["title-4"])
+        .build();
+    let entry = gtk::Entry::builder()
+        .text(initial)
+        .activates_default(true)
+        .build();
+    entry.update_property(&[gtk::accessible::Property::Label(title)]);
+    let error = gtk::Label::builder()
+        .xalign(0.0)
+        .css_classes(["seshat-error"])
+        .build();
+    let cancel = gtk::Button::with_label("Cancel");
+    let ok = gtk::Button::with_label(confirm);
+    ok.add_css_class("suggested-action");
+
+    content.append(&heading);
+    content.append(&entry);
+    content.append(&error);
+    content.append(&button_row(&[&cancel, &ok]));
+    window.set_child(Some(&content));
+    window.set_default_widget(Some(&ok));
+
+    let validate = {
+        let ok = ok.clone();
+        let error = error.clone();
+        move |text: &str| {
+            let result = validate_name(text);
+            ok.set_sensitive(result.is_ok());
+            error.set_label(&result.err().map(|e| e.to_string()).unwrap_or_default());
+        }
+    };
+    validate(initial);
+    entry.connect_changed(move |e| validate(&e.text()));
+
+    {
+        let window = window.clone();
+        cancel.connect_clicked(move |_| window.close());
+    }
+    {
+        let window = window.clone();
+        let entry = entry.clone();
+        ok.connect_clicked(move |_| {
+            let text = entry.text().to_string();
+            if validate_name(&text).is_ok() {
+                on_ok(text);
+                window.close();
+            }
+        });
+    }
+    window.present();
+    entry.grab_focus();
+    // Select the name without its extension, like other file managers.
+    let stem_end = if select_stem {
+        initial
+            .rfind('.')
+            .filter(|&i| i > 0)
+            .map_or(-1, |i| initial[..i].chars().count() as i32)
+    } else {
+        -1
+    };
+    entry.select_region(0, stem_end);
+}
+
+/// Asks to confirm a destructive action.
+pub fn confirm(
+    parent: &gtk::Window,
+    heading: &str,
+    body: &str,
+    action: &str,
+    on_confirm: impl Fn() + 'static,
+) {
+    let window = dialog_window(parent, heading);
+    let content = content_box();
+    content.append(
+        &gtk::Label::builder()
+            .label(heading)
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(["title-4"])
+            .build(),
+    );
+    content.append(
+        &gtk::Label::builder()
+            .label(body)
+            .wrap(true)
+            .xalign(0.0)
+            .build(),
+    );
+    let cancel = gtk::Button::with_label("Cancel");
+    let go = gtk::Button::with_label(action);
+    go.add_css_class("destructive-action");
+    content.append(&button_row(&[&cancel, &go]));
+    window.set_child(Some(&content));
+    // The safe choice is the default.
+    window.set_default_widget(Some(&cancel));
+    {
+        let window = window.clone();
+        cancel.connect_clicked(move |_| window.close());
+    }
+    {
+        let window = window.clone();
+        go.connect_clicked(move |_| {
+            on_confirm();
+            window.close();
+        });
+    }
+    window.present();
+    cancel.grab_focus();
+}

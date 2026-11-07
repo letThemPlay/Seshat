@@ -5,8 +5,12 @@
 
 mod actions;
 mod app;
+mod clipboard;
+mod conflicts;
 pub mod diagnostics;
+mod dialogs;
 mod files;
+mod operations_panel;
 mod pathbar;
 mod sidebar;
 pub mod theme;

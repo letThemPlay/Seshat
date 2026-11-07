@@ -14,7 +14,7 @@ use seshat_application::view::ViewMode;
 use seshat_domain::entities::{EntryKind, FileEntry, Location};
 
 /// What the views report to their owner.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FileViewEvent {
     Activate(u32),
     /// Secondary click on an item (`Some`) or on empty space (`None`).
@@ -25,6 +25,13 @@ pub enum FileViewEvent {
         y: f64,
     },
     SelectionChanged,
+    /// Files dropped from a drag, into a folder row (`Some`) or the shown
+    /// folder (`None`).
+    Drop {
+        paths: Vec<std::path::PathBuf>,
+        into: Option<u32>,
+        copy: bool,
+    },
 }
 
 type EventHandler = Rc<dyn Fn(FileViewEvent)>;
@@ -37,6 +44,8 @@ pub struct FileView {
     selection: gtk::MultiSelection,
     list_scroll: gtk::ScrolledWindow,
     grid_scroll: gtk::ScrolledWindow,
+    list: gtk::ListView,
+    grid: gtk::GridView,
 }
 
 impl FileView {
@@ -84,6 +93,7 @@ impl FileView {
             .build();
         for scroll in [&list_scroll, &grid_scroll] {
             background_menu_gesture(scroll, &root, &selection, &on_event);
+            scroll.add_controller(drop_target(None, &on_event));
         }
         root.add_named(&list_scroll, Some("list"));
         root.add_named(&grid_scroll, Some("grid"));
@@ -94,6 +104,8 @@ impl FileView {
             selection,
             list_scroll,
             grid_scroll,
+            list,
+            grid,
         }
     }
 
@@ -144,6 +156,13 @@ impl FileView {
             .into_iter()
             .map(|e| glib::BoxedAnyObject::new(e).upcast())
             .collect();
+        // Replacing the rows destroys the focused row; remember whether the
+        // list had keyboard focus so it can be put back.
+        let had_focus = self
+            .root
+            .root()
+            .and_then(|r| gtk::prelude::RootExt::focus(&r))
+            .is_some_and(|f| f.is_ancestor(&self.root));
         self.store.splice(0, self.store.n_items(), &objects);
 
         let selected = gtk::Bitset::new_empty();
@@ -152,6 +171,9 @@ impl FileView {
         }
         self.selection
             .set_selection(&selected, &gtk::Bitset::new_range(0, self.store.n_items()));
+        if had_focus {
+            self.focus();
+        }
 
         if let Some((list_y, grid_y)) = scroll {
             // Restore after GTK has re-laid out the new rows.
@@ -166,6 +188,26 @@ impl FileView {
         } else {
             self.list_scroll.vadjustment().set_value(0.0);
             self.grid_scroll.vadjustment().set_value(0.0);
+        }
+    }
+
+    /// Moves keyboard focus into the results, selecting the first item if
+    /// nothing is selected (e.g. after searching).
+    pub fn focus_results(&self) {
+        if self.store.n_items() == 0 {
+            return; // nothing to focus; keep focus in the search box
+        }
+        if self.selected().is_empty() {
+            self.selection.select_item(0, true);
+        }
+        // scroll_to(FOCUS) moves focus within the view but does not take it
+        // from another widget (e.g. the search box), so grab it first.
+        self.focus();
+        let flags = gtk::ListScrollFlags::FOCUS;
+        if self.root.visible_child_name().as_deref() == Some("grid") {
+            self.grid.scroll_to(0, flags, None);
+        } else {
+            self.list.scroll_to(0, flags, None);
         }
     }
 
@@ -214,6 +256,7 @@ fn item_factory(
             };
             add_item_context_menu(&widget, item, &root, &selection, &on_event);
             add_drag_source(&widget, item, &selection);
+            widget.add_controller(drop_target(Some(item.downgrade()), &on_event));
             item.set_child(Some(&widget));
         }
     });
@@ -512,4 +555,82 @@ fn format_time(time: Option<SystemTime>) -> String {
         .and_then(|dt| dt.format("%Y-%m-%d %H:%M"))
         .map(|s| s.to_string())
         .unwrap_or_default()
+}
+
+// ── Dropping files in ───────────────────────────────────────────────────────
+
+/// Ctrl copies, Shift moves; otherwise drags from inside Seshat move and
+/// drags from other applications copy (they may expect to keep the files).
+fn drop_action(target: &gtk::DropTarget) -> gdk::DragAction {
+    let state = target.current_event_state();
+    if state.contains(gdk::ModifierType::CONTROL_MASK) {
+        return gdk::DragAction::COPY;
+    }
+    if state.contains(gdk::ModifierType::SHIFT_MASK) {
+        return gdk::DragAction::MOVE;
+    }
+    let internal = target.current_drop().and_then(|d| d.drag()).is_some();
+    if internal {
+        gdk::DragAction::MOVE
+    } else {
+        gdk::DragAction::COPY
+    }
+}
+
+/// Accepts file lists. Row targets drop into the row's folder; other rows
+/// and the background drop into the shown folder.
+fn drop_target(
+    item: Option<glib::WeakRef<gtk::ListItem>>,
+    on_event: &EventHandler,
+) -> gtk::DropTarget {
+    let target = gtk::DropTarget::new(
+        gdk::FileList::static_type(),
+        gdk::DragAction::COPY | gdk::DragAction::MOVE,
+    );
+    target.connect_enter(|t, _, _| drop_action(t));
+    target.connect_motion(|t, _, _| drop_action(t));
+    let on_event = on_event.clone();
+    target.connect_drop(move |t, value, _, _| {
+        let Ok(list) = value.get::<gdk::FileList>() else {
+            return false;
+        };
+        let paths: Vec<std::path::PathBuf> = list.files().iter().filter_map(|f| f.path()).collect();
+        if paths.is_empty() {
+            return false;
+        }
+        let into = item
+            .as_ref()
+            .and_then(|weak| weak.upgrade())
+            .and_then(|item| {
+                let browsable = item.item().is_some_and(|obj| entry_of(&obj).is_browsable());
+                browsable.then(|| item.position())
+            });
+        on_event(FileViewEvent::Drop {
+            paths,
+            into,
+            copy: drop_action(t) == gdk::DragAction::COPY,
+        });
+        true
+    });
+    target
+}
+
+impl FileView {
+    /// Selects the entry at `location` (if shown) and scrolls to it.
+    pub fn select_location(&self, location: &Location) -> bool {
+        let Some(position) = (0..self.store.n_items()).find(|&i| {
+            self.store
+                .item(i)
+                .is_some_and(|obj| entry_of(&obj).location == *location)
+        }) else {
+            return false;
+        };
+        let flags = gtk::ListScrollFlags::SELECT | gtk::ListScrollFlags::FOCUS;
+        if self.root.visible_child_name().as_deref() == Some("grid") {
+            self.grid.scroll_to(position, flags, None);
+        } else {
+            self.list.scroll_to(position, flags, None);
+        }
+        true
+    }
 }

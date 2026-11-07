@@ -259,6 +259,48 @@ window.seshat popover separator {{
   color: @seshat_error;
 }}
 
+.seshat-operations {{
+  padding: {padding}px;
+  background-color: @seshat_app_background;
+  border-top: 1px solid @seshat_border;
+}}
+
+.seshat-operations > box {{
+  padding: {spacing}px {padding}px;
+  border-radius: {radius}px;
+  background-color: @seshat_surface;
+}}
+
+.seshat-operations .seshat-error .dim-label {{
+  color: @seshat_error;
+}}
+
+.seshat-operations progressbar > trough {{
+  min-height: 6px;
+  border-radius: 3px;
+  background-color: @seshat_border;
+}}
+
+.seshat-operations progressbar > trough > progress {{
+  min-height: 6px;
+  border-radius: 3px;
+  background-color: @seshat_accent;
+}}
+
+window.seshat-dialog {{
+  background-color: @seshat_surface;
+}}
+
+window.seshat button.suggested-action {{
+  background-color: @seshat_accent;
+  color: @seshat_surface;
+}}
+
+window.seshat button.destructive-action {{
+  background-color: @seshat_error;
+  color: @seshat_surface;
+}}
+
 .seshat-status.seshat-notice {{
   color: @seshat_warning;
 }}

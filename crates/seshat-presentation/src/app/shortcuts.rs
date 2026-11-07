@@ -26,8 +26,27 @@ const SHORTCUTS: &[Shortcut] = &[
     ("Menu", || Msg::KeyboardContextMenu),
 ];
 
+/// Shortcuts that trigger actions, so disabled actions (e.g. Rename with no
+/// selection) are ignored.
+const ACTION_SHORTCUTS: &[(&str, &str)] = &[
+    ("<Control>x", "cut"),
+    ("<Control>c", "copy"),
+    ("<Control>v", "paste"),
+    ("F2", "rename"),
+    ("Delete", "trash"),
+    ("KP_Delete", "trash"),
+    ("<Shift>Delete", "delete"),
+    ("<Control><Shift>n", "new-folder"),
+];
+
 pub fn install(window: &gtk::Window, sender: &ComponentSender<App>) {
     let controller = gtk::ShortcutController::new();
+    for (accelerator, action) in ACTION_SHORTCUTS {
+        if let Some(trigger) = gtk::ShortcutTrigger::parse_string(accelerator) {
+            let action = gtk::NamedAction::new(&format!("{}.{action}", crate::actions::GROUP));
+            controller.add_shortcut(gtk::Shortcut::new(Some(trigger), Some(action)));
+        }
+    }
     for (accelerator, message) in SHORTCUTS {
         let Some(trigger) = gtk::ShortcutTrigger::parse_string(accelerator) else {
             tracing::warn!(accelerator, "invalid shortcut trigger");
@@ -36,7 +55,7 @@ pub fn install(window: &gtk::Window, sender: &ComponentSender<App>) {
         let sender = sender.clone();
         let message = *message;
         let action = gtk::CallbackAction::new(move |_, _| {
-            sender.input(message());
+            sender.input_sender().emit(message());
             gtk::glib::Propagation::Stop
         });
         controller.add_shortcut(gtk::Shortcut::new(Some(trigger), Some(action)));
@@ -50,8 +69,8 @@ pub fn install(window: &gtk::Window, sender: &ComponentSender<App>) {
         .build();
     let sender = sender.clone();
     click.connect_pressed(move |gesture, _, _, _| match gesture.current_button() {
-        8 => sender.input(Msg::Back),
-        9 => sender.input(Msg::Forward),
+        8 => sender.input_sender().emit(Msg::Back),
+        9 => sender.input_sender().emit(Msg::Forward),
         _ => {}
     });
     window.add_controller(click);

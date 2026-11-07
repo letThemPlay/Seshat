@@ -7,6 +7,7 @@ use seshat_application::view::ViewMode;
 use super::{App, Msg};
 use crate::actions;
 use crate::files::FileView;
+use crate::operations_panel::OperationsPanel;
 use crate::pathbar::PathBar;
 
 /// Widgets only touched from `update_view`.
@@ -32,6 +33,8 @@ pub struct Handles {
     pub search_bar: gtk::SearchBar,
     pub search_entry: gtk::SearchEntry,
     pub context_menu: gtk::PopoverMenu,
+    pub window: gtk::Window,
+    pub panel: OperationsPanel,
 }
 
 fn icon_button(
@@ -45,7 +48,7 @@ fn icon_button(
         .tooltip_text(tooltip)
         .build();
     let sender = sender.clone();
-    button.connect_clicked(move |_| sender.input(msg()));
+    button.connect_clicked(move |_| sender.input_sender().emit(msg()));
     button
 }
 
@@ -70,6 +73,7 @@ pub fn build(
     root: &gtk::Window,
     sidebar: &gtk::ScrolledWindow,
     file_view: FileView,
+    panel: OperationsPanel,
     sender: &ComponentSender<App>,
 ) -> (AppWidgets, Handles) {
     // ── Toolbar ──
@@ -95,14 +99,18 @@ pub fn build(
     let pathbar = PathBar::new();
     pathbar.entry.connect_activate({
         let sender = sender.clone();
-        move |entry| sender.input(Msg::AddressSubmitted(entry.text().to_string()))
+        move |entry| {
+            sender
+                .input_sender()
+                .emit(Msg::AddressSubmitted(entry.text().to_string()))
+        }
     });
     let escape = gtk::EventControllerKey::new();
     escape.connect_key_pressed({
         let sender = sender.clone();
         move |_, key, _, _| {
             if key == gtk::gdk::Key::Escape {
-                sender.input(Msg::CancelAddress);
+                sender.input_sender().emit(Msg::CancelAddress);
                 gtk::glib::Propagation::Stop
             } else {
                 gtk::glib::Propagation::Proceed
@@ -169,22 +177,62 @@ pub fn build(
         .css_classes(["seshat-search"])
         .build();
     search_bar.connect_entry(&search_entry);
-    // Typing in the file list starts a search.
-    search_bar.set_key_capture_widget(Some(&file_view.root));
+    // Escape leaves an active search. Both this and the key capture below
+    // live on the window: with no results the file list is hidden, and
+    // when nothing has focus only the window sees key presses. Text fields
+    // (address bar, dialogs) handle their own keys first.
+    let escape_search = gtk::EventControllerKey::new();
+    escape_search.connect_key_pressed({
+        let sender = sender.clone();
+        move |_, key, _, _| {
+            if key == gtk::gdk::Key::Escape {
+                sender.input_sender().emit(Msg::CloseSearch);
+            }
+            gtk::glib::Propagation::Proceed
+        }
+    });
+    root.add_controller(escape_search);
+    // Typing anywhere in the window starts a search.
+    search_bar.set_key_capture_widget(Some(root));
     search_bar
         .bind_property("search-mode-enabled", &search_toggle, "active")
         .bidirectional()
         .sync_create()
         .build();
+    // Return or Down leaves the search box for the results, so keyboard
+    // actions (Ctrl+A, Ctrl+C, Delete…) act on files, not on the search text.
+    search_entry.connect_activate({
+        let sender = sender.clone();
+        move |_| sender.input_sender().emit(Msg::FocusResults)
+    });
+    let down = gtk::EventControllerKey::new();
+    down.connect_key_pressed({
+        let sender = sender.clone();
+        move |_, key, _, _| {
+            if key == gtk::gdk::Key::Down {
+                sender.input_sender().emit(Msg::FocusResults);
+                gtk::glib::Propagation::Stop
+            } else {
+                gtk::glib::Propagation::Proceed
+            }
+        }
+    });
+    search_entry.add_controller(down);
     search_entry.connect_search_changed({
         let sender = sender.clone();
-        move |entry| sender.input(Msg::Search(entry.text().to_string()))
+        move |entry| {
+            sender
+                .input_sender()
+                .emit(Msg::Search(entry.text().to_string()))
+        }
     });
     search_bar.connect_search_mode_enabled_notify({
         let sender = sender.clone();
         move |bar| {
             if !bar.is_search_mode() {
-                sender.input(Msg::Search(String::new()));
+                sender.input_sender().emit(Msg::Search(String::new()));
+                // Give the keyboard back to the files, not to nowhere.
+                sender.input_sender().emit(Msg::FocusFiles);
             }
         }
     });
@@ -208,7 +256,6 @@ pub fn build(
         .has_arrow(false)
         .halign(gtk::Align::Start)
         .build();
-    context_menu.set_parent(&file_view.root);
 
     let content = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
@@ -216,6 +263,15 @@ pub fn build(
         .build();
     content.append(&search_bar);
     content.append(&stack);
+    // Popovers must hang off a container that unparents arbitrary children
+    // on dispose (GtkBox does). GtkStack only removes its pages, so a
+    // popover parented to it makes window destruction loop forever.
+    context_menu.set_parent(&content);
+    // Keyboard users continue in the file list after the menu closes.
+    context_menu.connect_closed({
+        let sender = sender.clone();
+        move |_| sender.input_sender().emit(Msg::FocusFiles)
+    });
 
     let paned = gtk::Paned::builder()
         .orientation(gtk::Orientation::Horizontal)
@@ -236,6 +292,7 @@ pub fn build(
 
     let layout = gtk::Box::new(gtk::Orientation::Vertical, 0);
     layout.append(&paned);
+    layout.append(&panel.root);
     layout.append(&status_bar);
     root.set_child(Some(&layout));
 
@@ -257,6 +314,8 @@ pub fn build(
             search_bar,
             search_entry,
             context_menu,
+            window: root.clone(),
+            panel,
         },
     )
 }

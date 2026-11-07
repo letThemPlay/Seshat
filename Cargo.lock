@@ -871,6 +871,7 @@ version = "0.1.0"
 dependencies = [
  "seshat-domain",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -887,6 +888,7 @@ version = "0.1.0"
 dependencies = [
  "gio",
  "glib",
+ "rustix",
  "serde",
  "seshat-application",
  "seshat-domain",

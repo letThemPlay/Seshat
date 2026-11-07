@@ -1,5 +1,6 @@
 //! Main window component.
 
+mod file_ops;
 mod shortcuts;
 mod view;
 
@@ -12,6 +13,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
 };
 use seshat_application::navigation::{NavigationHistory, breadcrumbs, parse_address};
+use seshat_application::operations::{OperationEvent, OperationManager, OperationRequest};
 use seshat_application::ports::{
     DeviceError, DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError,
     ThemeRepository, WatchGuard, location_lost,
@@ -20,10 +22,14 @@ use seshat_application::preferences::{Preferences, PreferencesStore, ThemeChoice
 use seshat_application::use_cases::ListDirectory;
 use seshat_application::view::{SortKey, ViewMode, ViewOptions, arrange};
 use seshat_domain::entities::{Device, DeviceId, FileEntry, Location, StandardLocation};
+use seshat_domain::operation::OperationId;
 
-use crate::actions::{self, Actions};
+use crate::actions::{self, ActionContext, Actions};
+use crate::clipboard::ClipboardFiles;
+use crate::conflicts::{ConflictRequest, UiConflictResolver};
 use crate::diagnostics;
 use crate::files::{FileView, FileViewEvent};
+use crate::operations_panel::OperationsPanel;
 use crate::pathbar::address_text;
 use crate::sidebar::{Sidebar, SidebarInit, SidebarInput, SidebarOutput};
 use crate::theme::{ThemeRegistry, render_css};
@@ -52,6 +58,7 @@ pub struct AppInit {
     pub launcher: Rc<dyn Launcher>,
     pub preferences: Rc<dyn PreferencesStore>,
     pub themes: Rc<dyn ThemeRepository>,
+    pub operations: OperationManager,
 }
 
 impl std::fmt::Debug for AppInit {
@@ -83,6 +90,9 @@ pub enum Msg {
     SetSortKey(String),
     ToggleSortDescending,
     StartSearch,
+    FocusResults,
+    FocusFiles,
+    CloseSearch,
     Search(String),
     SetTheme(String),
     ReloadThemes,
@@ -108,6 +118,32 @@ pub enum Msg {
     Eject(DeviceId),
     DeviceActionFinished(Result<Option<PathBuf>, DeviceError>),
     OpenFailed(String),
+    // File operations
+    ClipboardStore {
+        cut: bool,
+    },
+    Paste,
+    PasteFiles(Option<ClipboardFiles>),
+    RenameSelection,
+    TrashSelection,
+    DeleteSelection,
+    RestoreSelection,
+    NewItem {
+        directory: bool,
+    },
+    EmptyTrash,
+    DropFiles {
+        paths: Vec<PathBuf>,
+        into: Option<u32>,
+        copy: bool,
+    },
+    /// Submit a request; select `select` once it appears.
+    Submit(OperationRequest, Option<Location>),
+    Operation(OperationEvent),
+    CancelOperation(OperationId),
+    Conflict(ConflictRequest),
+    ConflictAnswered,
+    WindowHidden,
 }
 
 /// Listing result whose `Debug` output is a summary. Relm4 logs messages at
@@ -173,6 +209,15 @@ pub struct App {
     themes_watch: Option<WatchGuard>,
     themes_reload_pending: bool,
     css_provider: gtk::CssProvider,
+
+    operations: OperationManager,
+    /// Conflicts waiting for the open dialog to close.
+    conflict_queue: std::collections::VecDeque<ConflictRequest>,
+    conflict_dialog: Option<(OperationId, gtk::Window)>,
+    /// Keeps the process alive while the window is hidden with work left.
+    hold: Option<gtk::gio::ApplicationHoldGuard>,
+    /// Select this entry once it shows up (after create/rename).
+    pending_select: Option<Location>,
 }
 
 impl std::fmt::Debug for App {
@@ -220,14 +265,14 @@ impl SimpleComponent for App {
         if let Some(settings) = gtk::Settings::default() {
             let sender = sender.clone();
             settings.connect_gtk_interface_color_scheme_notify(move |_| {
-                sender.input(Msg::SystemColorSchemeChanged);
+                sender.input_sender().emit(Msg::SystemColorSchemeChanged);
             });
         }
 
         let devices = init.device_monitor.devices();
         init.device_monitor.connect_changed(Box::new({
             let sender = sender.clone();
-            move || sender.input(Msg::DevicesChanged)
+            move || sender.input_sender().emit(Msg::DevicesChanged)
         }));
 
         let sidebar = Sidebar::builder()
@@ -247,16 +292,75 @@ impl SimpleComponent for App {
         let file_view = FileView::new({
             let sender = sender.clone();
             move |event| match event {
-                FileViewEvent::Activate(position) => sender.input(Msg::Activate(position)),
-                FileViewEvent::ContextMenu { position, x, y } => sender.input(Msg::ContextMenu {
-                    on_item: position.is_some(),
-                    x,
-                    y,
-                }),
-                FileViewEvent::SelectionChanged => sender.input(Msg::SelectionChanged),
+                FileViewEvent::Activate(position) => {
+                    sender.input_sender().emit(Msg::Activate(position))
+                }
+                FileViewEvent::ContextMenu { position, x, y } => {
+                    sender.input_sender().emit(Msg::ContextMenu {
+                        on_item: position.is_some(),
+                        x,
+                        y,
+                    })
+                }
+                FileViewEvent::SelectionChanged => {
+                    sender.input_sender().emit(Msg::SelectionChanged)
+                }
+                FileViewEvent::Drop { paths, into, copy } => {
+                    sender
+                        .input_sender()
+                        .emit(Msg::DropFiles { paths, into, copy });
+                }
             }
         });
-        let (widgets, ui) = view::build(&root, sidebar.widget(), file_view, &sender);
+        let panel = OperationsPanel::new({
+            let sender = sender.clone();
+            move |id| sender.input_sender().emit(Msg::CancelOperation(id))
+        });
+        let (widgets, ui) = view::build(&root, sidebar.widget(), file_view, panel, &sender);
+        init.operations
+            .set_conflict_resolver(std::sync::Arc::new(UiConflictResolver::new(
+                sender.input_sender().clone(),
+            )));
+        {
+            // Called on worker threads: only forward.
+            let input = sender.input_sender().clone();
+            init.operations.subscribe(Box::new(move |event| {
+                let _ = input.send(Msg::Operation(event.clone()));
+            }));
+        }
+        {
+            // Coming back to the window (e.g. after a dialog closes) puts
+            // keyboard focus on the files unless a text field had it.
+            let sender = sender.clone();
+            root.connect_focus_widget_notify(|window| {
+                let focus = gtk::prelude::GtkWindowExt::focus(window);
+                tracing::debug!(
+                    widget = focus.as_ref().map(|w| w.type_().name()).unwrap_or("none"),
+                    "keyboard focus"
+                );
+            });
+            root.connect_is_active_notify(move |window| {
+                let typing = gtk::prelude::GtkWindowExt::focus(window)
+                    .is_some_and(|w| w.is::<gtk::Text>() || w.is::<gtk::Entry>());
+                if window.is_active() && !typing {
+                    sender.input_sender().emit(Msg::FocusFiles);
+                }
+            });
+        }
+        {
+            // Closing the window must not abort running operations.
+            let operations = init.operations.clone();
+            let sender = sender.clone();
+            root.connect_close_request(move |window| {
+                if operations.active_count() > 0 {
+                    window.set_visible(false);
+                    sender.input_sender().emit(Msg::WindowHidden);
+                    gtk::glib::Propagation::Stop
+                } else {
+                    gtk::glib::Propagation::Proceed
+                }
+            });
+        }
         shortcuts::install(&root, &sender);
 
         let prefs = init.preferences.load();
@@ -295,6 +399,11 @@ impl SimpleComponent for App {
             themes_watch: None,
             themes_reload_pending: false,
             css_provider,
+            operations: init.operations,
+            conflict_queue: std::collections::VecDeque::new(),
+            conflict_dialog: None,
+            hold: None,
+            pending_select: None,
         };
         model.ui.file_view.set_mode(model.view_mode);
         model.load_themes();
@@ -341,16 +450,29 @@ impl SimpleComponent for App {
                     f64::from(root.width()) / 2.0,
                     f64::from(root.height()) / 3.0,
                 );
-                sender.input(Msg::ContextMenu { on_item, x, y });
+                sender
+                    .input_sender()
+                    .emit(Msg::ContextMenu { on_item, x, y });
             }
             Msg::ContextMenu { on_item, x, y } => {
                 let menu = if on_item {
-                    actions::item_menu()
+                    actions::item_menu(self.in_trash())
                 } else {
-                    actions::background_menu()
+                    actions::background_menu(self.in_trash())
                 };
                 let popover = &self.ui.context_menu;
                 popover.set_menu_model(Some(&menu));
+                // Event coordinates are relative to the file view; the popover
+                // hangs off its container.
+                let (x, y) = popover
+                    .parent()
+                    .and_then(|parent| {
+                        self.ui
+                            .file_view
+                            .root
+                            .compute_point(&parent, &gtk::graphene::Point::new(x as f32, y as f32))
+                    })
+                    .map_or((x, y), |p| (f64::from(p.x()), f64::from(p.y())));
                 popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
                 popover.popup();
             }
@@ -382,6 +504,13 @@ impl SimpleComponent for App {
                 self.rearrange(true);
                 self.save_preferences();
             }
+            Msg::FocusResults => self.ui.file_view.focus_results(),
+            Msg::FocusFiles => self.ui.file_view.focus(),
+            Msg::CloseSearch => {
+                if self.ui.search_bar.is_search_mode() {
+                    self.ui.search_bar.set_search_mode(false);
+                }
+            }
             Msg::StartSearch => {
                 self.ui.search_bar.set_search_mode(true);
                 self.ui.search_entry.grab_focus();
@@ -408,7 +537,7 @@ impl SimpleComponent for App {
                 self.themes_reload_pending = true;
                 let sender = sender.clone();
                 gtk::glib::timeout_add_local_once(RELOAD_DEBOUNCE, move || {
-                    sender.input(Msg::ReloadThemes);
+                    sender.input_sender().emit(Msg::ReloadThemes);
                 });
             }
             Msg::ThemesChanged => {}
@@ -450,7 +579,9 @@ impl SimpleComponent for App {
                 let sender = sender.clone();
                 relm4::spawn_local(async move {
                     let result = monitor.mount(&id).await.map(Some);
-                    sender.input(Msg::DeviceActionFinished(result));
+                    sender
+                        .input_sender()
+                        .emit(Msg::DeviceActionFinished(result));
                 });
             }
             Msg::Eject(id) => self.eject(id, &sender),
@@ -466,6 +597,36 @@ impl SimpleComponent for App {
                 }
             },
             Msg::OpenFailed(err) => self.notice = Some(format!("Could not open: {err}")),
+            Msg::ClipboardStore { cut } => self.clipboard_store(cut),
+            Msg::Paste => self.paste(&sender),
+            Msg::PasteFiles(files) => self.paste_files(files, &sender),
+            Msg::RenameSelection => self.rename_selection(&sender),
+            Msg::TrashSelection => self.trash_selection(&sender),
+            Msg::DeleteSelection => self.delete_selection(&sender),
+            Msg::RestoreSelection => self.restore_selection(&sender),
+            Msg::NewItem { directory } => self.new_item(directory, &sender),
+            Msg::EmptyTrash => self.empty_trash(&sender),
+            Msg::DropFiles { paths, into, copy } => self.drop_files(paths, into, copy, &sender),
+            Msg::Submit(request, select) => self.submit(request, select),
+            Msg::Operation(event) => self.operation_event(event, &sender),
+            Msg::CancelOperation(id) => {
+                let _ = self.operations.cancel(id);
+            }
+            Msg::Conflict(request) => {
+                self.conflict_queue.push_back(request);
+                self.show_next_conflict(&sender);
+            }
+            Msg::ConflictAnswered => {
+                self.conflict_dialog = None;
+                self.show_next_conflict(&sender);
+            }
+            Msg::WindowHidden => {
+                tracing::info!(
+                    active = self.operations.active_count(),
+                    "window closed; finishing operations in the background"
+                );
+                self.hold = Some(relm4::main_application().hold());
+            }
         }
     }
 
@@ -477,6 +638,11 @@ impl SimpleComponent for App {
             self.view_mode,
             self.view.sort,
             &self.theme_choice,
+            ActionContext {
+                selected: self.ui.file_view.selected().len(),
+                in_trash: self.in_trash(),
+                in_folder: matches!(current, Some(Location::Path(_))),
+            },
         );
         widgets
             .back_button
@@ -494,7 +660,7 @@ impl SimpleComponent for App {
                 widgets
                     .pathbar
                     .set_crumbs(&breadcrumbs(location, &self.home), move |target| {
-                        sender.input(Msg::Navigate(target));
+                        sender.input_sender().emit(Msg::Navigate(target));
                     });
             }
             widgets.rendered_crumbs = current.cloned();
@@ -582,7 +748,11 @@ impl App {
         let watch_sender = sender.clone();
         match self.directory_watcher.watch(
             &location,
-            Box::new(move |change| watch_sender.input(Msg::DirectoryChanged { view, change })),
+            Box::new(move |change| {
+                watch_sender
+                    .input_sender()
+                    .emit(Msg::DirectoryChanged { view, change })
+            }),
         ) {
             Ok(guard) => self.watch = Some(guard),
             Err(err) => tracing::debug!(error = %err, "cannot watch location; no live updates"),
@@ -604,7 +774,7 @@ impl App {
         let sender = sender.clone();
         relm4::spawn_local(async move {
             let result = use_case.execute(&location).await;
-            sender.input(Msg::Loaded {
+            sender.input_sender().emit(Msg::Loaded {
                 generation,
                 result: ListingResult(result),
             });
@@ -622,6 +792,12 @@ impl App {
                 self.listing = entries;
                 self.state = ContentState::Ready;
                 self.rearrange(self.reloading);
+                if let Some(location) = self.pending_select.take()
+                    && !self.ui.file_view.select_location(&location)
+                {
+                    // Not shown yet (e.g. filtered or not reloaded): keep waiting.
+                    self.pending_select = Some(location);
+                }
                 if !self.reloading {
                     self.ui.file_view.focus();
                 }
@@ -691,7 +867,7 @@ impl App {
             let sender = sender.clone();
             relm4::spawn_local(async move {
                 if let Err(err) = launcher.open(&location).await {
-                    sender.input(Msg::OpenFailed(err));
+                    sender.input_sender().emit(Msg::OpenFailed(err));
                 }
             });
         }
@@ -735,7 +911,7 @@ impl App {
                 self.reload_pending = true;
                 let sender = sender.clone();
                 gtk::glib::timeout_add_local_once(RELOAD_DEBOUNCE, move || {
-                    sender.input(Msg::ReloadNow { view });
+                    sender.input_sender().emit(Msg::ReloadNow { view });
                 });
             }
             DirectoryChange::Modified => {}
@@ -772,7 +948,9 @@ impl App {
         let sender = sender.clone();
         relm4::spawn_local(async move {
             let result = monitor.eject(&id).await.map(|()| None);
-            sender.input(Msg::DeviceActionFinished(result));
+            sender
+                .input_sender()
+                .emit(Msg::DeviceActionFinished(result));
         });
     }
 
@@ -813,7 +991,7 @@ impl App {
             .directory_watcher
             .watch(
                 &Location::Path(directory),
-                Box::new(move |_| sender.input(Msg::ThemesChanged)),
+                Box::new(move |_| sender.input_sender().emit(Msg::ThemesChanged)),
             )
             .ok();
     }

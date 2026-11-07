@@ -17,7 +17,9 @@ pub enum SidebarInput {
     SetDevices(Vec<Device>),
     /// Highlights the row matching the current location, if any.
     SetCurrent(Option<Location>),
-    RowSelected(usize),
+    RowActivated(usize),
+    /// Re-applies the current-location highlight.
+    Resync,
     EjectClicked(DeviceId),
 }
 
@@ -68,12 +70,26 @@ impl SimpleComponent for Sidebar {
             .selection_mode(gtk::SelectionMode::Single)
             .build();
         list.update_property(&[gtk::accessible::Property::Label("Places")]);
-        list.connect_row_selected({
+        // Navigate only on activation (click or Enter). Selection follows
+        // keyboard focus in a GtkListBox, so navigating on selection would
+        // jump between folders while arrowing through the list.
+        list.connect_row_activated({
             let sender = sender.clone();
             move |_, row| {
-                if let Some(index) = row.and_then(|r| usize::try_from(r.index()).ok()) {
-                    sender.input(SidebarInput::RowSelected(index));
+                if let Ok(index) = usize::try_from(row.index()) {
+                    sender
+                        .input_sender()
+                        .emit(SidebarInput::RowActivated(index));
                 }
+            }
+        });
+        // Keep the highlight on the current location, not the focused row.
+        list.connect_row_selected({
+            let sender = sender.clone();
+            // Also fires while the list is torn down at exit; a closed channel
+            // is expected then.
+            move |_, _| {
+                let _ = sender.input_sender().send(SidebarInput::Resync);
             }
         });
         root.set_child(Some(&list));
@@ -101,7 +117,8 @@ impl SimpleComponent for Sidebar {
                 self.current = location;
                 self.sync_selection();
             }
-            SidebarInput::RowSelected(index) => {
+            SidebarInput::Resync => self.sync_selection(),
+            SidebarInput::RowActivated(index) => {
                 let output = match self.targets.get(index).cloned().flatten() {
                     Some(Target::Location(location)) => SidebarOutput::Navigate(location),
                     Some(Target::UnmountedVolume(id)) => SidebarOutput::Mount(id),
@@ -142,8 +159,11 @@ impl Sidebar {
                     .build();
                 let sender = sender.clone();
                 let id = device.id.clone();
-                button
-                    .connect_clicked(move |_| sender.input(SidebarInput::EjectClicked(id.clone())));
+                button.connect_clicked(move |_| {
+                    sender
+                        .input_sender()
+                        .emit(SidebarInput::EjectClicked(id.clone()))
+                });
                 button.upcast::<gtk::Widget>()
             });
             let unmounted = device.state == DeviceState::Unmounted;

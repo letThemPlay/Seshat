@@ -39,11 +39,9 @@ The four layers are separate crates. Anything smaller (views, theme, diagnostics
 - Symlinks are never followed during listing (`NOFOLLOW_SYMLINKS`).
 - Logs never include file listings or contents. Relm4 logs input messages at debug level, so `Msg::Loaded` prints only an entry count.
 
-## File Operation Manager (Phases 4–5)
+## File Operation Manager
 
-The domain already defines the operation identity, the lifecycle (`OperationStatus::transition` rejects invalid transitions) and progress. The manager itself will live in `seshat-application` as a service that owns all operation state. Presentation and the D-Bus adapter (infrastructure) will both be *observers* of its event stream. The manager is reached only through application-defined traits, so it can later move into a separate background process (a D-Bus-activated service) without changing the domain or application layers.
-
-**Initial limitation (by design, to be documented again in Phase 4):** the manager runs inside the UI process. Closing the window will hide it rather than quit while operations are active. Killing the process will still abort them.
+Implemented in `seshat-application::operations`; see [operations.md](operations.md) for the lifecycle, event and snapshot contract, safety rules and how to add an operation.
 
 ## Async model
 
