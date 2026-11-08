@@ -102,6 +102,12 @@
           # Fail loudly instead of silently falling back to X11/XWayland.
           GDK_BACKEND = "wayland";
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+
+          # Like the package: file types must not depend on the host having a
+          # MIME database (CI runners' Nix environments don't expose one).
+          shellHook = ''
+            export XDG_DATA_DIRS=${pkgs.shared-mime-info}/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}
+          '';
         };
       });
 }
