@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>Seshat</title>
+  <!-- Folder back -->
+  <path d="M12 30a8 8 0 0 1 8-8h28l10 10h50a8 8 0 0 1 8 8v58a8 8 0 0 1-8 8H20a8 8 0 0 1-8-8z" fill="#2f5d8a"/>
+  <!-- Folder front -->
+  <path d="M12 44a8 8 0 0 1 8-8h88a8 8 0 0 1 8 8v54a8 8 0 0 1-8 8H20a8 8 0 0 1-8-8z" fill="#4a86c2"/>
+  <!-- Seven-pointed star -->
+  <g transform="translate(64 71)" fill="#f4f1e8">
+    <polygon points="0.0,-26.0 4.8,-9.9 20.3,-16.2 10.7,-2.4 25.3,5.8 8.6,6.9 11.3,23.4 0.0,11.0 -11.3,23.4 -8.6,6.9 -25.3,5.8 -10.7,-2.4 -20.3,-16.2 -4.8,-9.9"/>
+  </g>
+</svg>

@@ -1,0 +1,36 @@
+name: Update flake.lock
+
+# Dependabot does not cover Nix; this opens a PR with updated flake inputs.
+# Note: PRs created with GITHUB_TOKEN do not trigger other workflows; run CI
+# on the PR with "Run workflow" (CI has workflow_dispatch) or close/reopen it.
+
+on:
+  schedule:
+    - cron: "0 5 1 * *" # monthly
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: update-flake-lock
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Update flake inputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write # push the update branch
+      pull-requests: write # open the PR
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          github_access_token: ${{ github.token }}
+      - uses: DeterminateSystems/update-flake-lock@da03c0f078bc4b2c37ee4f7e072d34bf8f188bb3 # v29
+        with:
+          pr-title: "Update flake.lock"
+          pr-labels: dependencies
