@@ -16,8 +16,8 @@ use futures_util::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
 use zbus::{Connection, MatchRule, MessageStream, Type, proxy};
 
-const BUS_NAME: &str = "com.example.Seshat.Operations";
-const INTERFACE: &str = "com.example.Seshat.Operations";
+const BUS_NAME: &str = "dev.kdmorris.Seshat.Operations";
+const INTERFACE: &str = "dev.kdmorris.Seshat.Operations";
 const PROTOCOL_VERSION: u32 = 1;
 const RETRY: Duration = Duration::from_secs(2);
 
@@ -54,9 +54,9 @@ impl OperationInfo {
 }
 
 #[proxy(
-    interface = "com.example.Seshat.Operations",
-    default_service = "com.example.Seshat.Operations",
-    default_path = "/com/example/Seshat/Operations"
+    interface = "dev.kdmorris.Seshat.Operations",
+    default_service = "dev.kdmorris.Seshat.Operations",
+    default_path = "/dev/kdmorris/Seshat/Operations"
 )]
 trait Operations {
     fn get_protocol_version(&self) -> zbus::Result<u32>;

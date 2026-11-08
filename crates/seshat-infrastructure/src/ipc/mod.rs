@@ -15,8 +15,8 @@ pub use types::OperationInfo;
 /// incompatible change to methods, signals or `OperationInfo`.
 pub const PROTOCOL_VERSION: u32 = 1;
 
-/// Well-known bus name. Placeholder until the project identity is decided;
+/// Well-known bus name, derived from the application id `dev.kdmorris.Seshat`;
 /// distinct from the GTK application id, which GApplication owns.
-pub const BUS_NAME: &str = "com.example.Seshat.Operations";
-pub const OBJECT_PATH: &str = "/com/example/Seshat/Operations";
-pub const INTERFACE: &str = "com.example.Seshat.Operations";
+pub const BUS_NAME: &str = "dev.kdmorris.Seshat.Operations";
+pub const OBJECT_PATH: &str = "/dev/kdmorris/Seshat/Operations";
+pub const INTERFACE: &str = "dev.kdmorris.Seshat.Operations";

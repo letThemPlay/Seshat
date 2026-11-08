@@ -241,9 +241,9 @@ fn config(address: &str) -> IpcConfig {
 // ── An independent client ───────────────────────────────────────────────────
 
 #[zbus::proxy(
-    interface = "com.example.Seshat.Operations",
-    default_service = "com.example.Seshat.Operations",
-    default_path = "/com/example/Seshat/Operations"
+    interface = "dev.kdmorris.Seshat.Operations",
+    default_service = "dev.kdmorris.Seshat.Operations",
+    default_path = "/dev/kdmorris/Seshat/Operations"
 )]
 trait Operations {
     fn get_protocol_version(&self) -> zbus::Result<u32>;
@@ -389,7 +389,7 @@ fn cancellation_and_structured_errors() {
     assert!(names.contains(&"OperationCancelling"), "{names:?}");
     assert_eq!(names.last(), Some(&"OperationCancelled"));
 
-    let prefix = "com.example.Seshat.Operations.Error.";
+    let prefix = "dev.kdmorris.Seshat.Operations.Error.";
     assert_eq!(
         error_name(zbus::block_on(ops.cancel_operation(&id)).unwrap_err()),
         format!("{prefix}AlreadyFinished")

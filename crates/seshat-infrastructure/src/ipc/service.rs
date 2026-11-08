@@ -37,9 +37,9 @@ impl Default for IpcConfig {
 }
 
 /// Errors returned to D-Bus callers. Names are
-/// `com.example.Seshat.Operations.Error.<Variant>`.
+/// `dev.kdmorris.Seshat.Operations.Error.<Variant>`.
 #[derive(Debug, DBusError)]
-#[zbus(prefix = "com.example.Seshat.Operations.Error")]
+#[zbus(prefix = "dev.kdmorris.Seshat.Operations.Error")]
 pub enum IpcError {
     #[zbus(error)]
     ZBus(zbus::Error),
@@ -89,7 +89,7 @@ fn parse_id(id: &str) -> Result<OperationId, IpcError> {
         .map_err(|_| IpcError::InvalidArgument(format!("not an operation id: {id:?}")))
 }
 
-#[interface(name = "com.example.Seshat.Operations")]
+#[interface(name = "dev.kdmorris.Seshat.Operations")]
 impl Operations {
     /// Version of this protocol (see `docs/ipc/protocol.md`).
     fn get_protocol_version(&self) -> u32 {

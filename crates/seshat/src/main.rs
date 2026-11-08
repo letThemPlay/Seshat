@@ -18,9 +18,9 @@ use seshat_infrastructure::persistence::{FileThemeRepository, TomlPreferencesSto
 use seshat_presentation::AppInit;
 use tracing_subscriber::EnvFilter;
 
-/// Application ID. Placeholder until the project's reverse-DNS identity is
-/// decided (it also determines the D-Bus bus name in Phase 5).
-const APP_ID: &str = "com.example.Seshat";
+/// Application ID (reverse-DNS). The desktop entry, icon, AppStream id and
+/// the D-Bus service name (`seshat-infrastructure::ipc`) all derive from it.
+const APP_ID: &str = "dev.kdmorris.Seshat";
 
 /// File operations running at once; more are queued.
 const MAX_CONCURRENT_OPERATIONS: usize = 3;

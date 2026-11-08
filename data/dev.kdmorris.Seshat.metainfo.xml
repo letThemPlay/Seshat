@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.example.Seshat</id>
+  <id>dev.kdmorris.Seshat</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Seshat</name>
@@ -19,10 +19,10 @@
       <li>Light, dark and custom themes</li>
     </ul>
   </description>
-  <launchable type="desktop-id">com.example.Seshat.desktop</launchable>
+  <launchable type="desktop-id">dev.kdmorris.Seshat.desktop</launchable>
   <provides>
     <binary>seshat</binary>
-    <dbus type="user">com.example.Seshat.Operations</dbus>
+    <dbus type="user">dev.kdmorris.Seshat.Operations</dbus>
   </provides>
   <requires>
     <display_length compare="ge">360</display_length>

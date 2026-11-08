@@ -43,7 +43,7 @@ GDK_BACKEND=x11 cargo run -p seshat -- --check-backend   # expect exit 1 (negati
 
 Compositor-specific checks:
 
-- Hyprland: `hyprctl clients` should show `xwayland: 0` for class `com.example.Seshat`
+- Hyprland: `hyprctl clients` should show `xwayland: 0` for class `dev.kdmorris.Seshat`
 - KDE Plasma: KWin debug console → Windows. The client should be listed under *Wayland Windows*
 - GNOME: `Alt+F2` → `lg` → Windows. The window should not be marked as X11 (or use `xlsclients`, which should not list it)
 

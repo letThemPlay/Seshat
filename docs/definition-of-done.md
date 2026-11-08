@@ -36,5 +36,5 @@ Status as of 2026-11-07. "Verified" means checked by an automated test or script
 
 ## Decisions still open
 
-- **Project identity:** the app id `com.example.Seshat`, the D-Bus name `com.example.Seshat.Operations`, the homepage URL and the developer info in the AppStream data are placeholders.
+- **Project metadata:** the app id is `dev.kdmorris.Seshat` (D-Bus name `dev.kdmorris.Seshat.Operations`). The homepage URL and the developer info in the AppStream data are still missing.
 - **License:** GPL-3.0-or-later is a placeholder pending the maintainers' choice.

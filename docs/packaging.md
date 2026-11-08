@@ -19,9 +19,9 @@ On NixOS, add the flake as an input and put `inputs.seshat.packages.${system}.de
 |---|---|
 | `bin/seshat` | the application (GTK wrapper around `.seshat-wrapped`) |
 | `bin/seshat-progress` | example D-Bus client |
-| `share/applications/com.example.Seshat.desktop` | desktop entry (validated with `desktop-file-validate`) |
-| `share/icons/hicolor/scalable/apps/com.example.Seshat.svg` | application icon |
-| `share/metainfo/com.example.Seshat.metainfo.xml` | AppStream metadata (`appstreamcli validate`: one warning, the missing homepage URL) |
+| `share/applications/dev.kdmorris.Seshat.desktop` | desktop entry (validated with `desktop-file-validate`) |
+| `share/icons/hicolor/scalable/apps/dev.kdmorris.Seshat.svg` | application icon |
+| `share/metainfo/dev.kdmorris.Seshat.metainfo.xml` | AppStream metadata (`appstreamcli validate`: one warning, the missing homepage URL) |
 
 The build runs the whole workspace test suite in the Nix sandbox, including the D-Bus tests on a private bus.
 
@@ -46,7 +46,7 @@ The build runs the whole workspace test suite in the Nix sandbox, including the 
 
 ## D-Bus
 
-- Seshat owns `com.example.Seshat.Operations` on the **session bus** while it runs ([protocol](ipc/protocol.md)). GApplication separately owns the application id `com.example.Seshat`.
+- Seshat owns `dev.kdmorris.Seshat.Operations` on the **session bus** while it runs ([protocol](ipc/protocol.md)). GApplication separately owns the application id `dev.kdmorris.Seshat`.
 - There is no D-Bus activation file. The service has nothing to report unless Seshat is running, and activating it would open a window. A future standalone operations daemon would add a `.service` file.
 - No system-bus access and no polkit actions are needed.
 
@@ -63,7 +63,7 @@ Notes for when these are added:
 - **Flatpak:**
   - `--socket=wayland` and **no** `--socket=fallback-x11`; otherwise the app could silently run under XWayland.
   - `--filesystem=host` (a file manager needs it).
-  - `--own-name=com.example.Seshat.Operations` and `--talk-name=org.gtk.vfs.*`.
+  - `--own-name=dev.kdmorris.Seshat.Operations` and `--talk-name=org.gtk.vfs.*`.
   - The Trash and device features depend on host GVfs access.
 - **AppImage:** GTK4 AppImages bundle their own GTK and often break theming and portals. That's lower priority.
 - **DEB/RPM:** these are straightforward from `cargo build --release` plus the `data/` files, using the dependencies listed above.

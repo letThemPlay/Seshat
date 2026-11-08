@@ -45,12 +45,12 @@
           '';
 
           postInstall = ''
-            install -Dm644 data/com.example.Seshat.desktop \
-              $out/share/applications/com.example.Seshat.desktop
-            install -Dm644 data/icons/com.example.Seshat.svg \
-              $out/share/icons/hicolor/scalable/apps/com.example.Seshat.svg
-            install -Dm644 data/com.example.Seshat.metainfo.xml \
-              $out/share/metainfo/com.example.Seshat.metainfo.xml
+            install -Dm644 data/dev.kdmorris.Seshat.desktop \
+              $out/share/applications/dev.kdmorris.Seshat.desktop
+            install -Dm644 data/icons/dev.kdmorris.Seshat.svg \
+              $out/share/icons/hicolor/scalable/apps/dev.kdmorris.Seshat.svg
+            install -Dm644 data/dev.kdmorris.Seshat.metainfo.xml \
+              $out/share/metainfo/dev.kdmorris.Seshat.metainfo.xml
           '';
 
           meta = {

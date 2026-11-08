@@ -5,11 +5,11 @@ Seshat publishes its file operations on the **session bus**, so other applicatio
 | | |
 |---|---|
 | Bus | session bus |
-| Bus name | `com.example.Seshat.Operations` |
-| Object path | `/com/example/Seshat/Operations` |
-| Interface | `com.example.Seshat.Operations` |
+| Bus name | `dev.kdmorris.Seshat.Operations` |
+| Object path | `/dev/kdmorris/Seshat/Operations` |
+| Interface | `dev.kdmorris.Seshat.Operations` |
 
-These names are placeholders until the project's reverse-DNS identity is decided. They are defined once, in `seshat-infrastructure::ipc`. The bus name is deliberately different from the GTK application id, which GApplication owns.
+These names derive from the application id `dev.kdmorris.Seshat`. They are defined once, in `seshat-infrastructure::ipc`. The bus name is deliberately different from the GTK application id, which GApplication owns.
 
 The service exists while Seshat runs, including while the window is closed but operations are still finishing. There is no D-Bus activation yet, because operations only exist while Seshat runs.
 
@@ -58,7 +58,7 @@ Paths are UTF-8 strings. Linux filenames need not be valid UTF-8, so invalid seq
 
 ## Errors
 
-The error names are `com.example.Seshat.Operations.Error.*`:
+The error names are `dev.kdmorris.Seshat.Operations.Error.*`:
 
 | Name | When |
 |---|---|
@@ -71,7 +71,7 @@ The error names are `com.example.Seshat.Operations.Error.*`:
 
 To avoid races between the snapshot and the signals:
 
-1. **Subscribe first.** Add match rules for the interface's signals, and for `org.freedesktop.DBus.NameOwnerChanged` with `arg0='com.example.Seshat.Operations'`. Buffer what arrives.
+1. **Subscribe first.** Add match rules for the interface's signals, and for `org.freedesktop.DBus.NameOwnerChanged` with `arg0='dev.kdmorris.Seshat.Operations'`. Buffer what arrives.
 2. **Take a snapshot** with `GetActiveOperations()`, which returns `(S, operations)`.
 3. **Apply buffered and later signals** with `sequence > S`, and ignore those with `sequence ≤ S` (the snapshot already includes them).
 4. **On a gap** (`sequence > last + 1`), take a new snapshot (step 2).
@@ -97,11 +97,11 @@ Operations are removed from the active set by the terminal signals (`OperationCo
 
 ```sh
 # Watch the signals
-dbus-monitor --session "interface='com.example.Seshat.Operations'"
+dbus-monitor --session "interface='dev.kdmorris.Seshat.Operations'"
 
 # Snapshot
-busctl --user call com.example.Seshat.Operations /com/example/Seshat/Operations \
-    com.example.Seshat.Operations GetActiveOperations
+busctl --user call dev.kdmorris.Seshat.Operations /dev/kdmorris/Seshat/Operations \
+    dev.kdmorris.Seshat.Operations GetActiveOperations
 
 # Example client (crates/seshat-progress)
 cargo run -p seshat-progress                 # follow until interrupted
