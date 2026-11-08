@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 # Deliberately independent of Seshat's crates: it speaks only the D-Bus
 # protocol (docs/ipc/protocol.md), like a client in any other language.

@@ -5,7 +5,7 @@ Seshat currently ships as a **Nix flake package** (see [ADR 0003](decisions/0003
 ## Using the package
 
 ```sh
-nix run github:<owner>/seshat              # or, in a checkout: nix run .
+nix run github:letThemPlay/Seshat            # or, in a checkout: nix run .
 nix build .#seshat && ./result/bin/seshat
 nix profile install .#seshat               # per-user install
 nix run .#seshat-progress                  # the example D-Bus client

@@ -1,5 +1,8 @@
 # Seshat
 
+[![CI](https://github.com/letThemPlay/Seshat/actions/workflows/ci.yml/badge.svg)](https://github.com/letThemPlay/Seshat/actions/workflows/ci.yml)
+[![Security](https://github.com/letThemPlay/Seshat/actions/workflows/security.yml/badge.svg)](https://github.com/letThemPlay/Seshat/actions/workflows/security.yml)
+
 A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4.
 
 > **Status:** 0.1.0, all six phases of `spec.md` §17 are complete. See [Definition of Done](docs/definition-of-done.md) for what is verified and what still needs manual checks (GNOME and KDE sessions, removable devices).
@@ -65,6 +68,7 @@ cargo run -p seshat -- --check-backend
 - [Wayland verification](docs/development/wayland-verification.md)
 - [Writing themes](docs/development/themes.md)
 - [Testing](docs/development/testing.md)
+- [Continuous integration](docs/development/ci.md)
 - [Linux and Wayland setup](docs/development/setup.md)
 - [Packaging](docs/packaging.md)
 - [Definition of Done](docs/definition-of-done.md)

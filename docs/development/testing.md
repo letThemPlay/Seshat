@@ -1,6 +1,6 @@
 # Testing
 
-Run everything inside `nix develop`. `scripts/check.sh --ui` runs all of the following.
+Run everything inside `nix develop`. `scripts/check.sh --ui` runs all of the following, and CI runs it on every pull request ([ci.md](ci.md)).
 
 ```sh
 scripts/check-architecture.sh          # layer dependency rules

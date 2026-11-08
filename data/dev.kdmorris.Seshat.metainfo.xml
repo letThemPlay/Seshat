@@ -19,6 +19,9 @@
       <li>Light, dark and custom themes</li>
     </ul>
   </description>
+  <url type="homepage">https://github.com/letThemPlay/Seshat</url>
+  <url type="bugtracker">https://github.com/letThemPlay/Seshat/issues</url>
+  <url type="vcs-browser">https://github.com/letThemPlay/Seshat</url>
   <launchable type="desktop-id">dev.kdmorris.Seshat.desktop</launchable>
   <provides>
     <binary>seshat</binary>

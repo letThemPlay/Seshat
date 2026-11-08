@@ -1,0 +1,28 @@
+name: Set up Nix toolchain
+description: >
+  Install Nix and restore the Cargo build cache. All tools (Rust, GTK 4.20+,
+  Weston, Sway, D-Bus, ...) come from the flake's dev shell, exactly as in
+  local development; Nix dependencies are fetched from cache.nixos.org.
+
+inputs:
+  cache-key:
+    description: Separates Cargo caches between jobs that build differently.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      with:
+        # Authenticated GitHub API calls when fetching flake inputs.
+        github_access_token: ${{ github.token }}
+
+    - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        shared-key: ${{ inputs.cache-key }}
+        # cargo/rustc only exist inside the dev shell.
+        cmd-format: nix develop --command {0}
+
+    - name: Prepare the dev shell
+      shell: bash
+      run: nix develop --command true

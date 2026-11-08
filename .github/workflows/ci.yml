@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/.github/actions/setup
+        with:
+          cache-key: checks
+
+      - name: Format
+        run: nix develop --command cargo fmt --check
+      - name: Clippy
+        run: nix develop --command cargo clippy --all-targets --all-features -- -D warnings
+      - name: Architecture rules
+        run: nix develop --command scripts/check-architecture.sh
+      - name: Tests (unit, integration, D-Bus on a private bus)
+        run: nix develop --command cargo test --workspace
+      - name: Native Wayland verification (headless Weston)
+        run: nix develop --command scripts/verify-wayland.sh
+
+  ui-e2e:
+    name: UI end-to-end
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/.github/actions/setup
+        with:
+          cache-key: ui-e2e
+
+      # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor;
+      # the harness runs Seshat inside a bubblewrap sandbox that needs them.
+      - name: Allow user namespaces for bubblewrap
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Sandboxed UI test (headless Sway)
+        run: nix develop --command scripts/ui-session.sh scripts/ui/file-operations.sh "$RUNNER_TEMP/ui"
+      - name: Upload screenshots and logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-e2e-artifacts
+          path: ${{ runner.temp }}/ui
+          if-no-files-found: ignore
+          retention-days: 7
+
+  package:
+    name: Nix package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/.github/actions/setup
+        with:
+          cache-key: package
+
+      - name: Build package (runs the test suite in the Nix sandbox)
+        run: nix build --print-build-logs .#seshat
+      - name: Packaged binary is a native Wayland client
+        run: SESHAT_BIN=./result/bin/seshat nix develop --command scripts/verify-wayland.sh
+      - name: Validate desktop entry and AppStream metadata
+        run: |
+          nix develop --command desktop-file-validate data/dev.kdmorris.Seshat.desktop
+          nix develop --command appstreamcli validate --no-net data/dev.kdmorris.Seshat.metainfo.xml
+
+  deny:
+    name: Dependencies (cargo-deny)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          log-level: warn
