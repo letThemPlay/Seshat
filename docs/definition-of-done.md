@@ -36,4 +36,7 @@ Status as of 2026-11-07, test counts updated 2026-11-09. The spatial workspace h
 
 ## Decisions still open
 
-- **Project metadata:** the app id is `dev.kdmorris.Seshat` (D-Bus name `dev.kdmorris.Seshat.Operations`). The homepage URL and the developer info in the AppStream data are still missing.
+None. The last two were settled on 2026-11-09:
+
+- **Licence:** GPL-3.0-or-later (`LICENSE`).
+- **Project metadata:** the app id is `dev.kdmorris.Seshat` (D-Bus name `dev.kdmorris.Seshat.Operations`). The AppStream data names the developer (Kelvin Morris, id `dev.kdmorris`) and links the homepage, bug tracker and repository. `appstreamcli validate --pedantic` passes, with one pedantic note that the id contains capitals, which the established app id keeps.

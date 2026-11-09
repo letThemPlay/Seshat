@@ -74,3 +74,11 @@ Results in [review/performance.md](../review/performance.md).
 |---|---|
 | Licence | GPL-3.0-or-later, as already declared in `Cargo.toml`, `flake.nix` and the AppStream metadata. The full text is in `LICENSE` and installed with the package. |
 | Copyright notice | "Copyright (C) 2026 the Seshat contributors", in the README. No per-file headers. |
+
+## Project metadata (approved 2026-11-09)
+
+| Topic | Decision |
+|---|---|
+| Developer | Kelvin Morris, AppStream developer id `dev.kdmorris` (matching the app id). |
+| Description | The AppStream description covers the spatial workspace: panels, side-by-side branches, Focus Mode, Vim-style keys and the command line. |
+| App id | `dev.kdmorris.Seshat` stays, despite AppStream's pedantic note about capitals: the desktop file, icon and D-Bus name all use it. |
