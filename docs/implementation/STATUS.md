@@ -4,7 +4,7 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 248 Rust tests (up from 165), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (31 checks).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 264 Rust tests (up from 165), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (34 checks).
 
 ## Spatial file manager specification
 
@@ -15,7 +15,7 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 | 3.5 | Switching restores the active panel, cursor, scroll, sort, view, filter and selection | ✅ Verified | `spec_16_3_panel_state_is_restored_when_returning`; UI test step 7 |
 | 3.6 | Keyboard and mouse branch switching, active-branch indicator, overview | ✅ Verified | `[`/`]`, `:branch N`, the branch bar (active one underlined), `:branch` overview; UI test |
 | 3.7 | Closing a branch keeps shared ancestors, never deletes files, and leaves running operations alone | ✅ Verified | `spec_16_1_closing_a_branch_keeps_shared_ancestors`, `spec_16_6_workspace_changes_do_not_alter_a_running_operation` |
-| 3.8, 10.2 | Branch visualisation | ⚠️ Partial | Branch bar, fork menu on shared panels, active outline and breadcrumbs. Inactive branches are discoverable, not drawn side by side, and there are no drawn connectors |
+| 3.8, 10.2, 10.5 | Branch visualisation: shared ancestors once, branches grouped, connectors, active branch highlighted, overview when space runs out | ✅ Verified | Side-by-side grid ([ADR 0005](../decisions/0005-branch-layout.md)): `workspace_layout` tests, including spans equal to branch counts; connector geometry and theme tests; UI test checks rows, columns, cards, connectors and the short-window fallback |
 | 4.1 | `h`/`l` move within the branch and never create panels | ✅ Verified | `spec_16_2_horizontal_movement_stays_within_the_branch`; UI test |
 | 4.2 | `j`/`k`, `gg`, `G`, `Ctrl+d`/`Ctrl+u`; configurable list ends | ✅ Verified | `cursor_movement_clamps_or_wraps` (wrapping is a preference); UI test |
 | 4.3 | `Enter` opens; `Backspace` activates the parent panel | ✅ Verified | UI test; `parent_at_a_root_inserts_a_parent_panel` |
@@ -41,9 +41,8 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 
 ## Known gaps and follow-ups
 
-1. **Side-by-side branch rendering and connectors** (§3.8, §10.2). Branches are shown through the branch bar and fork menus.
-2. **Drag and drop between panels** is wired through the existing drop targets with explicit destinations, but needs a *manual* check: the UI harness cannot drag.
-3. **Path completion** on the command line.
-4. **A performance run with many panels** and large folders (§16.8 "many panels").
-5. **Manual Wayland matrix** (GNOME, KDE, fractional scaling, touchpad horizontal scrolling). Pending, as before.
-6. **D12 panel features** (columns, expanded metadata, preview), if they are wanted later.
+1. **Drag and drop between panels** is wired through the existing drop targets with explicit destinations, but needs a *manual* check: the UI harness cannot drag.
+2. **Path completion** on the command line.
+3. **A performance run with many panels** and large folders (§16.8 "many panels").
+4. **Manual Wayland matrix** (GNOME, KDE, fractional scaling, touchpad horizontal scrolling, connectors at fractional scales). Pending, as before.
+5. **D12 panel features** (columns, expanded metadata, preview), if they are wanted later.

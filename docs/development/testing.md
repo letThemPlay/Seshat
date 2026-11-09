@@ -39,7 +39,7 @@ Test scripts are sourced with helpers: `launch`, `type_text`, `press`, `chord ct
 The two scripts:
 
 - `file-operations.sh`: copy, paste, conflicts, create, rename, Trash, permanent delete, a large background copy after the window closes, and D-Bus publication.
-- `workspace.sh`: the spatial spec's definition of done (§19). It covers branches, Focus Mode navigation and branch switching, a cross-branch copy with confirmation, and the workspace restored after a restart. It reads workspace state from the `workspace state` debug line, which lists locations, never file listings.
+- `workspace.sh`: the spatial spec's definition of done (§19). It covers branches, the side-by-side layout (rows, columns, cards, connectors, and the single-row fallback in a short window), Focus Mode navigation and branch switching, a cross-branch copy with confirmation, and the workspace restored after a restart. It reads workspace state from the `workspace state` debug line, which lists locations, never file listings.
 
 Notes for writing scripts:
 

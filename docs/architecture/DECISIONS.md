@@ -8,6 +8,7 @@ Full ADRs live in [`docs/decisions/`](../decisions):
 | [0002](../decisions/0002-ipc.md) | D-Bus IPC with zbus |
 | [0003](../decisions/0003-packaging.md) | Nix package first |
 | [0004](../decisions/0004-spatial-workspace.md) | Spatial workspace: panel tree, branches, effects-based workspace service |
+| [0005](../decisions/0005-branch-layout.md) | Branches side by side with connectors |
 
 ## Spatial file manager: product decisions (approved 2026-11-09)
 
@@ -34,3 +35,14 @@ These resolve conflicts and gaps between [the original specification](../specifi
 | D17 | Grid view and `h`/`l` | `h`/`l` always move between panels; arrow keys move within the grid. |
 | D18 | Documentation names | `CLAUDE.md`, `1-SPATIAL-FILE-MANAGER.md`; this document set created alongside the existing docs. |
 | D19 | View value types | `SortKey`, `SortOrder`, `ViewMode` and `ViewOptions` moved to the domain and re-exported from `seshat_application::view`. |
+
+## Branch layout decisions (approved 2026-11-09)
+
+Side-by-side branch rendering, [ADR 0005](../decisions/0005-branch-layout.md).
+
+| # | Topic | Decision |
+|---|---|---|
+| L1 | What inactive branches show | Compact cards drawn from saved panel state: folder, cursor item, selection count, branch number. No extra folder reads; the listing cache limit (D13) holds. |
+| L2 | Default layout | Side by side by default, falling back to a single strip when the window is too short for any lane. `[workspace] layout = "strip"` keeps the strip. |
+| L3 | Row order | Fixed `[`/`]` order. Rows stay put while the active branch is in view. |
+| L4 | Many branches | At most six branch rows, fewer in short windows. The rest collapse into "+N branches" stubs that open the branch overview. |
