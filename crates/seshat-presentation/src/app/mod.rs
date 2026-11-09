@@ -21,6 +21,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
 };
 use seshat_application::interaction::command::CommandHistory;
+use seshat_application::interaction::completion::CompletionCycle;
 use seshat_application::interaction::{Intent, KeyMap, Mode, format_sequence};
 use seshat_application::navigation::{breadcrumbs, parse_address};
 use seshat_application::operations::{OperationEvent, OperationManager, OperationRequest};
@@ -155,7 +156,18 @@ pub enum Msg {
     CommandHistory {
         older: bool,
     },
-    CommandComplete,
+    /// Tab (`forward`) or Shift+Tab in the command line.
+    CommandComplete {
+        forward: bool,
+    },
+    /// A folder listed for path completion.
+    CompletionListed {
+        request: u64,
+        text: String,
+        keep: String,
+        partial: String,
+        result: ListingResult,
+    },
     ShowHelp,
     ShowBranches,
     /// Copy or move the targets into a folder picked from the open panels.
@@ -230,6 +242,10 @@ pub struct App {
     service: WorkspaceService,
     keys: SharedKeys,
     command_history: CommandHistory,
+    /// Tab cycling through completion matches (decision P1).
+    completion: Option<CompletionCycle>,
+    /// Numbers background listings for completion; late ones are dropped.
+    completion_request: u64,
     watches: HashMap<PanelId, WatchGuard>,
     /// Panels with a debounced reload scheduled.
     reload_pending: HashSet<PanelId>,
@@ -446,6 +462,8 @@ impl SimpleComponent for App {
             service,
             keys,
             command_history: CommandHistory::default(),
+            completion: None,
+            completion_request: 0,
             watches: HashMap::new(),
             reload_pending: HashSet::new(),
             focused_panel: None,
@@ -644,7 +662,14 @@ impl SimpleComponent for App {
             Msg::CommandSubmitted(text) => self.command_submitted(&text, &sender),
             Msg::CommandCancelled => self.close_command_line(),
             Msg::CommandHistory { older } => self.command_history_step(older),
-            Msg::CommandComplete => self.complete_command(),
+            Msg::CommandComplete { forward } => self.complete_command(forward, &sender),
+            Msg::CompletionListed {
+                request,
+                text,
+                keep,
+                partial,
+                result,
+            } => self.completion_listed(request, &text, keep, &partial, result.0),
             Msg::ShowHelp => self.show_help(),
             Msg::ShowBranches => self.show_branches(),
             Msg::TransferTo(kind, destination) => self.plan_transfer(kind, &destination, &sender),

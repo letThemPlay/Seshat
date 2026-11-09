@@ -113,6 +113,16 @@ impl WorkspaceService {
         self.listings.get(&panel)
     }
 
+    /// A loaded listing of `location` from any open panel, so completion can
+    /// use it instead of reading the folder again.
+    pub fn listing_for(&self, location: &Location) -> Option<&PanelListing> {
+        self.workspace
+            .panels()
+            .filter(|p| p.location() == location)
+            .filter_map(|p| self.listings.get(&p.id()))
+            .find(|l| l.loaded)
+    }
+
     pub fn active_panel(&self) -> PanelId {
         self.workspace.active_panel()
     }

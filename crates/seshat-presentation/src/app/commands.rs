@@ -6,9 +6,11 @@ use relm4::ComponentSender;
 use seshat_application::interaction::command::{
     self, BranchCommand, COMMANDS, Command, Destination,
 };
+use seshat_application::interaction::completion::{self, CompletionCycle, Plan};
 use seshat_application::interaction::{Action, Intent};
 use seshat_application::navigation::parse_address;
 use seshat_application::operations::OperationRequest;
+use seshat_application::ports::ListingError;
 use seshat_application::workspace::{TransferKind, TransferPlan};
 use seshat_domain::entities::Location;
 use seshat_domain::workspace::BranchId;
@@ -187,16 +189,128 @@ impl App {
         self.ui.command_entry.set_position(-1);
     }
 
-    pub(super) fn complete_command(&mut self) {
-        let text = self.ui.command_entry.text();
-        match command::complete(&text).as_slice() {
-            [single] => {
-                self.ui.command_entry.set_text(&format!("{single} "));
-                self.ui.command_entry.set_position(-1);
-            }
-            [] => {}
-            many => self.notice = Some(many.join("  ")),
+    /// Tab (`forward`) or Shift+Tab: completes command names, folder paths
+    /// and branch targets. Repeated presses cycle through the matches.
+    pub(super) fn complete_command(&mut self, forward: bool, sender: &ComponentSender<Self>) {
+        let text = self.ui.command_entry.text().to_string();
+        if let Some(cycle) = &mut self.completion
+            && cycle.is_current(&text)
+        {
+            let next = cycle.step(forward);
+            let (candidates, index) = (cycle.candidates().to_vec(), cycle.index());
+            self.set_command_text(&next);
+            self.notice = Some(match_list(&candidates, index));
+            return;
         }
+        self.completion = None;
+        let current = self.service.active_location().clone();
+        match completion::plan(&text, &self.home, &current) {
+            Plan::Nothing => {}
+            Plan::Command { partial } => {
+                let keep = text[..text.len() - partial.len()].to_owned();
+                let names: Vec<String> = completion::command_candidates(&partial)
+                    .into_iter()
+                    .map(|n| format!("{n} "))
+                    .collect();
+                self.finish_completion(keep, &partial, names.clone(), names);
+            }
+            Plan::Branch { keep, partial } => {
+                let ws = self.service.workspace();
+                let names: Vec<String> = ws
+                    .branches()
+                    .iter()
+                    .map(|b| {
+                        ws.panel(b.tip())
+                            .map(|p| folder_title(p.location()))
+                            .unwrap_or_default()
+                    })
+                    .collect();
+                let (targets, labels) = completion::branch_candidates(&partial, &names)
+                    .into_iter()
+                    .unzip();
+                self.finish_completion(keep, &partial, targets, labels);
+            }
+            Plan::Path {
+                keep,
+                folder,
+                partial,
+            } => {
+                // An open panel's listing is used as is; otherwise the
+                // folder is read in the background (decision: no extra
+                // reads for folders already shown).
+                if let Some(listing) = self.service.listing_for(&folder) {
+                    let names = completion::path_candidates(listing.entries(), &partial);
+                    self.finish_completion(keep, &partial, names.clone(), names);
+                    return;
+                }
+                self.completion_request += 1;
+                let request = self.completion_request;
+                let use_case = self.list_directory.clone();
+                let sender = sender.clone();
+                relm4::spawn_local(async move {
+                    let result = use_case.execute(&folder).await;
+                    sender.input_sender().emit(Msg::CompletionListed {
+                        request,
+                        text,
+                        keep,
+                        partial,
+                        result: super::ListingResult(result),
+                    });
+                });
+            }
+        }
+    }
+
+    /// A background listing for completion arrived. It is used only if it
+    /// is the latest request and the command line has not changed since.
+    pub(super) fn completion_listed(
+        &mut self,
+        request: u64,
+        text: &str,
+        keep: String,
+        partial: &str,
+        result: Result<Vec<seshat_domain::entities::FileEntry>, ListingError>,
+    ) {
+        let visible = WidgetExt::is_visible(&self.ui.command_entry);
+        if request != self.completion_request || !visible || self.ui.command_entry.text() != text {
+            return;
+        }
+        match result {
+            Ok(entries) => {
+                let names = completion::path_candidates(&entries, partial);
+                self.finish_completion(keep, partial, names.clone(), names);
+            }
+            Err(err) => self.notice = Some(crate::panel_view::error_message(&err, None)),
+        }
+    }
+
+    /// Applies the matches: a single one is filled in; several fill in
+    /// their common prefix, are listed, and start a Tab cycle.
+    fn finish_completion(
+        &mut self,
+        keep: String,
+        partial: &str,
+        candidates: Vec<String>,
+        labels: Vec<String>,
+    ) {
+        match candidates.as_slice() {
+            [] => self.notice = Some("No matches".to_owned()),
+            [single] => {
+                self.set_command_text(&format!("{keep}{single}"));
+                self.notice = None;
+            }
+            many => {
+                let text = format!("{keep}{}", completion::common_prefix(many, partial));
+                self.set_command_text(&text);
+                self.notice = Some(match_list(&labels, None));
+                self.completion = Some(CompletionCycle::new(keep, candidates, text));
+            }
+        }
+    }
+
+    fn set_command_text(&mut self, text: &str) {
+        self.ui.command_entry.set_text(text);
+        self.ui.command_entry.set_position(-1);
     }
 
     pub(super) fn command_submitted(&mut self, text: &str, sender: &ComponentSender<Self>) {
@@ -493,5 +607,44 @@ impl App {
         }
         drop(keys);
         dialogs::info(&self.ui.window, "Keys and Commands", &text);
+    }
+}
+
+/// Completion matches shown in the status bar: at most this many.
+const MAX_MATCHES_SHOWN: usize = 20;
+
+/// The matches for the status bar, the selected one in brackets.
+fn match_list(labels: &[String], current: Option<usize>) -> String {
+    let mut shown: Vec<String> = labels
+        .iter()
+        .take(MAX_MATCHES_SHOWN)
+        .enumerate()
+        .map(|(i, label)| {
+            if Some(i) == current {
+                format!("[{label}]")
+            } else {
+                label.clone()
+            }
+        })
+        .collect();
+    if labels.len() > MAX_MATCHES_SHOWN {
+        shown.push(format!("… {} more", labels.len() - MAX_MATCHES_SHOWN));
+    }
+    shown.join("  ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::match_list;
+
+    #[test]
+    fn match_lists_mark_the_current_one_and_are_capped() {
+        let labels: Vec<String> = ["a/", "b/"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(match_list(&labels, None), "a/  b/");
+        assert_eq!(match_list(&labels, Some(1)), "a/  [b/]");
+        let many: Vec<String> = (0..25).map(|i| format!("d{i}/")).collect();
+        let shown = match_list(&many, None);
+        assert!(shown.ends_with("… 5 more"), "{shown}");
+        assert!(!shown.contains("d20/"));
     }
 }
