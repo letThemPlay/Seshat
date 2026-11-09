@@ -4,6 +4,8 @@ use gtk::prelude::*;
 use relm4::ComponentSender;
 
 use super::{App, Msg};
+use crate::keys::{self, SharedKeys};
+use seshat_application::interaction::Intent;
 
 /// A GTK accelerator and the message it sends.
 type Shortcut = (&'static str, fn() -> Msg);
@@ -39,7 +41,8 @@ const ACTION_SHORTCUTS: &[(&str, &str)] = &[
     ("<Control><Shift>n", "new-folder"),
 ];
 
-pub fn install(window: &gtk::Window, sender: &ComponentSender<App>) {
+pub fn install(window: &gtk::Window, router: &SharedKeys, sender: &ComponentSender<App>) {
+    install_modal_keys(window, router, sender);
     let controller = gtk::ShortcutController::new();
     for (accelerator, action) in ACTION_SHORTCUTS {
         if let Some(trigger) = gtk::ShortcutTrigger::parse_string(accelerator) {
@@ -74,4 +77,41 @@ pub fn install(window: &gtk::Window, sender: &ComponentSender<App>) {
         _ => {}
     });
     window.add_controller(click);
+}
+
+/// Key bindings of the workspace (h/j/k/l, gg, zz, v, :, …), resolved by
+/// the modal key handling before any widget sees the key. Keys that are
+/// not bindings, and all keys while typing in a text field or menu, go on
+/// to GTK as usual, so arrows, Ctrl shortcuts and dialogs keep working.
+fn install_modal_keys(window: &gtk::Window, router: &SharedKeys, sender: &ComponentSender<App>) {
+    let controller = gtk::EventControllerKey::new();
+    controller.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let router = router.clone();
+    let sender = sender.clone();
+    let window_ref = window.downgrade();
+    controller.connect_key_pressed(move |_, key, _, state| {
+        let Some(window) = window_ref.upgrade() else {
+            return gtk::glib::Propagation::Proceed;
+        };
+        let focus = gtk::prelude::GtkWindowExt::focus(&window);
+        if keys::typing_elsewhere(focus.as_ref()) {
+            return gtk::glib::Propagation::Proceed;
+        }
+        let Some(press) = keys::key_press(key, state) else {
+            return gtk::glib::Propagation::Proceed;
+        };
+        let intent = router.borrow_mut().press(press);
+        tracing::trace!(
+            key = %press,
+            ?intent,
+            focus = focus.as_ref().map(|w| w.type_().name()).unwrap_or("none"),
+            "key"
+        );
+        if intent == Intent::Unhandled {
+            return gtk::glib::Propagation::Proceed;
+        }
+        sender.input_sender().emit(Msg::Intent(intent));
+        gtk::glib::Propagation::Stop
+    });
+    window.add_controller(controller);
 }

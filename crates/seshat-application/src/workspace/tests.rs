@@ -280,6 +280,26 @@ fn search_filters_belong_to_their_panel() {
 }
 
 #[test]
+fn filtered_out_items_never_stay_selected() {
+    let (mut s, [_, documents, _, _]) = scenario();
+    s.service.set_selection(
+        documents,
+        vec![loc("/h/Documents/Projects"), loc("/h/Documents/a.txt")],
+    );
+    s.service.set_query(documents, "a.txt");
+    assert_eq!(
+        s.service.state(documents).unwrap().selection.items(),
+        [loc("/h/Documents/a.txt")],
+        "an operation must not act on what the filter hides"
+    );
+    // Without a selection, the target is the visible cursor item.
+    s.service.set_query(documents, "b.");
+    s.service.activate_panel(documents).unwrap();
+    s.service.cursor_to_first(documents);
+    assert_eq!(s.service.targets()[0].items, [loc("/h/Documents/b.txt")]);
+}
+
+#[test]
 fn settings_change_one_panel_and_become_defaults() {
     let (mut s, [home, documents, _, _]) = scenario();
     s.service.toggle_hidden(home);

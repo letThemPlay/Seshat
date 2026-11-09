@@ -9,6 +9,7 @@ mkdir "$H/many"; (cd "$H/many" && head -c 60M /dev/urandom | split -b 2k -a 5 - 
 # Search → results → copy → paste
 launch
 check "D-Bus service is published"            ipc_published
+type_text /   # search starts with / (decision D1)
 type_text file1
 press Return                      # leave the search box for the results
 chord ctrl c
@@ -35,14 +36,14 @@ shot after-rename
 chord shift F10; shot context-menu; press Escape
 
 # Move to Trash (isolated XDG_DATA_HOME)
-type_text file1; press Return
+type_text /; type_text file1; press Return
 shot before-trash; press Delete 1.5
 check "trashed file left the folder"          test ! -e "$H/Notes/file1.txt"
 check "trashed file is in the Trash"          test -e "$DATA_DIR/Trash/files/file1.txt"
 press Escape
 
 # Permanent delete: the confirmation defaults to Cancel
-type_text Renamed; press Return
+type_text /; type_text Renamed; press Return
 chord shift Delete; shot delete-confirmation
 press Return 1; focus_main
 check "Return cancels permanent delete"       test -d "$H/Notes/Renamed"
@@ -53,7 +54,7 @@ check "deleted folder is not in the Trash"    test ! -e "$DATA_DIR/Trash/files/R
 
 # Large copy with progress; closing the window must not abort it
 chord ctrl l; type_text "$H"; press Return 1
-type_text many; press Return
+type_text /; type_text many; press Return
 chord ctrl c
 chord ctrl l; type_text "$H/Projects"; press Return 1
 chord ctrl v; sleep 0.5

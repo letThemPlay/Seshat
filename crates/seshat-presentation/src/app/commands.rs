@@ -1,0 +1,491 @@
+//! Keyboard intents and the command line. Both end in the same service
+//! calls as the mouse, menus and toolbar.
+
+use gtk::prelude::*;
+use relm4::ComponentSender;
+use seshat_application::interaction::command::{
+    self, BranchCommand, COMMANDS, Command, Destination,
+};
+use seshat_application::interaction::{Action, Intent};
+use seshat_application::navigation::parse_address;
+use seshat_application::operations::OperationRequest;
+use seshat_application::workspace::{TransferKind, TransferPlan};
+use seshat_domain::entities::Location;
+use seshat_domain::workspace::BranchId;
+
+use super::workspace::capitalise;
+use super::{App, Msg};
+use crate::dialogs;
+use crate::workspace_view::folder_title;
+
+impl App {
+    pub(super) fn intent(&mut self, intent: Intent, sender: &ComponentSender<Self>) {
+        let active = self.service.active_panel();
+        // A key press dismisses the last message.
+        if !matches!(intent, Intent::Pending) {
+            self.notice = None;
+        }
+        match intent {
+            Intent::Pending | Intent::Cancelled | Intent::Unhandled => {}
+            Intent::MoveCursor { delta, extend } => {
+                self.service.move_cursor(active, delta);
+                self.after_cursor_move(extend);
+            }
+            Intent::CursorFirst { extend } => {
+                self.service.cursor_to_first(active);
+                self.after_cursor_move(extend);
+            }
+            Intent::CursorLast { extend } => {
+                self.service.cursor_to_last(active);
+                self.after_cursor_move(extend);
+            }
+            Intent::HalfPage { down, extend } => {
+                let page = self
+                    .ui
+                    .workspace
+                    .with_panel(active, |v| v.files.rows_per_page())
+                    .unwrap_or(10);
+                let step = (page / 2).max(1) as isize;
+                self.service
+                    .move_cursor(active, if down { step } else { -step });
+                self.after_cursor_move(extend);
+            }
+            Intent::ToggleSelection => {
+                if self.service.cursor_index(active).is_none() {
+                    self.service.cursor_to_first(active);
+                }
+                self.service.toggle_selection_at_cursor(active);
+            }
+            Intent::StartRange => {
+                if self.service.cursor_index(active).is_none() {
+                    self.service.cursor_to_first(active);
+                }
+                self.service.start_range(active);
+            }
+            Intent::EndRange | Intent::LeaveVisual => {}
+            Intent::ClearSelection => {
+                // Esc closes what is open first, then clears the selection.
+                if self.ui.search_bar.is_search_mode() {
+                    self.ui.search_bar.set_search_mode(false);
+                } else if self.editing_address {
+                    self.editing_address = false;
+                } else {
+                    self.service.clear_selections();
+                }
+            }
+            Intent::OpenCommandLine => self.open_command_line(),
+            Intent::Perform(action) => self.perform(action, sender),
+        }
+    }
+
+    /// Carries out an action that is the same in every mode.
+    pub(super) fn perform(&mut self, action: Action, sender: &ComponentSender<Self>) {
+        match action {
+            Action::PanelLeft => {
+                self.service.move_left();
+            }
+            Action::PanelRight => {
+                self.service.move_right();
+            }
+            Action::Parent => {
+                self.service.go_parent();
+            }
+            Action::Open => self.open_cursor(),
+            Action::BranchPrevious => {
+                self.service.cycle_branch(false);
+            }
+            Action::BranchNext => {
+                self.service.cycle_branch(true);
+            }
+            Action::Back => {
+                self.service.go_back();
+            }
+            Action::Forward => {
+                self.service.go_forward();
+            }
+            Action::Search => self.start_search(),
+            Action::FocusMode => {
+                self.service.toggle_focus_mode();
+            }
+            Action::Yank => self.clipboard_store(false),
+            Action::Cut => self.clipboard_store(true),
+            Action::Paste => self.paste(sender),
+            // Mode actions are resolved by the interaction layer.
+            Action::CursorDown
+            | Action::CursorUp
+            | Action::CursorFirst
+            | Action::CursorLast
+            | Action::HalfPageDown
+            | Action::HalfPageUp
+            | Action::Visual
+            | Action::VisualRange
+            | Action::CommandLine
+            | Action::Escape => {
+                let intent = self.keys.borrow_mut().interaction.apply(action);
+                self.intent(intent, sender);
+            }
+        }
+    }
+
+    fn after_cursor_move(&mut self, extend: bool) {
+        let active = self.service.active_panel();
+        if extend {
+            self.service.extend_range(active);
+        }
+        let cursor = self.service.state(active).and_then(|s| s.cursor.clone());
+        self.ui.workspace.focus_panel(active, cursor.as_ref());
+    }
+
+    /// Enter: open the cursor item; with several files selected in the
+    /// panel and the cursor among them, open them all.
+    fn open_cursor(&mut self) {
+        let active = self.service.active_panel();
+        let Some(entry) = self.service.cursor_entry(active).cloned() else {
+            self.open_targets();
+            return;
+        };
+        let selected = self
+            .service
+            .state(active)
+            .map(|s| s.selection.items().to_vec())
+            .unwrap_or_default();
+        if !entry.is_browsable() && selected.len() > 1 && selected.contains(&entry.location) {
+            self.open_targets();
+        } else {
+            self.open_entries(active, vec![entry]);
+        }
+    }
+
+    // ── Command line ────────────────────────────────────────────────────
+
+    pub(super) fn open_command_line(&mut self) {
+        self.ui.command_entry.set_text("");
+        self.ui.command_entry.set_visible(true);
+        self.ui.command_entry.grab_focus();
+    }
+
+    pub(super) fn close_command_line(&mut self) {
+        self.keys.borrow_mut().interaction.leave_command_line();
+        self.ui.command_entry.set_visible(false);
+        self.focused_panel = None; // give the keyboard back to the panel
+    }
+
+    pub(super) fn command_history_step(&mut self, older: bool) {
+        let text = if older {
+            self.command_history.older().map(str::to_owned)
+        } else {
+            self.command_history.newer().map(str::to_owned)
+        };
+        let text = text.unwrap_or_default();
+        self.ui.command_entry.set_text(&text);
+        self.ui.command_entry.set_position(-1);
+    }
+
+    pub(super) fn complete_command(&mut self) {
+        let text = self.ui.command_entry.text();
+        match command::complete(&text).as_slice() {
+            [single] => {
+                self.ui.command_entry.set_text(&format!("{single} "));
+                self.ui.command_entry.set_position(-1);
+            }
+            [] => {}
+            many => self.notice = Some(many.join("  ")),
+        }
+    }
+
+    pub(super) fn command_submitted(&mut self, text: &str, sender: &ComponentSender<Self>) {
+        self.command_history.push(text);
+        let parsed = command::parse(text);
+        self.close_command_line();
+        match parsed {
+            Ok(command) => {
+                self.notice = None;
+                self.run_command(command, sender);
+            }
+            Err(err) => self.notice = Some(capitalise(&err.to_string())),
+        }
+    }
+
+    fn run_command(&mut self, command: Command, sender: &ComponentSender<Self>) {
+        let active = self.service.active_panel();
+        match command {
+            Command::Copy(destination) => {
+                self.transfer_command(TransferKind::Copy, destination, sender)
+            }
+            Command::Move(destination) => {
+                self.transfer_command(TransferKind::Move, destination, sender)
+            }
+            Command::Delete { permanently: false } => self.trash_selection(sender),
+            Command::Delete { permanently: true } => self.delete_selection(sender),
+            Command::Rename(None) => self.rename_selection(sender),
+            Command::Rename(Some(name)) => {
+                let targets = self.service.targets();
+                match targets.as_slice() {
+                    [group] if group.items.len() == 1 => match &group.items[0] {
+                        Location::Path(path) => {
+                            let select = path
+                                .parent()
+                                .map(|p| (group.panel, Location::Path(p.join(&name))));
+                            self.submit(
+                                OperationRequest::Rename {
+                                    path: path.clone(),
+                                    new_name: name,
+                                },
+                                select,
+                            );
+                        }
+                        Location::Trash(_) => {
+                            self.notice = Some("Items in the Trash can't be renamed.".to_owned());
+                        }
+                    },
+                    _ => self.notice = Some("Select exactly one item to rename.".to_owned()),
+                }
+            }
+            Command::Mkdir(name) => self.new_item(true, Some(name), sender),
+            Command::Touch(name) => self.new_item(false, Some(name), sender),
+            Command::Search(query) => {
+                self.service.set_query(active, &query);
+                self.focused_panel = None;
+            }
+            Command::Sort { key, descending } => {
+                self.service.set_sort_key(active, key);
+                if let Some(descending) = descending
+                    && self
+                        .service
+                        .state(active)
+                        .is_some_and(|s| s.options.sort.descending != descending)
+                {
+                    self.service.toggle_sort_descending(active);
+                }
+                self.save_preferences();
+            }
+            Command::View(mode) => {
+                self.service.set_view_mode(active, mode);
+                self.save_preferences();
+                self.focused_panel = None;
+            }
+            Command::Hidden => {
+                self.service.toggle_hidden(active);
+                self.save_preferences();
+            }
+            Command::Branch(BranchCommand::Overview) => self.show_branches(),
+            Command::Branch(BranchCommand::Next) => {
+                self.service.cycle_branch(true);
+            }
+            Command::Branch(BranchCommand::Previous) => {
+                self.service.cycle_branch(false);
+            }
+            Command::Branch(BranchCommand::Close) => self.close_branch(None),
+            Command::Branch(BranchCommand::Switch(n)) => match self.branch_number(n) {
+                Some(branch) => {
+                    let _ = self.service.activate_branch(branch);
+                }
+                None => self.notice = Some(format!("There is no branch {n}.")),
+            },
+            Command::Focus => {
+                self.service.toggle_focus_mode();
+            }
+            Command::Open(text) => {
+                let current = self.service.active_location().clone();
+                match parse_address(&text, &self.home, Some(&current)) {
+                    Ok(location) => self.service.open_location(location),
+                    Err(err) => self.notice = Some(err.to_string()),
+                }
+            }
+            Command::Help => self.show_help(),
+        }
+    }
+
+    fn branch_number(&self, n: usize) -> Option<BranchId> {
+        self.service
+            .workspace()
+            .branches()
+            .get(n.checked_sub(1)?)
+            .map(|b| b.id())
+    }
+
+    /// `:copy` / `:move`: to a typed folder, a branch's active panel, or
+    /// (without an argument) a folder picked from the open panels.
+    fn transfer_command(
+        &mut self,
+        kind: TransferKind,
+        destination: Option<Destination>,
+        sender: &ComponentSender<Self>,
+    ) {
+        let targets = self.service.targets();
+        if targets.is_empty() {
+            self.notice = Some("Select files first (v to select, V for a range).".to_owned());
+            return;
+        }
+        let destination = match destination {
+            Some(Destination::Branch(n)) => match self.branch_number(n) {
+                Some(branch) => {
+                    let panel = self
+                        .service
+                        .workspace()
+                        .branch(branch)
+                        .expect("listed")
+                        .cursor();
+                    self.service.location(panel).cloned()
+                }
+                None => {
+                    self.notice = Some(format!("There is no branch {n}."));
+                    return;
+                }
+            },
+            Some(Destination::Path(text)) => {
+                let current = self.service.active_location().clone();
+                match parse_address(&text, &self.home, Some(&current)) {
+                    Ok(location) => Some(location),
+                    Err(err) => {
+                        self.notice = Some(err.to_string());
+                        return;
+                    }
+                }
+            }
+            None => None,
+        };
+        match destination {
+            Some(destination) => self.plan_transfer(kind, &destination, sender),
+            None => self.pick_destination(kind, sender),
+        }
+    }
+
+    /// Plans a transfer of the targets and asks for confirmation when they
+    /// come from several panels (decision D7).
+    pub(super) fn plan_transfer(
+        &mut self,
+        kind: TransferKind,
+        destination: &Location,
+        sender: &ComponentSender<Self>,
+    ) {
+        match TransferPlan::new(kind, &self.service.targets(), destination) {
+            Ok(plan) if plan.is_noop() => {
+                self.notice = Some("The items are already in that folder.".to_owned());
+            }
+            Ok(plan) => self.confirm_transfer(plan, sender),
+            Err(err) => self.notice = Some(capitalise(&err.to_string())),
+        }
+    }
+
+    pub(super) fn confirm_transfer(&mut self, plan: TransferPlan, sender: &ComponentSender<Self>) {
+        if !plan.spans_panels() {
+            self.submit_transfer(plan);
+            return;
+        }
+        let details = plan
+            .origins
+            .iter()
+            .map(|(folder, n)| format!("• {n} from {}", crate::pathbar::address_text(folder)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let title = format!("{}?", plan.summary());
+        let verb = plan.kind.verb();
+        let sender = sender.clone();
+        dialogs::confirm(
+            &self.ui.window,
+            &title,
+            &format!("{details}\n\nInto {}", plan.destination.display()),
+            verb,
+            move || {
+                sender
+                    .input_sender()
+                    .emit(Msg::SubmitTransfer(plan.clone()))
+            },
+        );
+    }
+
+    /// Submits a planned transfer. Its paths were captured when it was
+    /// planned, so later navigation cannot change it. The selection is
+    /// cleared once it is handed over; on failure it is kept.
+    pub(super) fn submit_transfer(&mut self, plan: TransferPlan) {
+        match self.operations.submit(plan.request()) {
+            Ok(_) => {
+                self.service.clear_selections();
+                self.keys.borrow_mut().interaction.reset();
+            }
+            Err(err) => self.notice = Some(capitalise(&err.to_string())),
+        }
+    }
+
+    /// The destination picker: every open panel's folder, by branch.
+    fn pick_destination(&mut self, kind: TransferKind, sender: &ComponentSender<Self>) {
+        let ws = self.service.workspace();
+        let mut options: Vec<(String, Location)> = Vec::new();
+        for (i, branch) in ws.branches().iter().enumerate() {
+            for panel in ws.path(branch.id()) {
+                let location = ws.panel(panel).expect("path panel").location().clone();
+                if location.is_trash() || options.iter().any(|(_, l)| *l == location) {
+                    continue;
+                }
+                options.push((
+                    format!(
+                        "b{} · {} — {}",
+                        i + 1,
+                        folder_title(&location),
+                        crate::pathbar::address_text(&location)
+                    ),
+                    location,
+                ));
+            }
+        }
+        let sender = sender.clone();
+        dialogs::choose(
+            &self.ui.window,
+            &format!("{} to…", kind.verb()),
+            &options,
+            move |location| sender.input_sender().emit(Msg::TransferTo(kind, location)),
+        );
+    }
+
+    pub(super) fn show_branches(&mut self) {
+        let ws = self.service.workspace();
+        let active = ws.active_branch().id();
+        let mut lines = Vec::new();
+        for (i, branch) in ws.branches().iter().enumerate() {
+            let path: Vec<String> = ws
+                .path(branch.id())
+                .iter()
+                .map(|&p| {
+                    let name = folder_title(ws.panel(p).expect("path panel").location());
+                    if p == branch.cursor() {
+                        format!("[{name}]")
+                    } else {
+                        name
+                    }
+                })
+                .collect();
+            let marker = if branch.id() == active { "▶" } else { " " };
+            lines.push(format!("{marker} {}  {}", i + 1, path.join(" › ")));
+        }
+        dialogs::info(
+            &self.ui.window,
+            "Branches",
+            &format!(
+                "{}\n\nSwitch with [ and ], :branch N, or the branch bar. Close with :branch close.",
+                lines.join("\n")
+            ),
+        );
+    }
+
+    pub(super) fn show_help(&mut self) {
+        let keys = self.keys.borrow();
+        let mut text = String::from("Keys\n");
+        for action in Action::ALL {
+            let bound = keys.keymap.keys_for(action);
+            if !bound.is_empty() {
+                text.push_str(&format!(
+                    "  {:<14} {}\n",
+                    bound.join(" "),
+                    action.description()
+                ));
+            }
+        }
+        text.push_str("\nCommands\n");
+        for (name, description) in COMMANDS {
+            text.push_str(&format!("  :{name:<9} {description}\n"));
+        }
+        drop(keys);
+        dialogs::info(&self.ui.window, "Keys and Commands", &text);
+    }
+}

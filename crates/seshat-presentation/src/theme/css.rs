@@ -259,6 +259,112 @@ window.seshat popover separator {{
   color: @seshat_error;
 }}
 
+/* Spatial workspace. Every panel is main content, so every panel uses the
+   surface token (the same one as the selected navigation item). The active
+   panel is marked with an outline, never with a different fill. */
+.seshat-workspace,
+.seshat-strip {{
+  background-color: @seshat_app_background;
+}}
+
+.seshat-strip {{
+  padding: {spacing}px;
+}}
+
+.seshat-panel {{
+  background-color: @seshat_surface;
+  border-radius: {radius}px;
+  box-shadow: inset 0 0 0 1px @seshat_border;
+}}
+
+.seshat-panel.seshat-panel-active {{
+  box-shadow: inset 0 0 0 2px @seshat_accent;
+}}
+
+.seshat-panel-header {{
+  padding: {spacing}px {padding}px;
+  border-bottom: 1px solid @seshat_border;
+}}
+
+.seshat-panel-title {{
+  color: @seshat_text_secondary;
+}}
+
+.seshat-panel-active .seshat-panel-title {{
+  color: @seshat_text_primary;
+  font-weight: bold;
+}}
+
+.seshat-branch-badge {{
+  color: @seshat_accent;
+  border: 1px solid @seshat_accent;
+  border-radius: {radius}px;
+  padding: 0 6px;
+}}
+
+.seshat-panel-collapsed {{
+  background-color: @seshat_surface;
+  color: @seshat_text_muted;
+  border-radius: {radius}px;
+  box-shadow: inset 0 0 0 1px @seshat_border;
+}}
+
+.seshat-content listview row.seshat-cursor,
+.seshat-content listview row > .seshat-cursor,
+.seshat-content gridview child > .seshat-cursor {{
+  box-shadow: inset 2px 0 0 0 @seshat_focus;
+}}
+
+.seshat-branch-bar {{
+  padding: 2px {padding}px;
+}}
+
+.seshat-branch {{
+  border-radius: {radius}px;
+  color: @seshat_text_secondary;
+}}
+
+.seshat-branch button {{
+  color: inherit;
+  min-height: 0;
+  padding: 2px 6px;
+}}
+
+.seshat-branch.seshat-branch-active {{
+  color: @seshat_text_primary;
+  box-shadow: inset 0 -2px 0 0 @seshat_accent;
+}}
+
+.seshat-status {{
+  padding: 2px {padding}px;
+}}
+
+.seshat-mode {{
+  color: @seshat_accent;
+  font-weight: bold;
+}}
+
+.seshat-mode.seshat-mode-visual {{
+  color: @seshat_warning;
+}}
+
+.seshat-mode.seshat-mode-command {{
+  color: @seshat_success;
+}}
+
+.seshat-focus-indicator {{
+  color: @seshat_accent;
+  border: 1px solid @seshat_accent;
+  border-radius: {radius}px;
+  padding: 0 6px;
+}}
+
+.seshat-command {{
+  background-color: @seshat_surface;
+  color: @seshat_text_primary;
+  border-radius: {radius}px;
+}}
+
 .seshat-operations {{
   padding: {padding}px;
   background-color: @seshat_app_background;
@@ -369,6 +475,21 @@ mod tests {
             let selected = rule_body(&css, ".seshat-sidebar row:selected");
             assert_eq!(background(content), "@seshat_surface", "{}", theme.name);
             assert_eq!(background(selected), "@seshat_surface", "{}", theme.name);
+        }
+    }
+
+    #[test]
+    fn workspace_panels_use_the_shared_surface_token() {
+        for theme in [light(), dark()] {
+            let css = render_css(&theme);
+            assert_eq!(
+                background(rule_body(&css, ".seshat-panel")),
+                "@seshat_surface"
+            );
+            // The active panel is an outline, never a different fill.
+            let active = rule_body(&css, ".seshat-panel.seshat-panel-active");
+            assert!(!active.contains("background"), "{active}");
+            assert!(active.contains("@seshat_accent"), "{active}");
         }
     }
 

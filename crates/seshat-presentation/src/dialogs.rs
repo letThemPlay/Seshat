@@ -281,3 +281,121 @@ pub fn confirm(
     window.present();
     cancel.grab_focus();
 }
+
+/// Picks one of `options` (label and location), e.g. the destination of
+/// `:copy` among the open panels. Nothing happens if the window is closed.
+pub fn choose(
+    parent: &gtk::Window,
+    heading: &str,
+    options: &[(String, seshat_domain::entities::Location)],
+    on_pick: impl Fn(seshat_domain::entities::Location) + 'static,
+) {
+    let window = dialog_window(parent, heading);
+    window.set_resizable(true);
+    window.set_default_height(360);
+    let content = content_box();
+    content.append(
+        &gtk::Label::builder()
+            .label(heading)
+            .xalign(0.0)
+            .css_classes(["title-4"])
+            .build(),
+    );
+    let list = gtk::ListBox::builder()
+        .selection_mode(gtk::SelectionMode::Single)
+        .activate_on_single_click(false)
+        .build();
+    list.update_property(&[gtk::accessible::Property::Label("Destinations")]);
+    for (label, _) in options {
+        list.append(
+            &gtk::Label::builder()
+                .label(label.as_str())
+                .xalign(0.0)
+                .ellipsize(gtk::pango::EllipsizeMode::Middle)
+                .margin_top(4)
+                .margin_bottom(4)
+                .build(),
+        );
+    }
+    let scroll = gtk::ScrolledWindow::builder()
+        .child(&list)
+        .vexpand(true)
+        .min_content_height(200)
+        .build();
+    content.append(&scroll);
+    let cancel = gtk::Button::with_label("Cancel");
+    let go = gtk::Button::with_label("Choose");
+    go.add_css_class("suggested-action");
+    content.append(&button_row(&[&cancel, &go]));
+    window.set_child(Some(&content));
+
+    let locations: Vec<_> = options.iter().map(|(_, l)| l.clone()).collect();
+    let on_pick = Rc::new(on_pick);
+    let pick = {
+        let window = window.clone();
+        let list = list.clone();
+        move || {
+            if let Some(location) = list
+                .selected_row()
+                .and_then(|r| usize::try_from(r.index()).ok())
+                .and_then(|i| locations.get(i).cloned())
+            {
+                on_pick(location);
+                window.close();
+            }
+        }
+    };
+    let pick = Rc::new(pick);
+    {
+        let pick = pick.clone();
+        go.connect_clicked(move |_| pick());
+    }
+    list.connect_row_activated(move |_, _| pick());
+    {
+        let window = window.clone();
+        cancel.connect_clicked(move |_| window.close());
+    }
+    if let Some(first) = list.row_at_index(0) {
+        list.select_row(Some(&first));
+    }
+    window.present();
+    list.grab_focus();
+}
+
+/// Shows read-only text, e.g. key bindings and commands.
+pub fn info(parent: &gtk::Window, heading: &str, text: &str) {
+    let window = dialog_window(parent, heading);
+    window.set_resizable(true);
+    window.set_default_size(560, 480);
+    let content = content_box();
+    content.append(
+        &gtk::Label::builder()
+            .label(heading)
+            .xalign(0.0)
+            .css_classes(["title-4"])
+            .build(),
+    );
+    let body = gtk::Label::builder()
+        .label(text)
+        .xalign(0.0)
+        .yalign(0.0)
+        .selectable(true)
+        .css_classes(["monospace"])
+        .build();
+    content.append(
+        &gtk::ScrolledWindow::builder()
+            .child(&body)
+            .vexpand(true)
+            .min_content_height(300)
+            .build(),
+    );
+    let close = gtk::Button::with_label("Close");
+    content.append(&button_row(&[&close]));
+    window.set_child(Some(&content));
+    {
+        let window = window.clone();
+        close.connect_clicked(move |_| window.close());
+    }
+    window.present();
+    close.grab_focus();
+}

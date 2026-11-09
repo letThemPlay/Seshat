@@ -53,6 +53,11 @@ impl PanelListing {
         &self.shown
     }
 
+    /// Every entry of the folder, before filtering and sorting.
+    pub fn entries(&self) -> &[FileEntry] {
+        &self.entries
+    }
+
     /// Number of entries in the folder, before filtering.
     pub fn total(&self) -> usize {
         self.entries.len()

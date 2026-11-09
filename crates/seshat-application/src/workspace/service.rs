@@ -718,7 +718,7 @@ impl WorkspaceService {
     }
 
     /// Re-derives what `panel` shows, keeping its cursor on a valid item
-    /// and dropping selections of files that no longer exist.
+    /// and dropping selections of files that are gone or filtered out.
     fn rearrange(&mut self, panel: PanelId) {
         let Some(state) = self.workspace.panel(panel).map(|p| p.state.clone()) else {
             return;
@@ -751,9 +751,12 @@ impl WorkspaceService {
                 .map(|e| e.location.clone()),
             None => None,
         };
+        // Only what the panel shows can stay selected: an operation must
+        // never act on files hidden by a filter or that no longer exist.
+        let shown: HashSet<&Location> = listing.shown.iter().map(|e| &e.location).collect();
         let state = self.workspace.state_mut(panel).expect("checked");
         state.cursor = cursor;
-        state.selection.retain(|l| existing.contains(l));
+        state.selection.retain(|l| shown.contains(l));
         if let Some(scroll) = &state.scroll
             && !existing.contains(&scroll.item)
         {

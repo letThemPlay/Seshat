@@ -33,11 +33,20 @@ pub trait DeviceMonitor {
 /// Whether `current` lived on a device that disappeared between `before` and
 /// `after` (unplugged, unmounted or ejected).
 pub fn location_lost(current: &Location, before: &[Device], after: &[Device]) -> bool {
+    vanished_roots(before, after)
+        .iter()
+        .any(|root| current.is_within(root))
+}
+
+/// Mount points of devices that were mounted in `before` but are not in
+/// `after` (unplugged, unmounted or ejected).
+pub fn vanished_roots(before: &[Device], after: &[Device]) -> Vec<std::path::PathBuf> {
     before
         .iter()
         .filter_map(Device::root)
-        .filter(|root| !after.iter().any(|d| d.root() == Some(root)))
-        .any(|root| current.is_within(root))
+        .filter(|root| !after.iter().any(|d| d.root() == Some(*root)))
+        .map(std::path::Path::to_path_buf)
+        .collect()
 }
 
 #[cfg(test)]
@@ -65,6 +74,20 @@ mod tests {
         let after = [mounted("sd", "/run/media/u/SD")];
         let here = Location::Path("/run/media/u/USB/photos".into());
         assert!(location_lost(&here, &before, &after));
+    }
+
+    #[test]
+    fn lists_only_vanished_mount_points() {
+        let before = [
+            mounted("usb", "/run/media/u/USB"),
+            mounted("sd", "/run/media/u/SD"),
+        ];
+        let after = [mounted("sd", "/run/media/u/SD")];
+        assert_eq!(
+            vanished_roots(&before, &after),
+            [std::path::PathBuf::from("/run/media/u/USB")]
+        );
+        assert!(vanished_roots(&after, &after).is_empty());
     }
 
     #[test]
