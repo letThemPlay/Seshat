@@ -11,5 +11,10 @@ pub trait WorkspaceStore {
     /// a broken file must not stop the application from starting.
     fn load(&self) -> Option<Workspace>;
 
+    /// Saves the workspace. Implementations may finish writing in the
+    /// background; [`Self::flush`] waits for that.
     fn save(&self, workspace: &Workspace) -> Result<(), String>;
+
+    /// Waits until every save has reached the disk (before quitting).
+    fn flush(&self) {}
 }

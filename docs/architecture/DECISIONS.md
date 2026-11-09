@@ -55,3 +55,14 @@ Side-by-side branch rendering, [ADR 0005](../decisions/0005-branch-layout.md).
 | P2 | Which entries | Folders only (links to folders count), since `:copy`, `:move` and `:open` take a folder. Dot folders appear only after a typed `.`. |
 | P3 | Case | Smartcase: an all-lowercase prefix matches any case; a capital letter makes matching exact. |
 | P4 | Branch targets | `b` + Tab lists `b1 …`, `b2 …` for `:copy` and `:move`. |
+
+## Performance run decisions (approved 2026-11-09)
+
+Results in [review/performance.md](../review/performance.md).
+
+| # | Topic | Decision |
+|---|---|---|
+| R1 | Targets (release build, development machine) | Screen update p95 < 16 ms with 50 branches and 200 panels; branch switch < 50 ms; Focus Mode toggle < 16 ms; layout < 1 ms; workspace save < 20 ms on the UI thread; no UI freeze over 100 ms except loading a 100,000-entry folder; no folder reads on Focus Mode or branch switches. |
+| R2 | Scale | 50 branches, about 200 panels, folders of 1,000 entries, and one of 100,000. |
+| R3 | 100,000-row model swap (~250 ms) | Exempt and documented as a follow-up (incremental model updates). |
+| R4 | Timing in CI | None: benchmarks are opt-in ignored tests and a UI script run by hand. CI keeps the deterministic counter checks. |

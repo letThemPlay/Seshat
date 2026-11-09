@@ -310,6 +310,7 @@ impl SimpleComponent for App {
     ) -> ComponentParts<Self> {
         let backend = diagnostics::detect_backend();
         diagnostics::log_backend(&backend);
+        diagnostics::start_stall_monitor();
 
         let css_provider = gtk::CssProvider::new();
         css_provider.connect_parsing_error(|_, section, error| {
@@ -812,6 +813,8 @@ impl SimpleComponent for App {
 
     fn shutdown(&mut self, _widgets: &mut AppWidgets, _output: relm4::Sender<()>) {
         self.save_workspace();
+        // Saves are written in the background; wait for the last one.
+        self.workspace_store.flush();
     }
 }
 
