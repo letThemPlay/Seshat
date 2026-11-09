@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use seshat_application::preferences::{
-    Preferences, PreferencesStore, ThemeChoice, WorkspacePreferences,
+    Preferences, PreferencesStore, ThemeChoice, WorkspaceLayout, WorkspacePreferences,
 };
 use seshat_application::view::{SortKey, SortOrder, ViewMode};
 
@@ -47,6 +47,7 @@ struct WorkspaceSection {
     retain_focus_mode: Option<bool>,
     classic_keys: Option<bool>,
     wrap_cursor: Option<bool>,
+    layout: Option<String>,
 }
 
 impl PreferencesStore for TomlPreferencesStore {
@@ -118,6 +119,7 @@ fn to_file(preferences: &Preferences) -> SettingsFile {
             retain_focus_mode: Some(preferences.workspace.retain_focus_mode),
             classic_keys: Some(preferences.workspace.classic_keys),
             wrap_cursor: Some(preferences.workspace.wrap_cursor),
+            layout: Some(preferences.workspace.layout.id().to_owned()),
         }),
         keybindings: (!preferences.workspace.key_bindings.is_empty())
             .then(|| preferences.workspace.key_bindings.iter().cloned().collect()),
@@ -136,6 +138,11 @@ fn workspace_from(
             .unwrap_or(defaults.retain_focus_mode),
         classic_keys: section.classic_keys.unwrap_or(defaults.classic_keys),
         wrap_cursor: section.wrap_cursor.unwrap_or(defaults.wrap_cursor),
+        layout: section
+            .layout
+            .as_deref()
+            .and_then(WorkspaceLayout::from_id)
+            .unwrap_or(defaults.layout),
         key_bindings: keybindings.unwrap_or_default().into_iter().collect(),
     }
 }
@@ -172,6 +179,7 @@ mod tests {
                 retain_focus_mode: false,
                 classic_keys: true,
                 wrap_cursor: true,
+                layout: WorkspaceLayout::Strip,
                 key_bindings: vec![("focus-mode".into(), vec!["<C-f>".into(), "zf".into()])],
             },
         };

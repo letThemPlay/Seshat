@@ -28,7 +28,9 @@ use seshat_application::ports::{
     DeviceError, DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError,
     ThemeRepository, WatchGuard,
 };
-use seshat_application::preferences::{Preferences, PreferencesStore, ThemeChoice};
+use seshat_application::preferences::{
+    Preferences, PreferencesStore, ThemeChoice, WorkspaceLayout,
+};
 use seshat_application::use_cases::ListDirectory;
 use seshat_application::view::{SortKey, ViewMode};
 use seshat_application::workspace::{TransferKind, TransferPlan, WorkspaceService, WorkspaceStore};
@@ -337,7 +339,8 @@ impl SimpleComponent for App {
         }
         let keys = KeyRouter::new(keymap);
 
-        let workspace_view = Rc::new(WorkspaceView::new({
+        let strip = prefs.workspace.layout == WorkspaceLayout::Strip;
+        let workspace_view = Rc::new(WorkspaceView::new(strip, {
             let sender = sender.clone();
             move |event| sender.input_sender().emit(Msg::Workspace(event))
         }));

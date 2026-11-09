@@ -23,11 +23,15 @@ impl App {
     pub(super) fn sync(&mut self, sender: &ComponentSender<Self>) {
         self.run_effects(sender);
         let started = Instant::now();
-        let (visible, dropped) = self.ui.workspace.render(&self.service);
-        for (panel, offset) in dropped {
+        let outcome = self.ui.workspace.render(&self.service);
+        for (panel, offset) in outcome.dropped {
             self.remember_scroll(panel, offset);
         }
-        self.service.set_visible(&visible);
+        if outcome.refocus {
+            // The active panel moved in the layout and lost keyboard focus.
+            self.focused_panel = None;
+        }
+        self.service.set_visible(&outcome.visible);
         self.run_effects(sender);
         tracing::trace!(elapsed = ?started.elapsed(), "workspace rendered");
 
@@ -173,6 +177,7 @@ impl App {
                 let _ = self.service.activate_branch(branch);
             }
             WorkspaceEvent::CloseBranch(branch) => self.close_branch(Some(branch)),
+            WorkspaceEvent::ShowBranches => self.show_branches(),
             WorkspaceEvent::Resized => {}
         }
     }

@@ -16,6 +16,7 @@ log_text() { sed 's/\x1b\[[0-9;]*m//g' "$SESSION/seshat.log"; }
 log_has() { log_text | grep -q -- "$1"; }
 state() { log_text | grep "workspace state" | tail -1; }
 state_has() { state | grep -q -- "$1"; }
+layout_now() { log_text | grep "workspace layout" | tail -1 | grep -q -- "$1"; }
 active_is() { state_has "location=Path(\"$1\")"; }
 
 launch
@@ -39,6 +40,15 @@ check "Downloads opens"                             active_is "$H/Downloads"
 check "6. both branches coexist"                    state_has "branches=2 "
 check "Downloads is not a child of Projects"        state_has "panels=4 "
 shot two-branches
+
+# Side by side: Home spans both rows; three connectors; the other branch's
+# panels are cards. A short window falls back to one row (decisions L2, L4).
+check "branches are laid out side by side"          log_has "workspace layout rows=2 columns=3 hidden=0 cards=2 connectors=3"
+swaycmd '[title="^Seshat$"] floating enable, resize set 1100 360'; sleep 1
+check "a short window shows one branch row"         log_has "workspace layout rows=1 columns=2 hidden=1"
+shot short-window
+swaycmd '[title="^Seshat$"] floating disable'; sleep 1
+check "a tall window shows both rows again"         layout_now "rows=2 "
 
 # 7–8. Switch to the Projects branch (left at Home) and keep navigating it
 type_text "["
