@@ -42,6 +42,6 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 ## Known gaps and follow-ups
 
 1. **Drag and drop between panels** is wired through the existing drop targets with explicit destinations, but needs a *manual* check: the UI harness cannot drag.
-2. **Performance follow-ups** from the [2026-11-09 run](../review/performance.md): the listing cache size (D13) for workspaces with many branches, and incremental model updates for live reloads of very large folders.
+2. **Performance follow-ups** from the [2026-11-09 run](../review/performance.md): the listing cache size (D13) for workspaces with many branches, and incremental model updates for live reloads of very large folders. Deferred (2026-11-09, R5): revisit only if needed.
 3. **Manual Wayland matrix** (GNOME, KDE, fractional scaling, touchpad horizontal scrolling, connectors at fractional scales). Pending, as before.
 4. **D12 panel features** (columns, expanded metadata, preview), if they are wanted later.

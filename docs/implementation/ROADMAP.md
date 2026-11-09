@@ -25,7 +25,7 @@ The phases follow the approved plan, which refines [the spatial specification](.
 
 See [STATUS.md](STATUS.md) for detail.
 
-- Performance follow-ups: listing cache size for many branches (D13), incremental model updates for very large folders.
+- Performance follow-ups, deferred until needed (R5): listing cache size for many branches (D13), incremental model updates for very large folders.
 - Manual checks:
   - drag and drop between panels
   - touchpad horizontal scrolling

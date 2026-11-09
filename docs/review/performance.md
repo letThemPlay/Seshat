@@ -84,7 +84,9 @@ The max render time of a branch switch (49 ms) is the switch that swaps in the m
 
 **Saving no longer blocks the UI.** A save took about 25 ms on the UI thread, almost all of it the `fsync` of the atomic write, which on btrfs waits for pending metadata. `TomlWorkspaceStore` now encodes on the caller's thread and writes on a writer thread. Saves made while one is being written are coalesced, so only the latest is written. `flush()` waits for the writer at shutdown and before `load()`, so nothing is lost and a restore never reads a file that is about to be replaced.
 
-## Open findings
+## Open findings (deferred)
+
+On 2026-11-09 it was decided to document both and revisit them only if they become a problem in practice (decision R5).
 
 1. **Repeated folder reads when cycling through many branches.** Each branch shows about 4 full panels, so 50 branches touch about 200 panels, but only 16 listings are cached (D13). Every switch re-reads the panels it shows, in the background: the UI stays fast, and nothing reloads while you stay within ~4 branches. A larger cache or a byte budget would change D13, so it is left for a product decision.
 2. **Responsiveness during live reloads of a 100,000-entry folder.** Each reload replaces the whole GTK model (250–270 ms) and the UI pauses for up to 365 ms. Under R3 this is exempt and documented. Incremental model updates (applying only the changed rows) would remove it.

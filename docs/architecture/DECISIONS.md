@@ -66,3 +66,4 @@ Results in [review/performance.md](../review/performance.md).
 | R2 | Scale | 50 branches, about 200 panels, folders of 1,000 entries, and one of 100,000. |
 | R3 | 100,000-row model swap (~250 ms) | Exempt and documented as a follow-up (incremental model updates). |
 | R4 | Timing in CI | None: benchmarks are opt-in ignored tests and a UI script run by hand. CI keeps the deterministic counter checks. |
+| R5 | The run's two open findings | Deferred (2026-11-09): repeated folder reads beyond the 16-listing cache (D13 stays as is) and the pauses during live reloads of 100,000-entry folders are documented, to be revisited only if they become a problem. |
