@@ -13,7 +13,9 @@ echo code > "$H/Documents/Projects/x.rs"
 echo iso > "$H/Downloads/big.iso"
 
 log_text() { sed 's/\x1b\[[0-9;]*m//g' "$SESSION/seshat.log"; }
-log_has() { log_text | grep -q -- "$1"; }
+# grep -c reads all its input: grep -q would stop early and, under the
+# harness's pipefail, fail the pipeline with a broken pipe on long logs.
+log_has() { log_text | grep -c -- "$1" >/dev/null; }
 state() { log_text | grep "workspace state" | tail -1; }
 state_has() { state | grep -q -- "$1"; }
 layout_now() { log_text | grep "workspace layout" | tail -1 | grep -q -- "$1"; }

@@ -126,3 +126,47 @@ fn copy_throughput_against_cp() {
         mb / seshat.as_secs_f64()
     );
 }
+
+/// Saving and restoring a large workspace (spatial spec §13, §16.8).
+#[test]
+#[ignore = "benchmark"]
+fn workspace_save_and_load() {
+    use seshat_application::workspace::WorkspaceStore;
+    use seshat_domain::workspace::{PanelState, Workspace};
+    use seshat_infrastructure::persistence::TomlWorkspaceStore;
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = TomlWorkspaceStore::new(dir.path().join("workspace.toml"));
+    for branches in [50, 200, 1000] {
+        let mut ws = Workspace::new(Location::Path("/w".into()), PanelState::default());
+        let root = ws.active_panel();
+        for i in 0..branches {
+            ws.activate_panel(root).unwrap();
+            let mut at = ws
+                .open_child(root, Location::Path(format!("/w/a{}", i % 10).into()), None)
+                .unwrap()
+                .panel;
+            for k in 0..3 {
+                let parent = ws.panel(at).unwrap().location().clone();
+                at = ws
+                    .open_child(at, parent.child(format!("b{i}-{k}").as_ref()), None)
+                    .unwrap()
+                    .panel;
+            }
+        }
+        let started = Instant::now();
+        store.save(&ws).unwrap();
+        let saved = started.elapsed(); // what the UI thread waits for
+        store.flush();
+        let written = started.elapsed(); // until it is on disk
+        let size = fs::metadata(store.path()).unwrap().len();
+        let started = Instant::now();
+        let restored = store.load().expect("restores");
+        let loaded = started.elapsed();
+        assert_eq!(restored.panel_count(), ws.panel_count());
+        println!(
+            "workspace, {branches:>4} branches, {:>4} panels: save {saved:>9.2?} (on disk after {written:>9.2?}), load {loaded:>9.2?}, {size:>7} bytes",
+            ws.panel_count()
+        );
+    }
+}

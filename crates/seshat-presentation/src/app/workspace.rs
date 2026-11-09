@@ -31,9 +31,15 @@ impl App {
             // The active panel moved in the layout and lost keyboard focus.
             self.focused_panel = None;
         }
+        let full_views = outcome.visible.len();
         self.service.set_visible(&outcome.visible);
         self.run_effects(sender);
-        tracing::trace!(elapsed = ?started.elapsed(), "workspace rendered");
+        // Timings for performance runs (docs/review/performance.md).
+        tracing::debug!(
+            elapsed_us = started.elapsed().as_micros() as u64,
+            full_views,
+            "workspace rendered"
+        );
 
         let active = self.service.active_panel();
         let refocus =
@@ -72,6 +78,7 @@ impl App {
                     location,
                     generation,
                 } => {
+                    tracing::debug!(%panel, "listing requested");
                     let use_case = self.list_directory.clone();
                     let sender = sender.clone();
                     relm4::spawn_local(async move {
@@ -144,8 +151,14 @@ impl App {
         for (panel, offset) in self.ui.workspace.scroll_offsets() {
             self.remember_scroll(panel, offset);
         }
-        if let Err(err) = self.workspace_store.save(self.service.workspace()) {
-            tracing::warn!(error = %err, "workspace not saved");
+        let started = Instant::now();
+        match self.workspace_store.save(self.service.workspace()) {
+            Ok(()) => tracing::debug!(
+                elapsed_us = started.elapsed().as_micros() as u64,
+                panels = self.service.workspace().panel_count(),
+                "workspace saved"
+            ),
+            Err(err) => tracing::warn!(error = %err, "workspace not saved"),
         }
     }
 

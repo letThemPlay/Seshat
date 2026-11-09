@@ -59,7 +59,10 @@ The Wayland matrix (GNOME, KDE, scaling, multi-monitor) is in `wayland-verificat
 
 ```sh
 cargo test --release -p seshat-infrastructure --test perf -- --ignored --nocapture
-SESHAT_RELEASE=1 scripts/ui-session.sh <script>   # UI timings: "view updated" debug lines
+SESHAT_RELEASE=1 scripts/ui-session.sh <script>   # UI timings: "panel view updated" debug lines
+cargo test --release -p seshat-application --test workspace_perf -- --ignored --nocapture   # workspace
+cargo test --release -p seshat-presentation layout_scaling -- --ignored --nocapture        # layout
+SESHAT_RELEASE=1 SESHAT_STALL_MONITOR=1 scripts/ui-session.sh scripts/ui/workspace-perf.sh   # end to end
 ```
 
 Results and their interpretation are in [review/performance.md](../review/performance.md).

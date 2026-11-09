@@ -117,3 +117,27 @@ pub fn log_backend(backend: &DisplayBackend) {
         );
     }
 }
+
+/// Main-loop gaps longer than this are reported by the stall monitor.
+const STALL_THRESHOLD: std::time::Duration = std::time::Duration::from_millis(100);
+const STALL_TICK: std::time::Duration = std::time::Duration::from_millis(20);
+
+/// With `SESHAT_STALL_MONITOR=1`, logs every main-loop stall longer than
+/// 100 ms: a timer that should fire every 20 ms reports how late it was.
+/// Performance runs use it to check the UI stays responsive (input is
+/// handled on the same loop). Off by default; it costs a wakeup every 20 ms.
+pub fn start_stall_monitor() {
+    if std::env::var_os("SESHAT_STALL_MONITOR").is_none_or(|v| v != "1") {
+        return;
+    }
+    tracing::info!("main-loop stall monitor enabled");
+    let last = std::cell::Cell::new(std::time::Instant::now());
+    gtk::glib::timeout_add_local(STALL_TICK, move || {
+        let now = std::time::Instant::now();
+        let gap = now.duration_since(last.replace(now));
+        if gap > STALL_THRESHOLD {
+            tracing::info!(gap_ms = gap.as_millis() as u64, "main loop stalled");
+        }
+        gtk::glib::ControlFlow::Continue
+    });
+}

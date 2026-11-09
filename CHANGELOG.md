@@ -2,6 +2,7 @@
 
 ## Unreleased: spatial workspace
 
+- **Performance run** ([results](docs/review/performance.md)): all approved targets met at 50 branches and 211 panels. Saving the workspace no longer blocks the UI (the write and its `fsync` run on a writer thread). Opt-in benchmarks and `scripts/ui/workspace-perf.sh` for reruns.
 - **Command-line completion:** Tab completes command names, folder paths for `:copy`, `:move` and `:open` (with `~`, relative paths and `..`), and branch targets such as `b2`. Repeated Tab and Shift+Tab cycle through several matches, which are listed in the status bar.
 - **Branches side by side** ([ADR 0005](docs/decisions/0005-branch-layout.md)): tree depth across, branches down. Shared folders span their branches; connectors link folders to subfolders, with the active path in the accent colour. Other branches are compact cards. Short windows fall back to one row with "+N branches" stubs; `layout = "strip"` keeps the single strip.
 Implements the [spatial file manager specification](docs/specifications/1-SPATIAL-FILE-MANAGER.md) on top of 0.1.0. Product decisions D1–D19 are in [DECISIONS.md](docs/architecture/DECISIONS.md) and the architecture in [ADR 0004](docs/decisions/0004-spatial-workspace.md).
@@ -18,7 +19,7 @@ Implements the [spatial file manager specification](docs/specifications/1-SPATIA
   - Sidebar and address-bar locations open as new branches (D3).
   - A deleted folder or removed device leaves its panels in place, marked unavailable, instead of returning Home (D14).
   - Selections never include items hidden by a search filter.
-- **Tests:** 272 Rust tests (from 165) and a second sandboxed UI test, `scripts/ui/workspace.sh`, which walks the spec's definition of done.
+- **Tests:** 273 Rust tests (from 165) and a second sandboxed UI test, `scripts/ui/workspace.sh`, which walks the spec's definition of done.
 
 ## 0.1.0 (unreleased)
 

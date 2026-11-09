@@ -7,6 +7,7 @@
 use std::ffi::OsString;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, mpsc};
 
 use serde::{Deserialize, Serialize};
 use seshat_application::workspace::{WORKSPACE_SCHEMA_VERSION, WorkspaceStore};
@@ -22,14 +23,50 @@ use super::atomic::write_atomic;
 /// Larger files are not read: a workspace this big is not one we wrote.
 const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
 
-#[derive(Debug, Clone)]
+/// Saves the workspace as TOML. Encoding happens on the caller's thread,
+/// which is fast; writing, including the `fsync` of the atomic write, runs
+/// on a writer thread, because `fsync` can take tens of milliseconds on a
+/// busy filesystem and must not block the UI. Saves made while one is being
+/// written are coalesced: only the latest is written.
+#[derive(Debug)]
 pub struct TomlWorkspaceStore {
     path: PathBuf,
+    writer: Mutex<Option<mpsc::Sender<Job>>>,
+}
+
+#[derive(Debug)]
+enum Job {
+    Write(String),
+    /// Answer once everything queued before it is written.
+    Flush(mpsc::SyncSender<()>),
 }
 
 impl TomlWorkspaceStore {
     pub fn new(path: PathBuf) -> Self {
-        Self { path }
+        Self {
+            path,
+            writer: Mutex::new(None),
+        }
+    }
+
+    /// The writer thread's queue, starting the thread on first use. `None`
+    /// if the thread cannot be started (then saves are written directly).
+    fn writer(&self) -> Option<mpsc::Sender<Job>> {
+        let mut writer = self.writer.lock().unwrap_or_else(|e| e.into_inner());
+        if writer.is_none() {
+            let (jobs, queue) = mpsc::channel();
+            let path = self.path.clone();
+            let started = std::thread::Builder::new()
+                .name("seshat-workspace-writer".into())
+                .spawn(move || write_queue(&path, &queue));
+            match started {
+                Ok(_) => *writer = Some(jobs),
+                Err(err) => {
+                    tracing::warn!(error = %err, "no workspace writer thread; saving directly")
+                }
+            }
+        }
+        writer.clone()
     }
 
     /// `$XDG_STATE_HOME/seshat/workspace.toml`.
@@ -44,6 +81,7 @@ impl TomlWorkspaceStore {
 
 impl WorkspaceStore for TomlWorkspaceStore {
     fn load(&self) -> Option<Workspace> {
+        self.flush(); // never read a file that is about to be replaced
         let size = match std::fs::metadata(&self.path) {
             Ok(m) => m.len(),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return None,
@@ -70,7 +108,63 @@ impl WorkspaceStore for TomlWorkspaceStore {
 
     fn save(&self, workspace: &Workspace) -> Result<(), String> {
         let text = encode(workspace)?;
-        write_atomic(&self.path, &text).map_err(|e| e.to_string())
+        match self.writer() {
+            Some(writer) => match writer.send(Job::Write(text)) {
+                Ok(()) => Ok(()),
+                // The writer thread is gone: write here instead.
+                Err(mpsc::SendError(Job::Write(text))) => {
+                    write_atomic(&self.path, &text).map_err(|e| e.to_string())
+                }
+                Err(_) => Ok(()),
+            },
+            None => write_atomic(&self.path, &text).map_err(|e| e.to_string()),
+        }
+    }
+
+    fn flush(&self) {
+        let writer = self
+            .writer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(writer) = writer {
+            let (done, wait) = mpsc::sync_channel(1);
+            if writer.send(Job::Flush(done)).is_ok() {
+                let _ = wait.recv();
+            }
+        }
+    }
+}
+
+/// The writer thread: writes the latest queued workspace, answers flushes
+/// once what was queued before them is on disk, and ends when the store is
+/// dropped.
+fn write_queue(path: &Path, queue: &mpsc::Receiver<Job>) {
+    while let Ok(job) = queue.recv() {
+        let mut latest = None;
+        let mut waiting = Vec::new();
+        for job in std::iter::once(job).chain(queue.try_iter()) {
+            match job {
+                Job::Write(text) => latest = Some(text),
+                Job::Flush(done) => waiting.push(done),
+            }
+        }
+        if let Some(text) = latest {
+            let started = std::time::Instant::now();
+            match write_atomic(path, &text) {
+                Ok(()) => tracing::debug!(
+                    elapsed_us = started.elapsed().as_micros() as u64,
+                    bytes = text.len(),
+                    "workspace written"
+                ),
+                Err(err) => {
+                    tracing::warn!(path = %path.display(), error = %err, "workspace not saved")
+                }
+            }
+        }
+        for done in waiting {
+            let _ = done.send(());
+        }
     }
 }
 
@@ -386,6 +480,23 @@ mod tests {
     }
 
     #[test]
+    fn background_saves_keep_the_latest_and_flush_waits_for_it() {
+        let (_dir, store) = store();
+        let mut ws = sample();
+        for _ in 0..20 {
+            ws.cycle_branch(true);
+            store.save(&ws).unwrap();
+        }
+        store.flush();
+        let on_disk = std::fs::read_to_string(store.path()).unwrap();
+        assert_eq!(decode(&on_disk).unwrap().to_parts(), ws.to_parts());
+        // load() flushes too, so it always sees the latest save.
+        ws.set_focus_mode(false);
+        store.save(&ws).unwrap();
+        assert_eq!(store.load().unwrap().to_parts(), ws.to_parts());
+    }
+
+    #[test]
     fn missing_file_restores_nothing() {
         let (_dir, store) = store();
         assert!(store.load().is_none());
@@ -395,6 +506,7 @@ mod tests {
     fn spec_16_7_newer_and_corrupt_files_are_ignored() {
         let (_dir, store) = store();
         store.save(&sample()).unwrap();
+        store.flush(); // the file is read directly below
         let text = std::fs::read_to_string(store.path()).unwrap();
         std::fs::write(store.path(), text.replace("version = 1", "version = 99")).unwrap();
         assert!(store.load().is_none());
@@ -410,6 +522,7 @@ mod tests {
     fn structurally_invalid_workspaces_are_rejected() {
         let (_dir, store) = store();
         store.save(&sample()).unwrap();
+        store.flush(); // the file is read directly below
         let text = std::fs::read_to_string(store.path()).unwrap();
         // Point the active branch somewhere that does not exist.
         let broken = text

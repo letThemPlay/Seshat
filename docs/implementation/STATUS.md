@@ -4,7 +4,7 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 272 Rust tests (up from 165), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (37 checks).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 273 Rust tests (up from 165), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (37 checks).
 
 ## Spatial file manager specification
 
@@ -36,12 +36,12 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 | 11 | Search per panel | ✅ Verified | `search_filters_belong_to_their_panel`. Workspace-wide search is a future feature |
 | 12 | Workspace as application state; navigation service | ✅ Verified | `WorkspaceService`; ADR 0004 |
 | 13 | Versioned persistence; restore; missing paths | ✅ Verified | `TomlWorkspaceStore` tests; UI test restart. Missing folders show as unavailable panels |
-| 14 | Performance | ⚠️ Partial | Listings cached LRU (16) and watched only while cached; full views only near the active panel; reload counts verified. No benchmark with many panels yet |
+| 14, 16.8 | Performance | ✅ Verified, with two open findings | Performance run of 2026-11-09 ([review](../review/performance.md)): all approved targets met at 50 branches and 211 panels after one fix (saving off the UI thread). Open: re-reads when cycling through more branches than the 16-listing cache covers (D13), and ~250 ms pauses when a 100,000-entry folder reloads live (exempt under R3) |
 | 15 | Edge cases | ⚠️ Partial | Deleted folders and removed devices: panels kept and marked unavailable (D14). External renames are not followed. Closing the active branch in Focus Mode and resizing in Focus Mode are covered |
 
 ## Known gaps and follow-ups
 
 1. **Drag and drop between panels** is wired through the existing drop targets with explicit destinations, but needs a *manual* check: the UI harness cannot drag.
-2. **A performance run with many panels** and large folders (§16.8 "many panels").
+2. **Performance follow-ups** from the [2026-11-09 run](../review/performance.md): the listing cache size (D13) for workspaces with many branches, and incremental model updates for live reloads of very large folders. Deferred (2026-11-09, R5): revisit only if needed.
 3. **Manual Wayland matrix** (GNOME, KDE, fractional scaling, touchpad horizontal scrolling, connectors at fractional scales). Pending, as before.
 4. **D12 panel features** (columns, expanded metadata, preview), if they are wanted later.

@@ -436,4 +436,50 @@ mod tests {
             assert_eq!(path_rows, (c.row..c.row + c.span).collect::<Vec<_>>());
         }
     }
+
+    /// Layout cost for growing workspaces (spatial spec §16.8). Run with
+    /// `cargo test --release -p seshat-presentation layout_scaling -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "benchmark"]
+    fn layout_scaling() {
+        for branches in [50, 200, 1000] {
+            let mut ws = Workspace::new(loc("/w"), PanelState::default());
+            let root = ws.active_panel();
+            for i in 0..branches {
+                ws.activate_panel(root).unwrap();
+                let mut at = ws
+                    .open_child(root, loc(&format!("/w/a{}", i % 10)), None)
+                    .unwrap()
+                    .panel;
+                at = ws
+                    .open_child(at, loc(&format!("/w/a{}/b{i}", i % 10)), None)
+                    .unwrap()
+                    .panel;
+                for k in 0..3 {
+                    let parent = ws.panel(at).unwrap().location().clone();
+                    at = ws
+                        .open_child(at, parent.child(format!("t{k}").as_ref()), None)
+                        .unwrap()
+                        .panel;
+                }
+            }
+            let runs = 200;
+            let started = std::time::Instant::now();
+            for _ in 0..runs {
+                std::hint::black_box(compute(
+                    &ws,
+                    LayoutOptions {
+                        max_rows: 6,
+                        radius: 3,
+                    },
+                    None,
+                ));
+            }
+            println!(
+                "layout, {branches:>4} branches, {:>4} panels: {:>10.2?} per call",
+                ws.panel_count(),
+                started.elapsed() / runs
+            );
+        }
+    }
 }

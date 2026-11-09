@@ -252,7 +252,13 @@ impl PanelView {
         {
             let first = self.revision.get() == u64::MAX;
             self.revision.set(listing.revision());
+            let started = std::time::Instant::now();
             self.files.replace(listing.shown().to_vec(), !first);
+            tracing::debug!(
+                rows = listing.shown().len(),
+                elapsed_us = started.elapsed().as_micros() as u64,
+                "panel view updated"
+            );
             if first && let Some(scroll) = &state.scroll {
                 self.files.restore_scroll_offset(f64::from(scroll.offset));
             }
@@ -261,7 +267,13 @@ impl PanelView {
             self.shown_selection.replace(None);
         }
         if self.shown_selection.borrow().as_deref() != Some(state.selection.items()) {
+            let started = std::time::Instant::now();
             self.files.set_selected(state.selection.items());
+            tracing::debug!(
+                selected = state.selection.len(),
+                elapsed_us = started.elapsed().as_micros() as u64,
+                "selection applied"
+            );
             self.shown_selection
                 .replace(Some(state.selection.items().to_vec()));
         }
