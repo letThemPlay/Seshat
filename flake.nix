@@ -20,6 +20,7 @@
             fileset = pkgs.lib.fileset.unions [
               ./Cargo.toml
               ./Cargo.lock
+              ./LICENSE # installed with the package
               ./crates
               ./data
               ./docs/themes # an integration test reads the example theme
@@ -51,6 +52,7 @@
               $out/share/icons/hicolor/scalable/apps/dev.kdmorris.Seshat.svg
             install -Dm644 data/dev.kdmorris.Seshat.metainfo.xml \
               $out/share/metainfo/dev.kdmorris.Seshat.metainfo.xml
+            install -Dm644 LICENSE $out/share/licenses/seshat/LICENSE
           '';
 
           meta = {

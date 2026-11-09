@@ -37,4 +37,3 @@ Status as of 2026-11-07, test counts updated 2026-11-09. The spatial workspace h
 ## Decisions still open
 
 - **Project metadata:** the app id is `dev.kdmorris.Seshat` (D-Bus name `dev.kdmorris.Seshat.Operations`). The homepage URL and the developer info in the AppStream data are still missing.
-- **License:** GPL-3.0-or-later is a placeholder pending the maintainers' choice.

@@ -67,3 +67,10 @@ Results in [review/performance.md](../review/performance.md).
 | R3 | 100,000-row model swap (~250 ms) | Exempt and documented as a follow-up (incremental model updates). |
 | R4 | Timing in CI | None: benchmarks are opt-in ignored tests and a UI script run by hand. CI keeps the deterministic counter checks. |
 | R5 | The run's two open findings | Deferred (2026-11-09): repeated folder reads beyond the 16-listing cache (D13 stays as is) and the pauses during live reloads of 100,000-entry folders are documented, to be revisited only if they become a problem. |
+
+## Licence (approved 2026-11-09)
+
+| Topic | Decision |
+|---|---|
+| Licence | GPL-3.0-or-later, as already declared in `Cargo.toml`, `flake.nix` and the AppStream metadata. The full text is in `LICENSE` and installed with the package. |
+| Copyright notice | "Copyright (C) 2026 the Seshat contributors", in the README. No per-file headers. |

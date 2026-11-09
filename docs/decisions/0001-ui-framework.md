@@ -73,7 +73,7 @@ Flatpak with the GNOME runtime is the cheapest first target: GTK and GVfs come f
 
 ## Licensing
 
-GTK is LGPL-2.1-or-later and dynamically linked, so it imposes no constraint on Seshat's license. The workspace currently declares GPL-3.0-or-later. The maintainers should confirm this before the first release.
+GTK is LGPL-2.1-or-later and dynamically linked, so it imposes no constraint on Seshat's license. Seshat is licensed GPL-3.0-or-later, confirmed by the maintainer on 2026-11-09 (see `LICENSE`).
 
 ## Consequences
 
