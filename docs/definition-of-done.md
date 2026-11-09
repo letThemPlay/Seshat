@@ -1,6 +1,6 @@
 # Definition of Done (spec §18): status
 
-Status as of 2026-11-07. "Verified" means checked by an automated test or script in this repository, unless marked *manual*.
+Status as of 2026-11-07, test counts updated 2026-11-09. The spatial workspace has its own status page: [implementation/STATUS.md](implementation/STATUS.md). "Verified" means checked by an automated test or script in this repository, unless marked *manual*.
 
 | Requirement | Status | Evidence |
 |---|---|---|
@@ -21,7 +21,7 @@ Status as of 2026-11-07. "Verified" means checked by an automated test or script
 | Selected navigation background matches the main content | ✅ Verified | both reference `@seshat_surface` (CSS unit test, every built-in theme) |
 | Selected navigation radius is exactly 12px | ✅ Verified | central constant; not overridable by themes (unit tests) |
 | Filesystem errors are handled safely | ✅ Verified | partial failures, permission errors, vanished sources, no data loss on failed overwrites, Trash never deletes ([security](review/security.md)) |
-| Automated tests pass | ✅ Verified | 165 Rust tests + 20 UI end-to-end checks (`scripts/check.sh --ui`) |
+| Automated tests pass | ✅ Verified | 248 Rust tests + 51 UI end-to-end checks (`scripts/check.sh --ui`: file operations 20, spatial workspace 31) |
 | Documentation is complete | ✅ | see the README's documentation list (all 13 items from spec §15) |
 
 ## Not yet verified (manual or environment-dependent)

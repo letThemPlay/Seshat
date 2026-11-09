@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased: spatial workspace
+
+Implements the [spatial file manager specification](docs/specifications/1-SPATIAL-FILE-MANAGER.md) on top of 0.1.0. Product decisions D1–D19 are in [DECISIONS.md](docs/architecture/DECISIONS.md) and the architecture in [ADR 0004](docs/decisions/0004-spatial-workspace.md).
+
+- **Workspace:** folders open as persistent panels in a horizontally scrolling strip. Each panel keeps its cursor, scroll position, sort order, view, search and selection.
+- **Branches:** opening another folder from a panel that already has a child starts a new branch; shared folders exist once. Switch with `[` and `]`, the branch bar or `:branch`; close branches without touching files.
+- **Focus Mode** (`zz` or the toolbar button) expands the active panel; navigation and branch switching keep working.
+- **Vim-style keys:** Normal, Visual (`v`, `V`) and Command (`:`) modes. Bindings are configurable in `settings.toml`, and `:help` lists them.
+- **Operations across panels and branches:** the workspace-wide selection is copied or moved to an explicit destination (paste into a panel, `:copy`/`:move`, the destination picker, or drag and drop), with a confirmation when the sources come from several panels. The operation manager and the D-Bus protocol are unchanged.
+- **The workspace is saved** to `$XDG_STATE_HOME/seshat/workspace.toml` (versioned) and restored on launch.
+- **Behaviour changes:**
+  - Typing letters no longer starts a search; use `/` or Ctrl+F, or set `classic_keys = true` (D1).
+  - Back and Forward return to previously active panels (D2).
+  - Sidebar and address-bar locations open as new branches (D3).
+  - A deleted folder or removed device leaves its panels in place, marked unavailable, instead of returning Home (D14).
+  - Selections never include items hidden by a search filter.
+- **Tests:** 248 Rust tests (from 165) and a second sandboxed UI test, `scripts/ui/workspace.sh`, which walks the spec's definition of done.
+
 ## 0.1.0 (unreleased)
 
 First complete version, built in six phases (see `docs/specifications/0-INITIAL-PRODUCT-SPEC.md` §17).
