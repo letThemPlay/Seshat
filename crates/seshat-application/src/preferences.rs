@@ -59,8 +59,34 @@ pub struct WorkspacePreferences {
     pub classic_keys: bool,
     /// Moving past the last item wraps to the first, and vice versa.
     pub wrap_cursor: bool,
+    /// Branches side by side (`Tree`) or only the active one (`Strip`).
+    pub layout: WorkspaceLayout,
     /// Key binding overrides: action id and its key sequences.
     pub key_bindings: Vec<(String, Vec<String>)>,
+}
+
+/// How branches are laid out (decision L2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WorkspaceLayout {
+    /// Branches side by side: tree depth across, branches down, with
+    /// connectors. Falls back to one row when the window is too short.
+    #[default]
+    Tree,
+    /// Only the active branch, as a single strip.
+    Strip,
+}
+
+impl WorkspaceLayout {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Tree => "tree",
+            Self::Strip => "strip",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        [Self::Tree, Self::Strip].into_iter().find(|l| l.id() == id)
+    }
 }
 
 impl Default for WorkspacePreferences {
@@ -70,6 +96,7 @@ impl Default for WorkspacePreferences {
             retain_focus_mode: true,
             classic_keys: false,
             wrap_cursor: false,
+            layout: WorkspaceLayout::Tree,
             key_bindings: Vec::new(),
         }
     }

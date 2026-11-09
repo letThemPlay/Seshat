@@ -9,7 +9,7 @@ A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4: a
 
 ## The workspace
 
-Opening a folder adds a **panel** to the right instead of replacing the view. Panels keep their cursor, scroll position, sort order, view, search and selection while you move around. Opening a different folder from a panel that already has a child starts a new **branch**. Branches coexist, share their common folders, and are listed in the branch bar above the panels. **Focus Mode** (`zz`) expands the active panel without closing anything; navigation keeps working. The workspace is restored when Seshat starts.
+Opening a folder adds a **panel** to the right instead of replacing the view. Panels keep their cursor, scroll position, sort order, view, search and selection while you move around. Opening a different folder from a panel that already has a child starts a new **branch**. Branches coexist side by side: each row is a branch, a shared folder spans the rows of its branches, and connectors link folders to their subfolders. The active branch gets the space; the others are compact cards you can click. **Focus Mode** (`zz`) expands the active panel without closing anything; navigation keeps working. The workspace is restored when Seshat starts.
 
 Keys follow Vim. `:help` lists every key and command. Bindings can be changed in `~/.config/seshat/settings.toml`:
 
@@ -20,6 +20,7 @@ focus-mode = ["zz", "<C-f>"]
 [workspace]
 classic_keys = false   # true: typing searches, no single-letter keys
 wrap_cursor = false
+layout = "tree"         # "strip": only the active branch, as one row
 retain_focus_mode = true
 restore = true
 ```
@@ -100,7 +101,7 @@ cargo run -p seshat -- --check-backend
 - [Packaging](docs/packaging.md)
 - [Definition of Done](docs/definition-of-done.md)
 - Reviews: [security](docs/review/security.md), [performance](docs/review/performance.md), [architecture](docs/review/architecture.md)
-- ADRs: [0001 UI framework](docs/decisions/0001-ui-framework.md), [0002 IPC](docs/decisions/0002-ipc.md), [0003 packaging](docs/decisions/0003-packaging.md), [0004 spatial workspace](docs/decisions/0004-spatial-workspace.md)
+- ADRs: [0001 UI framework](docs/decisions/0001-ui-framework.md), [0002 IPC](docs/decisions/0002-ipc.md), [0003 packaging](docs/decisions/0003-packaging.md), [0004 spatial workspace](docs/decisions/0004-spatial-workspace.md), [0005 branch layout](docs/decisions/0005-branch-layout.md)
 - [Changelog](CHANGELOG.md)
 
 ## Layout

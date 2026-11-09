@@ -1,13 +1,20 @@
-//! The spatial workspace: the active branch's panels in a horizontally
-//! scrolling strip, and a branch bar to see and switch branches.
+//! The spatial workspace: branches side by side, with connectors, and a
+//! branch bar to see and switch branches.
 //!
-//! Rendering only reads the workspace service. Panels near the active one
-//! get full [`PanelView`]s; farther ones are drawn as slim buttons, so large
-//! workspaces stay cheap (spatial spec §14). Focus Mode hides the other
-//! panels without destroying them, so nothing reloads (§6).
+//! Columns are tree depth and rows are branches ([`workspace_layout`]). A
+//! shared ancestor is one cell spanning its branches' rows. The active
+//! branch's row gets the height; other branches are compact lanes of cards.
+//! Panels on the active branch near the active panel are full
+//! [`PanelView`]s; everything else is a [`BranchCard`] drawn from saved
+//! state, so showing a branch never reads its folders (decision L1).
+//!
+//! Rendering only reads the workspace service. Focus Mode hides everything
+//! but the active panel without destroying anything, so nothing reloads.
+//!
+//! [`workspace_layout`]: crate::workspace_layout
 
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -16,14 +23,21 @@ use seshat_application::workspace::WorkspaceService;
 use seshat_domain::entities::Location;
 use seshat_domain::workspace::{BranchId, PanelId, Workspace};
 
+use crate::branch_card::{BranchCard, CardContent, LANE_HEIGHT};
+use crate::connectors::ConnectorLane;
 use crate::panel_view::{HeaderInfo, PanelEvent, PanelView};
 use crate::pathbar::address_text;
+use crate::workspace_layout::{self, Layout, LayoutOptions};
 
-/// Panels within this distance of the active one get a full view.
+/// Panels within this many columns of the active one get a full view.
 const RENDER_RADIUS: usize = 3;
 const INACTIVE_WIDTH: i32 = 300;
 const MIN_ACTIVE_WIDTH: i32 = 460;
-const COLLAPSED_WIDTH: i32 = 110;
+/// The active branch keeps at least this much height; lanes get the rest.
+const MIN_ACTIVE_HEIGHT: i32 = 300;
+/// At most this many branches are shown at once (decision L4).
+const MAX_ROWS: usize = 6;
+const ROW_SPACING: i32 = 6;
 const SCROLL_ANIMATION: Duration = Duration::from_millis(180);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,22 +45,44 @@ pub enum WorkspaceEvent {
     Panel(PanelId, PanelEvent),
     ActivateBranch(BranchId),
     CloseBranch(BranchId),
-    /// The window was resized; panel widths need recomputing.
+    /// "+N branches": show the branch overview.
+    ShowBranches,
+    /// The window was resized; widths and lanes need recomputing.
     Resized,
 }
 
 /// Scroll offsets of panels whose views were just dropped, to keep.
 pub type DroppedScrolls = Vec<(PanelId, i32)>;
 
+/// What a render did, for the window to follow up on.
+#[derive(Debug, Default)]
+pub struct RenderOutcome {
+    /// Panels with full views, whose listings must stay loaded.
+    pub visible: Vec<PanelId>,
+    pub dropped: DroppedScrolls,
+    /// The active panel's view was (re)attached and lost keyboard focus.
+    pub refocus: bool,
+}
+
+type Placement = (i32, i32, i32, i32);
+
 pub struct WorkspaceView {
     pub root: gtk::Box,
     branch_bar: gtk::Box,
     scroller: gtk::ScrolledWindow,
-    strip: gtk::Box,
+    grid: gtk::Grid,
     panels: RefCell<HashMap<PanelId, PanelView>>,
-    collapsed: RefCell<HashMap<PanelId, gtk::Button>>,
+    cards: RefCell<HashMap<PanelId, BranchCard>>,
+    lanes: RefCell<Vec<ConnectorLane>>,
+    stubs: (gtk::Button, gtk::Button),
+    /// Where each widget is attached in the grid.
+    placed: RefCell<HashMap<gtk::Widget, Placement>>,
     branches_shown: RefCell<Vec<(BranchId, String, bool)>>,
-    last_layout: Cell<Option<(PanelId, bool, i32)>>,
+    last_reveal: Cell<Option<(PanelId, bool, i32)>>,
+    first_row: Cell<Option<usize>>,
+    last_logged: RefCell<Option<(usize, usize, usize, usize)>>,
+    /// The single-strip layout was chosen (decision L2).
+    strip: Cell<bool>,
     on_event: Rc<dyn Fn(WorkspaceEvent)>,
 }
 
@@ -54,12 +90,13 @@ impl std::fmt::Debug for WorkspaceView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WorkspaceView")
             .field("panels", &self.panels.borrow().len())
+            .field("cards", &self.cards.borrow().len())
             .finish_non_exhaustive()
     }
 }
 
 impl WorkspaceView {
-    pub fn new(on_event: impl Fn(WorkspaceEvent) + 'static) -> Self {
+    pub fn new(strip: bool, on_event: impl Fn(WorkspaceEvent) + 'static) -> Self {
         let on_event: Rc<dyn Fn(WorkspaceEvent)> = Rc::new(on_event);
         let branch_bar = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -73,22 +110,32 @@ impl WorkspaceView {
             .hscrollbar_policy(gtk::PolicyType::External)
             .build();
 
-        let strip = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(6)
+        let grid = gtk::Grid::builder()
+            .row_spacing(ROW_SPACING)
             .css_classes(["seshat-strip"])
             .build();
         let scroller = gtk::ScrolledWindow::builder()
-            .child(&strip)
+            .child(&grid)
             .vscrollbar_policy(gtk::PolicyType::Never)
             .hscrollbar_policy(gtk::PolicyType::Automatic)
             .vexpand(true)
             .hexpand(true)
             .build();
-        scroller.hadjustment().connect_page_size_notify({
+        for adjustment in [scroller.hadjustment(), scroller.vadjustment()] {
             let on_event = on_event.clone();
-            move |_| on_event(WorkspaceEvent::Resized)
-        });
+            adjustment.connect_page_size_notify(move |_| on_event(WorkspaceEvent::Resized));
+        }
+
+        let stub = || {
+            let button = gtk::Button::builder()
+                .css_classes(["flat", "seshat-branch-stub"])
+                .tooltip_text("Show all branches (:branch)")
+                .build();
+            let on_event = on_event.clone();
+            button.connect_clicked(move |_| on_event(WorkspaceEvent::ShowBranches));
+            button
+        };
+        let stubs = (stub(), stub());
 
         let root = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -101,55 +148,79 @@ impl WorkspaceView {
             root,
             branch_bar,
             scroller,
-            strip,
+            grid,
             panels: RefCell::default(),
-            collapsed: RefCell::default(),
+            cards: RefCell::default(),
+            lanes: RefCell::default(),
+            stubs,
+            placed: RefCell::default(),
             branches_shown: RefCell::default(),
-            last_layout: Cell::new(None),
+            last_reveal: Cell::new(None),
+            first_row: Cell::new(None),
+            last_logged: RefCell::new(None),
+            strip: Cell::new(strip),
             on_event,
         }
     }
 
-    /// Renders the workspace. Returns the panels that have full views (so
-    /// their listings stay loaded) and the scroll offsets of panels whose
-    /// views were dropped.
-    pub fn render(&self, service: &WorkspaceService) -> (Vec<PanelId>, DroppedScrolls) {
+    /// Renders the workspace from the service.
+    pub fn render(&self, service: &WorkspaceService) -> RenderOutcome {
         let ws = service.workspace();
-        let path = ws.active_path();
         let active = ws.active_panel();
         let focus = ws.focus_mode();
-        let index = path.iter().position(|&p| p == active).unwrap_or(0);
-        let branch_number = ws
-            .branches()
-            .iter()
-            .position(|b| b.id() == ws.active_branch().id())
-            .map_or(1, |i| i + 1);
+        let max_rows = if self.strip.get() {
+            1
+        } else {
+            rows_for_height(self.viewport_height())
+        };
+        let layout = workspace_layout::compute(
+            ws,
+            LayoutOptions {
+                max_rows,
+                radius: RENDER_RADIUS,
+            },
+            self.first_row.get(),
+        );
+        self.first_row.set(Some(layout.first_row));
+        self.log_layout(&layout);
 
-        let full: Vec<PanelId> = path
+        let full: Vec<PanelId> = layout
+            .cells
             .iter()
-            .enumerate()
-            .filter(|(i, _)| i.abs_diff(index) <= RENDER_RADIUS)
-            .map(|(_, &p)| p)
+            .filter(|c| c.full)
+            .map(|c| c.panel)
             .collect();
-        let on_path: HashSet<PanelId> = path.iter().copied().collect();
+        let carded: Vec<PanelId> = layout
+            .cells
+            .iter()
+            .filter(|c| !c.full)
+            .map(|c| c.panel)
+            .collect();
 
-        // Drop views that are no longer on the active branch, or too far.
+        // Drop views and cards that are no longer shown that way.
         let mut dropped = Vec::new();
-        self.panels.borrow_mut().retain(|id, view| {
-            let keep = full.contains(id);
-            if !keep {
-                dropped.push((*id, view.scroll_offset()));
-                self.strip.remove(&view.root);
-            }
-            keep
-        });
-        self.collapsed.borrow_mut().retain(|id, button| {
-            let keep = on_path.contains(id) && !full.contains(id);
-            if !keep {
-                self.strip.remove(button);
-            }
-            keep
-        });
+        {
+            let mut placed = self.placed.borrow_mut();
+            self.panels.borrow_mut().retain(|id, view| {
+                let keep = full.contains(id);
+                if !keep {
+                    dropped.push((*id, view.scroll_offset()));
+                    let widget = view.root.clone().upcast::<gtk::Widget>();
+                    self.grid.remove(&widget);
+                    placed.remove(&widget);
+                }
+                keep
+            });
+            self.cards.borrow_mut().retain(|id, card| {
+                let keep = carded.contains(id);
+                if !keep {
+                    let widget = card.root.clone().upcast::<gtk::Widget>();
+                    self.grid.remove(&widget);
+                    placed.remove(&widget);
+                }
+                keep
+            });
+        }
 
         let viewport = self.viewport_width();
         let active_width = if focus {
@@ -157,32 +228,46 @@ impl WorkspaceView {
         } else {
             (viewport / 2).max(MIN_ACTIVE_WIDTH).min(viewport.max(1))
         };
+        let path = ws.active_path();
+        let branch_number = layout.first_row + layout.active_row + 1;
+        let top = i32::from(layout.hidden_above > 0);
 
-        let mut previous: Option<gtk::Widget> = None;
-        for (i, &panel) in path.iter().enumerate() {
-            let widget: gtk::Widget = if full.contains(&panel) {
-                self.ensure_panel(panel);
+        let mut desired: Vec<(gtk::Widget, Placement)> = Vec::new();
+        let mut widgets: HashMap<PanelId, gtk::Widget> = HashMap::new();
+        for cell in &layout.cells {
+            let placement = (
+                (cell.column * 2) as i32,
+                top + cell.row as i32,
+                1,
+                cell.span as i32,
+            );
+            let p = ws.panel(cell.panel).expect("laid out panel exists");
+            let widget: gtk::Widget = if cell.full {
+                self.ensure_panel(cell.panel);
                 let panels = self.panels.borrow();
-                let view = &panels[&panel];
-                let p = ws.panel(panel).expect("path panel exists");
-                let is_active = panel == active;
+                let view = &panels[&cell.panel];
+                let index = path.iter().position(|&x| x == cell.panel).unwrap_or(0);
                 let header = header_info(
                     ws,
-                    panel,
-                    is_active.then(|| branch_number.to_string()),
-                    focus.then(|| (i.checked_sub(1).map(|j| path[j]), path.get(i + 1).copied())),
+                    cell.panel,
+                    cell.active.then(|| branch_number.to_string()),
+                    focus.then(|| {
+                        (
+                            index.checked_sub(1).map(|j| path[j]),
+                            path.get(index + 1).copied(),
+                        )
+                    }),
                 );
                 view.render(
                     &p.state,
-                    service.listing(panel),
+                    service.listing(cell.panel),
                     p.unavailable(),
                     &header,
-                    is_active,
+                    cell.active,
                 );
-                view.root.set_visible(!focus || is_active);
-                view.root.set_hexpand(is_active);
+                view.root.set_hexpand(cell.active);
                 view.root.set_size_request(
-                    if is_active {
+                    if cell.active {
                         active_width
                     } else {
                         INACTIVE_WIDTH
@@ -191,24 +276,152 @@ impl WorkspaceView {
                 );
                 view.root.clone().upcast()
             } else {
-                let button = self.ensure_collapsed(panel, ws);
-                button.set_visible(!focus);
-                button.upcast()
+                self.ensure_card(cell.panel);
+                let cards = self.cards.borrow();
+                let card = &cards[&cell.panel];
+                card.render(
+                    CardContent::new(
+                        &folder_title(p.location()),
+                        &address_text(p.location()),
+                        &p.state,
+                        p.unavailable(),
+                        cell.branch_number,
+                    ),
+                    cell.on_active_path,
+                );
+                card.root
+                    .set_size_request(-1, if cell.on_active_path { -1 } else { LANE_HEIGHT });
+                card.root.clone().upcast()
             };
-            if widget.parent().is_none() {
-                self.strip.append(&widget);
-            }
-            self.strip.reorder_child_after(&widget, previous.as_ref());
-            previous = Some(widget);
+            // The active branch's row takes the spare height; lanes stay
+            // compact (a spanning shared panel does not stretch them, as the
+            // active row already expands).
+            widget.set_vexpand(cell.on_active_path);
+            widget.set_visible(!focus || cell.active);
+            widgets.insert(cell.panel, widget.clone());
+            desired.push((widget, placement));
         }
 
+        // Connector lanes between columns.
+        let gaps = layout.columns.saturating_sub(1);
+        {
+            let mut lanes = self.lanes.borrow_mut();
+            while lanes.len() < gaps {
+                lanes.push(ConnectorLane::new());
+            }
+            for lane in lanes.drain(gaps..) {
+                let widget = lane.root.upcast::<gtk::Widget>();
+                if self.placed.borrow_mut().remove(&widget).is_some() {
+                    self.grid.remove(&widget);
+                }
+            }
+            for (column, lane) in lanes.iter().enumerate() {
+                let link = |e: &&workspace_layout::Edge| {
+                    Some((
+                        widgets.get(&e.parent)?.clone(),
+                        widgets.get(&e.child)?.clone(),
+                    ))
+                };
+                let here = layout.edges.iter().filter(|e| e.column == column);
+                let active_links = here
+                    .clone()
+                    .filter(|e| e.on_active_path)
+                    .filter_map(|e| link(&e))
+                    .collect();
+                let inactive_links = here
+                    .filter(|e| !e.on_active_path)
+                    .filter_map(|e| link(&e))
+                    .collect();
+                lane.set_links(inactive_links, active_links);
+                lane.root.set_visible(!focus);
+                desired.push((
+                    lane.root.clone().upcast(),
+                    ((column * 2 + 1) as i32, top, 1, layout.rows as i32),
+                ));
+            }
+        }
+
+        // "+N branches" above and below the shown rows.
+        let width = (layout.columns * 2 - 1) as i32;
+        for (stub, hidden, row, side) in [
+            (&self.stubs.0, layout.hidden_above, 0, "above"),
+            (
+                &self.stubs.1,
+                layout.hidden_below,
+                top + layout.rows as i32,
+                "below",
+            ),
+        ] {
+            if hidden > 0 && !focus {
+                stub.set_label(&format!(
+                    "+{hidden} branch{} {side}",
+                    if hidden == 1 { "" } else { "es" }
+                ));
+                desired.push((stub.clone().upcast(), (0, row, width, 1)));
+            }
+        }
+
+        let refocus = self.apply(desired, widgets.get(&active));
         self.render_branch_bar(ws);
 
-        let layout = (active, focus, viewport);
-        if self.last_layout.replace(Some(layout)) != Some(layout) {
+        let reveal = (active, focus, viewport);
+        if self.last_reveal.replace(Some(reveal)) != Some(reveal) {
             self.reveal(active);
         }
-        (full, dropped)
+        RenderOutcome {
+            visible: full,
+            dropped,
+            refocus,
+        }
+    }
+
+    /// Attaches, moves and detaches grid children to match `desired`.
+    /// Returns whether the active panel's widget was (re)attached.
+    fn apply(&self, desired: Vec<(gtk::Widget, Placement)>, active: Option<&gtk::Widget>) -> bool {
+        let mut placed = self.placed.borrow_mut();
+        let keep: Vec<&gtk::Widget> = desired.iter().map(|(w, _)| w).collect();
+        placed.retain(|widget, _| {
+            let stays = keep.contains(&widget);
+            if !stays {
+                self.grid.remove(widget);
+            }
+            stays
+        });
+        let mut refocus = false;
+        for (widget, placement) in desired {
+            if placed.get(&widget) == Some(&placement) {
+                continue;
+            }
+            if placed.remove(&widget).is_some() {
+                self.grid.remove(&widget);
+            }
+            let (column, row, width, height) = placement;
+            self.grid.attach(&widget, column, row, width, height);
+            refocus |= Some(&widget) == active;
+            placed.insert(widget, placement);
+        }
+        refocus
+    }
+
+    /// One debug line per layout change, for diagnostics and the UI tests.
+    fn log_layout(&self, layout: &Layout) {
+        let cards = layout.cells.iter().filter(|c| !c.full).count();
+        let shape = (
+            layout.rows,
+            layout.columns,
+            layout.hidden_above + layout.hidden_below,
+            cards,
+        );
+        if self.last_logged.replace(Some(shape)) != Some(shape) {
+            tracing::debug!(
+                rows = shape.0,
+                columns = shape.1,
+                hidden = shape.2,
+                cards = shape.3,
+                connectors = layout.edges.len(),
+                "workspace layout"
+            );
+        }
     }
 
     /// Gives keyboard focus to the active panel.
@@ -245,6 +458,11 @@ impl WorkspaceView {
         if page > 0 { page } else { 760 }
     }
 
+    fn viewport_height(&self) -> i32 {
+        let height = self.scroller.height();
+        if height > 0 { height } else { 560 }
+    }
+
     fn ensure_panel(&self, panel: PanelId) {
         if self.panels.borrow().contains_key(&panel) {
             return;
@@ -256,32 +474,14 @@ impl WorkspaceView {
         self.panels.borrow_mut().insert(panel, view);
     }
 
-    fn ensure_collapsed(&self, panel: PanelId, ws: &Workspace) -> gtk::Button {
-        let title = ws
-            .panel(panel)
-            .map(|p| folder_title(p.location()))
-            .unwrap_or_default();
-        let mut collapsed = self.collapsed.borrow_mut();
-        let button = collapsed.entry(panel).or_insert_with(|| {
-            let label = gtk::Label::builder()
-                .ellipsize(gtk::pango::EllipsizeMode::End)
-                .build();
-            let button = gtk::Button::builder()
-                .child(&label)
-                .css_classes(["flat", "seshat-panel-collapsed"])
-                .width_request(COLLAPSED_WIDTH)
-                .build();
-            let on_event = self.on_event.clone();
-            button.connect_clicked(move |_| {
-                on_event(WorkspaceEvent::Panel(panel, PanelEvent::Activate))
-            });
-            button
-        });
-        if let Some(label) = button.child().and_downcast::<gtk::Label>() {
-            label.set_label(&title);
+    fn ensure_card(&self, panel: PanelId) {
+        if self.cards.borrow().contains_key(&panel) {
+            return;
         }
-        button.set_tooltip_text(Some(&title));
-        button.clone()
+        let on_event = self.on_event.clone();
+        let card =
+            BranchCard::new(move || on_event(WorkspaceEvent::Panel(panel, PanelEvent::Activate)));
+        self.cards.borrow_mut().insert(panel, card);
     }
 
     fn render_branch_bar(&self, ws: &Workspace) {
@@ -341,7 +541,7 @@ impl WorkspaceView {
         *self.branches_shown.borrow_mut() = branches;
     }
 
-    /// Smoothly scrolls the strip so the active panel is fully visible.
+    /// Smoothly scrolls sideways so the active panel is fully visible.
     fn reveal(&self, panel: PanelId) {
         let Some(widget) = self
             .panels
@@ -351,12 +551,12 @@ impl WorkspaceView {
         else {
             return;
         };
-        let strip = self.strip.clone();
+        let grid = self.grid.clone();
         let adjustment = self.scroller.hadjustment();
         let scroller = self.scroller.clone();
         // After layout, so the new widths and positions are known.
         gtk::glib::idle_add_local_once(move || {
-            let Some(bounds) = widget.compute_bounds(&strip) else {
+            let Some(bounds) = widget.compute_bounds(&grid) else {
                 return;
             };
             let (left, right) = (
@@ -387,6 +587,15 @@ impl WorkspaceView {
     }
 }
 
+/// How many branches fit: the active one keeps [`MIN_ACTIVE_HEIGHT`], each
+/// other branch needs a lane. Too short for any lane means a single strip
+/// (decision L2).
+pub fn rows_for_height(height: i32) -> usize {
+    let spare = (height - MIN_ACTIVE_HEIGHT).max(0);
+    let lanes = (spare / (LANE_HEIGHT + ROW_SPACING)) as usize;
+    (1 + lanes).min(MAX_ROWS)
+}
+
 /// A short name for a panel's folder.
 pub fn folder_title(location: &Location) -> String {
     match location {
@@ -415,5 +624,19 @@ fn header_info(
         forks: p.children().iter().filter_map(|&c| named(c)).collect(),
         previous: previous.and_then(named),
         next: next.and_then(named),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rows_for_height;
+
+    #[test]
+    fn lanes_depend_on_height_and_are_capped() {
+        assert_eq!(rows_for_height(200), 1, "too short: the single strip");
+        assert_eq!(rows_for_height(300 + 69), 1);
+        assert_eq!(rows_for_height(300 + 70), 2);
+        assert_eq!(rows_for_height(300 + 3 * 70), 4);
+        assert_eq!(rows_for_height(5000), 6, "at most six branches (L4)");
     }
 }

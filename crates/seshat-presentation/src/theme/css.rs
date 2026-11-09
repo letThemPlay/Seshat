@@ -302,11 +302,37 @@ window.seshat popover separator {{
   padding: 0 6px;
 }}
 
-.seshat-panel-collapsed {{
+/* Cards: panels of other branches, and far panels of this one. They are
+   panels too, so they use the surface token like every panel. */
+.seshat-card {{
   background-color: @seshat_surface;
-  color: @seshat_text_muted;
+  color: @seshat_text_secondary;
   border-radius: {radius}px;
   box-shadow: inset 0 0 0 1px @seshat_border;
+  padding: {spacing}px {padding}px;
+}}
+
+.seshat-card:hover {{
+  box-shadow: inset 0 0 0 1px @seshat_accent;
+}}
+
+.seshat-card.seshat-card-on-path .seshat-card-title {{
+  color: @seshat_text_primary;
+}}
+
+/* Connectors draw in their CSS colour. */
+.seshat-connector {{
+  color: @seshat_border;
+}}
+
+.seshat-connector.seshat-connector-active {{
+  color: @seshat_accent;
+}}
+
+.seshat-branch-stub {{
+  color: @seshat_text_muted;
+  min-height: 0;
+  padding: 2px {padding}px;
 }}
 
 .seshat-content listview row.seshat-cursor,
@@ -442,7 +468,8 @@ mod tests {
     fn rule_body<'a>(css: &'a str, selector: &str) -> &'a str {
         let mut rest = css;
         while let Some(open) = rest.find('{') {
-            let selectors = &rest[..open];
+            // Comments may precede a rule and contain commas: drop them.
+            let selectors = rest[..open].rsplit("*/").next().unwrap_or_default();
             let close = open + rest[open..].find('}').expect("unterminated rule");
             let body = &rest[open + 1..close];
             if selectors
@@ -490,6 +517,22 @@ mod tests {
             let active = rule_body(&css, ".seshat-panel.seshat-panel-active");
             assert!(!active.contains("background"), "{active}");
             assert!(active.contains("@seshat_accent"), "{active}");
+        }
+    }
+
+    #[test]
+    fn cards_and_connectors_use_theme_tokens() {
+        for theme in [light(), dark()] {
+            let css = render_css(&theme);
+            assert_eq!(
+                background(rule_body(&css, ".seshat-card")),
+                "@seshat_surface"
+            );
+            assert!(rule_body(&css, ".seshat-connector").contains("color: @seshat_border;"));
+            assert!(
+                rule_body(&css, ".seshat-connector.seshat-connector-active")
+                    .contains("color: @seshat_accent;")
+            );
         }
     }
 

@@ -78,6 +78,6 @@ Other parts of the service:
 - The UI end-to-end test `scripts/ui/workspace.sh` walks the spatial spec's §19 definition of done in a real session.
 - The D-Bus protocol, the operation manager and the native Wayland setup are unchanged.
 - Deliberate limits, tracked in [STATUS.md](../implementation/STATUS.md):
-  - Inactive branches are discoverable (branch bar, fork menus) but not drawn side by side with the active one.
+  - Inactive branches were only discoverable (branch bar, fork menus) here; [ADR 0005](0005-branch-layout.md) later draws them side by side.
   - Folders renamed outside Seshat are not followed (D14).
   - Panel states for features that do not exist yet (column configuration, expanded metadata, preview) are not modelled (D12).

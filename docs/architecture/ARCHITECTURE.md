@@ -37,7 +37,7 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 | Directory listings and their load and watch generations | `WorkspaceService` (cached per panel; never in widgets) |
 | Interaction mode, pending keys | `Interaction` (shared with the key controller) |
 | File operations and their lifecycle | `OperationManager`, the single source of truth, also published on D-Bus |
-| Rendered widgets | `WorkspaceView` and `PanelView`; disposable at any time |
+| Rendered widgets | `WorkspaceView` (a grid laid out by the pure `workspace_layout`: depth across, branches down, connectors), `PanelView` and `BranchCard`; disposable at any time |
 
 ### Rules specific to the workspace
 

@@ -62,5 +62,7 @@ Compositor-specific checks:
 | Workspace: touchpad horizontal scrolling | ☐ | ☐ | ☐ |
 | Workspace: drag files between panels | ☐ | ☐ | ☐ |
 | Workspace: Focus Mode at 125%/150% scale | ☐ | ☐ | ☐ |
+| Workspace: connectors and cards crisp at 125%/150% scale | ☐ | ☐ | ☐ |
+| Workspace: short window falls back to one branch row | ☐ | ☐ | ☐ |
 
 Record the detected backend line from the log with every entry.

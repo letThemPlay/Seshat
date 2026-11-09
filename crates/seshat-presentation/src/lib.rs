@@ -5,8 +5,10 @@
 
 mod actions;
 mod app;
+mod branch_card;
 mod clipboard;
 mod conflicts;
+mod connectors;
 pub mod diagnostics;
 mod dialogs;
 mod files;
@@ -16,6 +18,7 @@ mod panel_view;
 mod pathbar;
 mod sidebar;
 pub mod theme;
+mod workspace_layout;
 mod workspace_view;
 
 pub use app::AppInit;
