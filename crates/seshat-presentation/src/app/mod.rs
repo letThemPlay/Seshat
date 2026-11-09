@@ -235,6 +235,8 @@ pub struct App {
     focused_panel: Option<PanelId>,
     /// Whether that focus went to the file list (not a message page).
     focused_on_files: bool,
+    /// Last workspace shape logged (active panel, branches, panels, focus).
+    logged_shape: Option<(PanelId, usize, usize, bool)>,
     /// Search text set by the model, so its echo from the entry is ignored.
     search_echo: Option<String>,
     devices: Vec<Device>,
@@ -396,7 +398,7 @@ impl SimpleComponent for App {
                 }
             });
         }
-        shortcuts::install(&root, &keys, &sender);
+        shortcuts::install(&root, &keys, &ui.command_entry, &sender);
 
         let defaults = PanelState {
             options: ViewOptions {
@@ -445,6 +447,7 @@ impl SimpleComponent for App {
             reload_pending: HashSet::new(),
             focused_panel: None,
             focused_on_files: false,
+            logged_shape: None,
             search_echo: None,
             devices,
             theme_choice: prefs.theme.clone(),

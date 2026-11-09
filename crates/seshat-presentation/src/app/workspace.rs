@@ -40,12 +40,21 @@ impl App {
             self.sidebar.emit(SidebarInput::SetCurrent(Some(
                 self.service.active_location().clone(),
             )));
+        }
+
+        // One line per structural change, for diagnostics and the UI tests.
+        // Locations only; never listings.
+        let ws = self.service.workspace();
+        let shape = (active, ws.branch_count(), ws.panel_count(), ws.focus_mode());
+        if self.logged_shape != Some(shape) {
+            self.logged_shape = Some(shape);
             tracing::debug!(
                 panel = %active,
                 location = ?self.service.active_location(),
-                branches = self.service.workspace().branch_count(),
-                panels = self.service.workspace().panel_count(),
-                focus_mode = self.service.workspace().focus_mode(),
+                branch = ws.active_branch().id().raw(),
+                branches = shape.1,
+                panels = shape.2,
+                focus_mode = shape.3,
                 "workspace state"
             );
         }

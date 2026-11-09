@@ -369,8 +369,9 @@ pub fn build(
 }
 
 /// The command line (`:`): Return runs, Esc cancels, Up/Down recall
-/// history, Tab completes. Leaving it cancels, so Normal Mode keys never
-/// end up typed into a forgotten prompt.
+/// history, Tab completes. If focus leaves it, the next key press closes it
+/// (see `shortcuts::install_modal_keys`), so keys never go to a forgotten
+/// prompt.
 fn command_line(sender: &ComponentSender<App>) -> gtk::Entry {
     let entry = gtk::Entry::builder()
         .placeholder_text(":command (Tab completes, :help lists commands)")
@@ -403,15 +404,5 @@ fn command_line(sender: &ComponentSender<App>) -> gtk::Entry {
         }
     });
     entry.add_controller(keys);
-    let focus = gtk::EventControllerFocus::new();
-    focus.connect_leave({
-        let sender = sender.clone();
-        move |controller| {
-            if controller.widget().is_some_and(|w| w.is_visible()) {
-                sender.input_sender().emit(Msg::CommandCancelled);
-            }
-        }
-    });
-    entry.add_controller(focus);
     entry
 }

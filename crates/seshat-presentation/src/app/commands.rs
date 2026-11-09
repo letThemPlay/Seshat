@@ -158,7 +158,13 @@ impl App {
 
     // ── Command line ────────────────────────────────────────────────────
 
+    /// Opens the command line. From the keyboard, the key controller has
+    /// already opened and focused it (so no typed key is lost); this only
+    /// covers other ways in.
     pub(super) fn open_command_line(&mut self) {
+        if WidgetExt::is_visible(&self.ui.command_entry) {
+            return;
+        }
         self.ui.command_entry.set_text("");
         self.ui.command_entry.set_visible(true);
         self.ui.command_entry.grab_focus();
@@ -382,7 +388,7 @@ impl App {
         let title = format!("{}?", plan.summary());
         let verb = plan.kind.verb();
         let sender = sender.clone();
-        dialogs::confirm(
+        dialogs::confirm_safe(
             &self.ui.window,
             &title,
             &format!("{details}\n\nInto {}", plan.destination.display()),

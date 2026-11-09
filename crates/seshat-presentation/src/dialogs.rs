@@ -243,6 +243,28 @@ pub fn confirm(
     action: &str,
     on_confirm: impl Fn() + 'static,
 ) {
+    confirm_styled(parent, heading, body, action, true, on_confirm);
+}
+
+/// Asks to confirm an action that is not destructive (e.g. a copy).
+pub fn confirm_safe(
+    parent: &gtk::Window,
+    heading: &str,
+    body: &str,
+    action: &str,
+    on_confirm: impl Fn() + 'static,
+) {
+    confirm_styled(parent, heading, body, action, false, on_confirm);
+}
+
+fn confirm_styled(
+    parent: &gtk::Window,
+    heading: &str,
+    body: &str,
+    action: &str,
+    destructive: bool,
+    on_confirm: impl Fn() + 'static,
+) {
     let window = dialog_window(parent, heading);
     let content = content_box();
     content.append(
@@ -262,7 +284,11 @@ pub fn confirm(
     );
     let cancel = gtk::Button::with_label("Cancel");
     let go = gtk::Button::with_label(action);
-    go.add_css_class("destructive-action");
+    go.add_css_class(if destructive {
+        "destructive-action"
+    } else {
+        "suggested-action"
+    });
     content.append(&button_row(&[&cancel, &go]));
     window.set_child(Some(&content));
     // The safe choice is the default.
