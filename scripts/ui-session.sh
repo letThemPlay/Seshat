@@ -6,8 +6,9 @@
 #
 # Isolation: the compositor, Seshat and all simulated input share a private
 # XDG_RUNTIME_DIR and a scrubbed environment (no DISPLAY, no session D-Bus,
-# no access to the real Wayland session). HOME, XDG_CONFIG_HOME and
-# XDG_DATA_HOME (and so the Trash) point into a throwaway directory.
+# no access to the real Wayland session). HOME, XDG_CONFIG_HOME,
+# XDG_DATA_HOME (and so the Trash) and XDG_STATE_HOME (the saved workspace)
+# point into a throwaway directory.
 # Simulated input (wtype) can only reach this compositor; every helper
 # re-checks that before sending anything.
 #
@@ -66,6 +67,7 @@ clean_env=(
     XDG_RUNTIME_DIR="$SESSION/runtime"
     XDG_CONFIG_HOME="$SESSION/config"
     XDG_DATA_HOME="$SESSION/data"
+    XDG_STATE_HOME="$SESSION/state"
     DBUS_SESSION_BUS_ADDRESS="$DBUS_ADDRESS"
     XDG_DATA_DIRS="${XDG_DATA_DIRS:-}"
     LANG="${LANG:-C.UTF-8}"

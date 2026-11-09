@@ -1,0 +1,31 @@
+# Roadmap
+
+## Original specification (0.1.0)
+
+All six phases of [the original specification](../specifications/0-INITIAL-PRODUCT-SPEC.md) §17 are complete. See [definition-of-done.md](../definition-of-done.md).
+
+## Spatial file manager
+
+The phases follow the approved plan, which refines [the spatial specification](../specifications/1-SPATIAL-FILE-MANAGER.md) §17. Product decisions D1–D19 are in [DECISIONS.md](../architecture/DECISIONS.md), and the architecture is in [ADR 0004](../decisions/0004-spatial-workspace.md).
+
+| Phase | Scope | Status |
+|---|---|---|
+| 0. Groundwork | Spec and instruction files, decision log, view types moved to the domain (D19), search no longer captures typing (D1) | ✅ Done |
+| 1. Workspace and panels | Domain panel tree with invariants; `WorkspaceService` and effects; per-panel listings, watches and LRU; workspace strip; `h`/`j`/`k`/`l`, `gg`, `G`, `Enter`, `Backspace` | ✅ Done |
+| 2. Branching | First-class branches, shared ancestors, switch and close, branch bar, fork menus, jump list (D2), sidebar and address semantics (D3), unavailable panels (D14) | ✅ Done |
+| 3. Focus Mode | Presentation flag; navigation and branch switching while focused; retention preference; toolbar toggle; indicator; neighbour hints | ✅ Done |
+| 4. Interaction modes | Normal, Visual and Command; configurable keymap with conflict detection; command line with history and completion; mode bar; help | ✅ Done |
+| 5. Cross-panel operations | Workspace-wide selection; explicit destinations (paste, `:copy`/`:move`, picker, drop); confirmation across panels (D7); clipboard staging (D9) | ✅ Done |
+| 6. Persistence and refinement | Versioned workspace store; restore on launch; UI end-to-end test of the definition of done | ✅ Done; refinements open (see below) |
+
+### Open refinements
+
+See [STATUS.md](STATUS.md) for detail.
+
+- Side-by-side rendering of inactive branches with connectors.
+- Path completion on the command line.
+- A performance run with many panels.
+- Manual checks:
+  - drag and drop between panels
+  - touchpad horizontal scrolling
+  - GNOME and KDE sessions

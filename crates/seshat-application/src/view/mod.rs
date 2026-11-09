@@ -2,10 +2,9 @@
 //! Pure functions over domain entries; no I/O.
 
 mod natural;
-mod options;
 
 pub use natural::{natural_cmp, natural_cmp_folded};
-pub use options::{SortKey, SortOrder, ViewMode, ViewOptions};
+pub use seshat_domain::view::{SortKey, SortOrder, ViewMode, ViewOptions};
 
 use std::cmp::Ordering;
 

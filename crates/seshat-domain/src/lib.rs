@@ -6,5 +6,7 @@
 pub mod entities;
 pub mod error;
 pub mod operation;
+pub mod view;
+pub mod workspace;
 
 pub use error::DomainError;

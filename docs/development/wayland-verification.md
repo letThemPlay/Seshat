@@ -59,5 +59,8 @@ Compositor-specific checks:
 | Keyboard navigation (lists, Enter to open) | ☐ | ☐ | ☐ |
 | Theme follows system light/dark | ☐ | ☐ | ☐ |
 | Clipboard, DnD, file dialogs | Phase 3+ | Phase 3+ | Phase 3+ |
+| Workspace: touchpad horizontal scrolling | ☐ | ☐ | ☐ |
+| Workspace: drag files between panels | ☐ | ☐ | ☐ |
+| Workspace: Focus Mode at 125%/150% scale | ☐ | ☐ | ☐ |
 
 Record the detected backend line from the log with every entry.

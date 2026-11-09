@@ -40,9 +40,39 @@ impl ThemeChoice {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Preferences {
     pub theme: ThemeChoice,
+    /// Defaults for new panels (each panel keeps its own settings).
     pub show_hidden: bool,
     pub view_mode: ViewMode,
     pub sort: SortOrder,
+    pub workspace: WorkspacePreferences,
+}
+
+/// Preferences of the spatial workspace and its keyboard interaction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspacePreferences {
+    /// Restore the previous workspace on launch (otherwise start at Home).
+    pub restore: bool,
+    /// Keep Focus Mode when switching branches.
+    pub retain_focus_mode: bool,
+    /// "Classic keys" (decision D1): typing searches, and single-key
+    /// bindings such as `h` or `j` are off.
+    pub classic_keys: bool,
+    /// Moving past the last item wraps to the first, and vice versa.
+    pub wrap_cursor: bool,
+    /// Key binding overrides: action id and its key sequences.
+    pub key_bindings: Vec<(String, Vec<String>)>,
+}
+
+impl Default for WorkspacePreferences {
+    fn default() -> Self {
+        Self {
+            restore: true,
+            retain_focus_mode: true,
+            classic_keys: false,
+            wrap_cursor: false,
+            key_bindings: Vec::new(),
+        }
+    }
 }
 
 /// Loads and saves preferences.

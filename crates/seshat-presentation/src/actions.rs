@@ -24,6 +24,8 @@ pub struct ActionContext {
     pub in_trash: bool,
     /// The shown location is a regular folder (not the Trash).
     pub in_folder: bool,
+    /// Number of open branches.
+    pub branches: usize,
 }
 
 /// An action name and the message it sends.
@@ -45,6 +47,11 @@ const COMMANDS: &[Command] = &[
     ("new-folder", || Msg::NewItem { directory: true }),
     ("new-file", || Msg::NewItem { directory: false }),
     ("empty-trash", || Msg::EmptyTrash),
+    ("branches", || Msg::ShowBranches),
+    ("close-branch", || Msg::CloseBranch),
+    ("next-branch", || Msg::CycleBranch(true)),
+    ("previous-branch", || Msg::CycleBranch(false)),
+    ("help", || Msg::ShowHelp),
 ];
 
 impl ActionContext {
@@ -58,6 +65,7 @@ impl ActionContext {
             "restore" => any && self.in_trash,
             "paste" | "new-folder" | "new-file" => self.in_folder,
             "empty-trash" => self.in_trash,
+            "close-branch" | "next-branch" | "previous-branch" => self.branches > 1,
             _ => true,
         }
     }
@@ -71,6 +79,7 @@ pub struct Actions {
     view_mode: gio::SimpleAction,
     sort_key: gio::SimpleAction,
     sort_descending: gio::SimpleAction,
+    focus_mode: gio::SimpleAction,
     theme: gio::SimpleAction,
 }
 
@@ -95,6 +104,7 @@ impl Actions {
         };
         let show_hidden = toggle("show-hidden", || Msg::ToggleHidden);
         let sort_descending = toggle("sort-descending", || Msg::ToggleSortDescending);
+        let focus_mode = toggle("focus-mode", || Msg::ToggleFocusMode);
 
         let string_action = |name: &str, initial: &str, msg: fn(String) -> Msg| {
             let action = gio::SimpleAction::new_stateful(
@@ -117,6 +127,7 @@ impl Actions {
         for action in [
             &show_hidden,
             &sort_descending,
+            &focus_mode,
             &view_mode,
             &sort_key,
             &theme,
@@ -131,6 +142,7 @@ impl Actions {
             view_mode,
             sort_key,
             sort_descending,
+            focus_mode,
             theme,
         }
     }
@@ -142,8 +154,10 @@ impl Actions {
         mode: ViewMode,
         sort: SortOrder,
         theme: &ThemeChoice,
+        focus_mode: bool,
         context: ActionContext,
     ) {
+        set_state(&self.focus_mode, &focus_mode.to_variant());
         set_state(&self.show_hidden, &show_hidden.to_variant());
         set_state(&self.view_mode, &mode.id().to_variant());
         set_state(&self.sort_key, &sort.key.id().to_variant());
@@ -296,10 +310,17 @@ pub fn background_menu(in_trash: bool) -> gio::Menu {
     radio(&view, "List", "view-mode", ViewMode::List.id());
     radio(&view, "Grid", "view-mode", ViewMode::Grid.id());
 
+    let workspace = gio::Menu::new();
+    item(&workspace, "Focus Mode", "focus-mode", None);
+    item(&workspace, "Branches…", "branches", None);
+    item(&workspace, "Close Branch", "close-branch", None);
+    item(&workspace, "Keys and Commands", "help", None);
+
     let menu = gio::Menu::new();
     menu.append_section(None, &general);
     menu.append_section(None, &view);
     menu.append_submenu(Some("Sort By"), &sort_menu());
+    menu.append_section(None, &workspace);
     menu
 }
 
@@ -313,6 +334,7 @@ mod tests {
             selected: 1,
             in_trash: false,
             in_folder: true,
+            branches: 1,
         };
         let folder_many = ActionContext {
             selected: 3,
@@ -322,6 +344,7 @@ mod tests {
             selected: 1,
             in_trash: true,
             in_folder: false,
+            branches: 1,
         };
         assert!(folder_one.allows("rename"));
         assert!(!folder_many.allows("rename"));
@@ -339,5 +362,13 @@ mod tests {
         assert!(!nothing.allows("delete"));
         assert!(nothing.allows("paste"));
         assert!(nothing.allows("new-folder"));
+        assert!(!nothing.allows("close-branch"), "the last branch stays");
+        assert!(
+            ActionContext {
+                branches: 2,
+                ..nothing
+            }
+            .allows("close-branch")
+        );
     }
 }

@@ -60,7 +60,17 @@ jobs:
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Sandboxed UI test (headless Sway)
         run: nix develop --command scripts/ui-session.sh scripts/ui/file-operations.sh "$RUNNER_TEMP/ui"
+      - name: Sandboxed UI test of the spatial workspace (headless Sway)
+        run: nix develop --command scripts/ui-session.sh scripts/ui/workspace.sh "$RUNNER_TEMP/ui-workspace"
       - name: Upload screenshots and logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-e2e-workspace-artifacts
+          path: ${{ runner.temp }}/ui-workspace
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload screenshots and logs (file operations)
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

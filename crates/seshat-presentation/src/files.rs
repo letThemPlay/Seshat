@@ -4,7 +4,8 @@
 //! switching views keeps the selection. Rows are recycled by GTK, so large
 //! directories only create widgets for what is visible.
 
-use std::collections::HashSet;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::SystemTime;
 
@@ -36,6 +37,13 @@ pub enum FileViewEvent {
 
 type EventHandler = Rc<dyn Fn(FileViewEvent)>;
 
+/// Row widgets currently bound to an entry, so the cursor can be drawn on
+/// them and a focused row can be mapped back to its location.
+type Registry = Rc<RefCell<HashMap<gtk::Widget, Location>>>;
+
+/// Style class of the row under the navigation cursor.
+const CURSOR_CLASS: &str = "seshat-cursor";
+
 #[derive(Debug, Clone)]
 pub struct FileView {
     /// Stack with the "list" and "grid" pages.
@@ -46,6 +54,10 @@ pub struct FileView {
     grid_scroll: gtk::ScrolledWindow,
     list: gtk::ListView,
     grid: gtk::GridView,
+    registry: Registry,
+    cursor: Rc<RefCell<Option<Location>>>,
+    /// Set while the model applies a selection, so it is not reported back.
+    applying: Rc<Cell<bool>>,
 }
 
 impl FileView {
@@ -53,21 +65,43 @@ impl FileView {
         let on_event: EventHandler = Rc::new(on_event);
         let store = gio::ListStore::new::<glib::BoxedAnyObject>();
         let selection = gtk::MultiSelection::new(Some(store.clone()));
+        let applying = Rc::new(Cell::new(false));
         selection.connect_selection_changed({
             let on_event = on_event.clone();
-            move |_, _, _| on_event(FileViewEvent::SelectionChanged)
+            let applying = applying.clone();
+            move |_, _, _| {
+                if !applying.get() {
+                    on_event(FileViewEvent::SelectionChanged)
+                }
+            }
         });
+        let registry: Registry = Rc::default();
+        let cursor: Rc<RefCell<Option<Location>>> = Rc::default();
 
         let root = gtk::Stack::new();
 
         let list = gtk::ListView::new(
             Some(selection.clone()),
-            Some(item_factory(&root, &selection, &on_event, Layout::Row)),
+            Some(item_factory(
+                &root,
+                &selection,
+                &on_event,
+                &registry,
+                &cursor,
+                Layout::Row,
+            )),
         );
         list.update_property(&[gtk::accessible::Property::Label("Files")]);
         let grid = gtk::GridView::new(
             Some(selection.clone()),
-            Some(item_factory(&root, &selection, &on_event, Layout::Cell)),
+            Some(item_factory(
+                &root,
+                &selection,
+                &on_event,
+                &registry,
+                &cursor,
+                Layout::Cell,
+            )),
         );
         grid.set_max_columns(64);
         grid.update_property(&[gtk::accessible::Property::Label("Files")]);
@@ -106,15 +140,14 @@ impl FileView {
             grid_scroll,
             list,
             grid,
+            registry,
+            cursor,
+            applying,
         }
     }
 
     pub fn set_mode(&self, mode: ViewMode) {
         self.root.set_visible_child_name(mode.id());
-    }
-
-    pub fn len(&self) -> u32 {
-        self.store.n_items()
     }
 
     pub fn entry(&self, position: u32) -> Option<FileEntry> {
@@ -163,6 +196,7 @@ impl FileView {
             .root()
             .and_then(|r| gtk::prelude::RootExt::focus(&r))
             .is_some_and(|f| f.is_ancestor(&self.root));
+        self.applying.set(true);
         self.store.splice(0, self.store.n_items(), &objects);
 
         let selected = gtk::Bitset::new_empty();
@@ -171,6 +205,7 @@ impl FileView {
         }
         self.selection
             .set_selection(&selected, &gtk::Bitset::new_range(0, self.store.n_items()));
+        self.applying.set(false);
         if had_focus {
             self.focus();
         }
@@ -188,26 +223,6 @@ impl FileView {
         } else {
             self.list_scroll.vadjustment().set_value(0.0);
             self.grid_scroll.vadjustment().set_value(0.0);
-        }
-    }
-
-    /// Moves keyboard focus into the results, selecting the first item if
-    /// nothing is selected (e.g. after searching).
-    pub fn focus_results(&self) {
-        if self.store.n_items() == 0 {
-            return; // nothing to focus; keep focus in the search box
-        }
-        if self.selected().is_empty() {
-            self.selection.select_item(0, true);
-        }
-        // scroll_to(FOCUS) moves focus within the view but does not take it
-        // from another widget (e.g. the search box), so grab it first.
-        self.focus();
-        let flags = gtk::ListScrollFlags::FOCUS;
-        if self.root.visible_child_name().as_deref() == Some("grid") {
-            self.grid.scroll_to(0, flags, None);
-        } else {
-            self.list.scroll_to(0, flags, None);
         }
     }
 
@@ -240,6 +255,8 @@ fn item_factory(
     root: &gtk::Stack,
     selection: &gtk::MultiSelection,
     on_event: &EventHandler,
+    registry: &Registry,
+    cursor: &Rc<RefCell<Option<Location>>>,
     layout: Layout,
 ) -> gtk::SignalListItemFactory {
     let factory = gtk::SignalListItemFactory::new();
@@ -261,15 +278,35 @@ fn item_factory(
         }
     });
 
-    factory.connect_bind(move |_, item| {
-        let item = item.downcast_ref::<gtk::ListItem>().expect("ListItem");
-        let (Some(child), Some(obj)) = (item.child(), item.item()) else {
-            return;
-        };
-        let entry = entry_of(&obj);
-        match layout {
-            Layout::Row => bind_row(&child, &entry),
-            Layout::Cell => bind_cell(&child, &entry),
+    factory.connect_bind({
+        let registry = registry.clone();
+        let cursor = cursor.clone();
+        move |_, item| {
+            let item = item.downcast_ref::<gtk::ListItem>().expect("ListItem");
+            let (Some(child), Some(obj)) = (item.child(), item.item()) else {
+                return;
+            };
+            let entry = entry_of(&obj);
+            match layout {
+                Layout::Row => bind_row(&child, &entry),
+                Layout::Cell => bind_cell(&child, &entry),
+            }
+            if cursor.borrow().as_ref() == Some(&entry.location) {
+                child.add_css_class(CURSOR_CLASS);
+            } else {
+                child.remove_css_class(CURSOR_CLASS);
+            }
+            registry.borrow_mut().insert(child, entry.location);
+        }
+    });
+    factory.connect_unbind({
+        let registry = registry.clone();
+        move |_, item| {
+            let item = item.downcast_ref::<gtk::ListItem>().expect("ListItem");
+            if let Some(child) = item.child() {
+                child.remove_css_class(CURSOR_CLASS);
+                registry.borrow_mut().remove(&child);
+            }
         }
     });
     factory
@@ -616,21 +653,122 @@ fn drop_target(
 }
 
 impl FileView {
-    /// Selects the entry at `location` (if shown) and scrolls to it.
-    pub fn select_location(&self, location: &Location) -> bool {
-        let Some(position) = (0..self.store.n_items()).find(|&i| {
-            self.store
+    /// The locations GTK currently shows as selected.
+    pub fn selected_locations(&self) -> Vec<Location> {
+        self.selected().into_iter().map(|e| e.location).collect()
+    }
+
+    /// Shows `items` as the selection. The model owns the selection; this
+    /// only mirrors it, so it is not reported back as a change.
+    pub fn set_selected(&self, items: &[Location]) {
+        let wanted: HashSet<&Location> = items.iter().collect();
+        let selected = gtk::Bitset::new_empty();
+        let n = self.store.n_items();
+        for i in 0..n {
+            if self
+                .store
                 .item(i)
-                .is_some_and(|obj| entry_of(&obj).location == *location)
-        }) else {
-            return false;
+                .is_some_and(|obj| wanted.contains(&entry_of(&obj).location))
+            {
+                selected.add(i);
+            }
+        }
+        if selected == self.selection.selection() {
+            return;
+        }
+        self.applying.set(true);
+        self.selection
+            .set_selection(&selected, &gtk::Bitset::new_range(0, n));
+        self.applying.set(false);
+    }
+
+    /// Draws the navigation cursor on `location`. With `reveal` the row is
+    /// scrolled into view, and with `focus` it also gets keyboard focus.
+    pub fn set_cursor(&self, location: Option<&Location>, reveal: bool, focus: bool) {
+        *self.cursor.borrow_mut() = location.cloned();
+        for (widget, row) in self.registry.borrow().iter() {
+            if Some(row) == location {
+                widget.add_css_class(CURSOR_CLASS);
+            } else {
+                widget.remove_css_class(CURSOR_CLASS);
+            }
+        }
+        if !reveal {
+            return;
+        }
+        let Some(position) = location.and_then(|l| self.position_of(l)) else {
+            return;
         };
-        let flags = gtk::ListScrollFlags::SELECT | gtk::ListScrollFlags::FOCUS;
+        let flags = if focus {
+            gtk::ListScrollFlags::FOCUS
+        } else {
+            gtk::ListScrollFlags::NONE
+        };
         if self.root.visible_child_name().as_deref() == Some("grid") {
             self.grid.scroll_to(position, flags, None);
         } else {
             self.list.scroll_to(position, flags, None);
         }
-        true
+    }
+
+    fn position_of(&self, location: &Location) -> Option<u32> {
+        (0..self.store.n_items()).find(|&i| {
+            self.store
+                .item(i)
+                .is_some_and(|obj| entry_of(&obj).location == *location)
+        })
+    }
+
+    /// The entry of the row that has keyboard focus, if it is in this view.
+    /// GTK focuses the row's internal container, whose child is our row.
+    pub fn location_at_focus(&self, focus: &gtk::Widget) -> Option<Location> {
+        if !focus.is_ancestor(&self.root) {
+            return None;
+        }
+        let registry = self.registry.borrow();
+        registry.get(focus).cloned().or_else(|| {
+            focus
+                .first_child()
+                .and_then(|child| registry.get(&child).cloned())
+        })
+    }
+
+    /// Whether `widget` lies inside this view.
+    pub fn contains(&self, widget: &gtk::Widget) -> bool {
+        widget.is_ancestor(&self.root)
+    }
+
+    /// Roughly how many items fit on one page (for half-page scrolling).
+    pub fn rows_per_page(&self) -> usize {
+        let (scroll, columns) = if self.root.visible_child_name().as_deref() == Some("grid") {
+            (&self.grid_scroll, 4.0)
+        } else {
+            (&self.list_scroll, 1.0)
+        };
+        let adjustment = scroll.vadjustment();
+        let n = f64::from(self.store.n_items().max(1));
+        let row = (adjustment.upper() / (n / columns).ceil()).max(1.0);
+        ((adjustment.page_size() / row) * columns).max(1.0) as usize
+    }
+
+    pub fn scroll_offset(&self) -> f64 {
+        if self.root.visible_child_name().as_deref() == Some("grid") {
+            self.grid_scroll.vadjustment().value()
+        } else {
+            self.list_scroll.vadjustment().value()
+        }
+    }
+
+    /// Restores a scroll offset once GTK has laid out the rows.
+    pub fn restore_scroll_offset(&self, offset: f64) {
+        let adjustments = [
+            self.list_scroll.vadjustment(),
+            self.grid_scroll.vadjustment(),
+        ];
+        glib::idle_add_local_once(move || {
+            for adjustment in adjustments {
+                adjustment.set_value(offset);
+            }
+        });
     }
 }

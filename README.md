@@ -3,20 +3,44 @@
 [![CI](https://github.com/letThemPlay/Seshat/actions/workflows/ci.yml/badge.svg)](https://github.com/letThemPlay/Seshat/actions/workflows/ci.yml)
 [![Security](https://github.com/letThemPlay/Seshat/actions/workflows/security.yml/badge.svg)](https://github.com/letThemPlay/Seshat/actions/workflows/security.yml)
 
-A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4.
+A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4: a spatial, keyboard-first workspace of persistent folder panels and branches.
 
-> **Status:** 0.1.0, all six phases of `spec.md` §17 are complete. See [Definition of Done](docs/definition-of-done.md) for what is verified and what still needs manual checks (GNOME and KDE sessions, removable devices).
+> **Status:** 0.1.0. All six phases of the [original specification](docs/specifications/0-INITIAL-PRODUCT-SPEC.md) and of the [spatial file manager](docs/specifications/1-SPATIAL-FILE-MANAGER.md) are implemented. See [implementation status](docs/implementation/STATUS.md) and the [Definition of Done](docs/definition-of-done.md) for what is verified and what still needs manual checks.
 
-## Keyboard
+## The workspace
+
+Opening a folder adds a **panel** to the right instead of replacing the view. Panels keep their cursor, scroll position, sort order, view, search and selection while you move around. Opening a different folder from a panel that already has a child starts a new **branch**. Branches coexist, share their common folders, and are listed in the branch bar above the panels. **Focus Mode** (`zz`) expands the active panel without closing anything; navigation keeps working. The workspace is restored when Seshat starts.
+
+Keys follow Vim. `:help` lists every key and command. Bindings can be changed in `~/.config/seshat/settings.toml`:
+
+```toml
+[keybindings]
+focus-mode = ["zz", "<C-f>"]
+
+[workspace]
+classic_keys = false   # true: typing searches, no single-letter keys
+wrap_cursor = false
+retain_focus_mode = true
+restore = true
+```
 
 | Keys | Action |
 |---|---|
-| Alt+Left / Alt+Right, mouse back/forward | Back / Forward |
-| Alt+Up | Parent folder |
+| `h` / `l` | Previous / next panel of the branch |
+| `j` / `k`, `gg` / `G`, `Ctrl+d` / `Ctrl+u` | Move the cursor; first / last item; half a page |
+| `Enter` / `Backspace` | Open the folder (new panel) or file / parent panel |
+| `[` / `]` | Previous / next branch |
+| `v` / `V` / `Esc` | Visual Mode: toggle item / range / leave (selection kept); `Esc` again clears the selection |
+| `y` / `x` / `p` | Copy / cut the selection (from any panels) / paste into this panel |
+| `zz` | Focus Mode |
+| `/` | Search this panel |
+| `:` | Command line: `:copy`, `:move [path \| bN]`, `:delete`, `:rename`, `:mkdir`, `:touch`, `:sort`, `:view`, `:hidden`, `:branch [N \| next \| prev \| close]`, `:focus`, `:open`, `:help` |
+| Alt+Left / Alt+Right, Ctrl+O / Ctrl+I, mouse back/forward | Back / Forward (previously active panels) |
+| Alt+Up | Parent panel |
 | F5, Ctrl+R | Refresh |
 | Ctrl+H | Show hidden files |
 | Ctrl+L | Type a location (`~/…`, `/…`, `trash:`), Esc to cancel |
-| Ctrl+F, or start typing | Search this folder (Return or Down: go to the results, Esc: close) |
+| Ctrl+F, `/` | Search this panel (Return or Down: go to the results, Esc: close) |
 | Ctrl+1 / Ctrl+2 | List / grid view |
 | Ctrl+A | Select all |
 | Ctrl+X / Ctrl+C / Ctrl+V | Cut / copy / paste files |
@@ -25,7 +49,6 @@ A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4.
 | Delete / Shift+Delete | Move to Trash / delete permanently (confirmed) |
 | Ctrl+Shift+N | New folder |
 | Shift+F10, Menu | Context menu |
-| Enter | Open folder or file |
 
 ## Install
 
@@ -56,11 +79,15 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --workspace
 scripts/verify-wayland.sh           # headless Weston: proves native Wayland, no XWayland
 scripts/ui-session.sh scripts/ui/file-operations.sh   # sandboxed UI end-to-end test
+scripts/ui-session.sh scripts/ui/workspace.sh         # the spatial workspace, end to end
 cargo run -p seshat -- --check-backend
 ```
 
 ## Documentation
 
+- Specifications: [original](docs/specifications/0-INITIAL-PRODUCT-SPEC.md), [spatial file manager](docs/specifications/1-SPATIAL-FILE-MANAGER.md)
+- [Implementation status](docs/implementation/STATUS.md) and [roadmap](docs/implementation/ROADMAP.md)
+- [Architecture](docs/architecture/ARCHITECTURE.md), [decisions](docs/architecture/DECISIONS.md), [Linux and Wayland](docs/architecture/LINUX-WAYLAND.md)
 - [Architecture overview](docs/architecture/overview.md)
 - [Filesystem integration](docs/architecture/filesystem.md)
 - [File operations](docs/architecture/operations.md)
@@ -73,7 +100,7 @@ cargo run -p seshat -- --check-backend
 - [Packaging](docs/packaging.md)
 - [Definition of Done](docs/definition-of-done.md)
 - Reviews: [security](docs/review/security.md), [performance](docs/review/performance.md), [architecture](docs/review/architecture.md)
-- ADRs: [0001 UI framework](docs/decisions/0001-ui-framework.md), [0002 IPC](docs/decisions/0002-ipc.md), [0003 packaging](docs/decisions/0003-packaging.md)
+- ADRs: [0001 UI framework](docs/decisions/0001-ui-framework.md), [0002 IPC](docs/decisions/0002-ipc.md), [0003 packaging](docs/decisions/0003-packaging.md), [0004 spatial workspace](docs/decisions/0004-spatial-workspace.md)
 - [Changelog](CHANGELOG.md)
 
 ## Layout

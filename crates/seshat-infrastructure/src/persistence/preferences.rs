@@ -1,7 +1,11 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use seshat_application::preferences::{Preferences, PreferencesStore, ThemeChoice};
+use std::collections::BTreeMap;
+
+use seshat_application::preferences::{
+    Preferences, PreferencesStore, ThemeChoice, WorkspacePreferences,
+};
 use seshat_application::view::{SortKey, SortOrder, ViewMode};
 
 use super::atomic::write_atomic;
@@ -32,6 +36,17 @@ struct SettingsFile {
     view_mode: Option<String>,
     sort_key: Option<String>,
     sort_descending: Option<bool>,
+    workspace: Option<WorkspaceSection>,
+    /// Action id → key sequences, e.g. `focus-mode = ["zz"]`.
+    keybindings: Option<BTreeMap<String, Vec<String>>>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct WorkspaceSection {
+    restore: Option<bool>,
+    retain_focus_mode: Option<bool>,
+    classic_keys: Option<bool>,
+    wrap_cursor: Option<bool>,
 }
 
 impl PreferencesStore for TomlPreferencesStore {
@@ -87,6 +102,7 @@ fn from_file(file: SettingsFile) -> Preferences {
                 .unwrap_or(defaults.sort.key),
             descending: file.sort_descending.unwrap_or(defaults.sort.descending),
         },
+        workspace: workspace_from(file.workspace.unwrap_or_default(), file.keybindings),
     }
 }
 
@@ -97,6 +113,30 @@ fn to_file(preferences: &Preferences) -> SettingsFile {
         view_mode: Some(preferences.view_mode.id().to_owned()),
         sort_key: Some(preferences.sort.key.id().to_owned()),
         sort_descending: Some(preferences.sort.descending),
+        workspace: Some(WorkspaceSection {
+            restore: Some(preferences.workspace.restore),
+            retain_focus_mode: Some(preferences.workspace.retain_focus_mode),
+            classic_keys: Some(preferences.workspace.classic_keys),
+            wrap_cursor: Some(preferences.workspace.wrap_cursor),
+        }),
+        keybindings: (!preferences.workspace.key_bindings.is_empty())
+            .then(|| preferences.workspace.key_bindings.iter().cloned().collect()),
+    }
+}
+
+fn workspace_from(
+    section: WorkspaceSection,
+    keybindings: Option<BTreeMap<String, Vec<String>>>,
+) -> WorkspacePreferences {
+    let defaults = WorkspacePreferences::default();
+    WorkspacePreferences {
+        restore: section.restore.unwrap_or(defaults.restore),
+        retain_focus_mode: section
+            .retain_focus_mode
+            .unwrap_or(defaults.retain_focus_mode),
+        classic_keys: section.classic_keys.unwrap_or(defaults.classic_keys),
+        wrap_cursor: section.wrap_cursor.unwrap_or(defaults.wrap_cursor),
+        key_bindings: keybindings.unwrap_or_default().into_iter().collect(),
     }
 }
 
@@ -126,6 +166,13 @@ mod tests {
             sort: SortOrder {
                 key: SortKey::Modified,
                 descending: true,
+            },
+            workspace: WorkspacePreferences {
+                restore: false,
+                retain_focus_mode: false,
+                classic_keys: true,
+                wrap_cursor: true,
+                key_bindings: vec![("focus-mode".into(), vec!["<C-f>".into(), "zf".into()])],
             },
         };
         store.save(&prefs).unwrap();

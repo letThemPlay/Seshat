@@ -1,38 +1,52 @@
 //! Main window component.
+//!
+//! The window is a shell around the [`WorkspaceService`]: it turns user
+//! input into service calls, carries out the I/O the service asks for
+//! (listing, watching, launching, saving) and renders the result. Panel and
+//! branch state lives in the service, never in widgets.
 
+mod commands;
 mod file_ops;
 mod shortcuts;
 mod view;
+mod workspace;
 
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gtk::prelude::*;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
 };
-use seshat_application::navigation::{NavigationHistory, breadcrumbs, parse_address};
+use seshat_application::interaction::command::CommandHistory;
+use seshat_application::interaction::{Intent, KeyMap, Mode, format_sequence};
+use seshat_application::navigation::{breadcrumbs, parse_address};
 use seshat_application::operations::{OperationEvent, OperationManager, OperationRequest};
 use seshat_application::ports::{
     DeviceError, DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError,
-    ThemeRepository, WatchGuard, location_lost,
+    ThemeRepository, WatchGuard,
 };
 use seshat_application::preferences::{Preferences, PreferencesStore, ThemeChoice};
 use seshat_application::use_cases::ListDirectory;
-use seshat_application::view::{SortKey, ViewMode, ViewOptions, arrange};
+use seshat_application::view::{SortKey, ViewMode};
+use seshat_application::workspace::{TransferKind, TransferPlan, WorkspaceService, WorkspaceStore};
 use seshat_domain::entities::{Device, DeviceId, FileEntry, Location, StandardLocation};
 use seshat_domain::operation::OperationId;
+use seshat_domain::view::ViewOptions;
+use seshat_domain::workspace::{PanelId, PanelState};
 
 use crate::actions::{self, ActionContext, Actions};
 use crate::clipboard::ClipboardFiles;
 use crate::conflicts::{ConflictRequest, UiConflictResolver};
 use crate::diagnostics;
-use crate::files::{FileView, FileViewEvent};
+use crate::keys::{KeyRouter, SharedKeys};
 use crate::operations_panel::OperationsPanel;
 use crate::pathbar::address_text;
 use crate::sidebar::{Sidebar, SidebarInit, SidebarInput, SidebarOutput};
 use crate::theme::{ThemeRegistry, render_css};
+use crate::workspace_view::{WorkspaceEvent, WorkspaceView};
 use view::{AppWidgets, Handles};
 
 /// Seshat owns its look through its own theme system, so its stylesheet must
@@ -45,6 +59,9 @@ const THEME_PROVIDER_PRIORITY: u32 = gtk::STYLE_PROVIDER_PRIORITY_USER + 1;
 /// into one reload.
 const RELOAD_DEBOUNCE: Duration = Duration::from_millis(300);
 const MAX_RELOAD_DEBOUNCE: Duration = Duration::from_secs(3);
+
+/// Workspace changes are saved this long after the last one.
+const SAVE_DELAY: Duration = Duration::from_secs(1);
 
 /// Opening many files at once from one action is almost always a mistake.
 const MAX_FILES_TO_OPEN: usize = 20;
@@ -59,6 +76,7 @@ pub struct AppInit {
     pub launcher: Rc<dyn Launcher>,
     pub preferences: Rc<dyn PreferencesStore>,
     pub themes: Rc<dyn ThemeRepository>,
+    pub workspace_store: Rc<dyn WorkspaceStore>,
     pub operations: OperationManager,
 }
 
@@ -70,22 +88,25 @@ impl std::fmt::Debug for AppInit {
 
 #[derive(Debug)]
 pub enum Msg {
+    /// Open a location from outside the tree: sidebar, devices, themes
+    /// folder (decision D3).
     Navigate(Location),
+    /// A breadcrumb of the active panel.
+    Crumb(Location),
     Back,
     Forward,
     GoUp,
     Refresh,
-    Activate(u32),
     OpenSelection,
     CopyPaths,
     /// Context menu from the keyboard (Menu key, Shift+F10).
     KeyboardContextMenu,
     ContextMenu {
+        panel: PanelId,
         on_item: bool,
         x: f64,
         y: f64,
     },
-    SelectionChanged,
     ToggleHidden,
     SetViewMode(String),
     SetSortKey(String),
@@ -103,17 +124,44 @@ pub enum Msg {
     EditAddress,
     CancelAddress,
     AddressSubmitted(String),
-    Loaded {
+
+    // Workspace
+    Workspace(WorkspaceEvent),
+    PanelLoaded {
+        panel: PanelId,
         generation: u64,
         result: ListingResult,
     },
-    DirectoryChanged {
-        view: u64,
+    PanelChanged {
+        panel: PanelId,
+        generation: u64,
         change: DirectoryChange,
     },
-    ReloadNow {
-        view: u64,
+    ReloadPanel {
+        panel: PanelId,
+        generation: u64,
     },
+    /// A key press, resolved by the modal key handling.
+    Intent(Intent),
+    CycleBranch(bool),
+    CloseBranch,
+    ToggleFocusMode,
+    /// Keyboard focus moved (e.g. a click or arrow key in a file list).
+    FocusMoved,
+    CommandSubmitted(String),
+    CommandCancelled,
+    CommandHistory {
+        older: bool,
+    },
+    CommandComplete,
+    ShowHelp,
+    ShowBranches,
+    /// Copy or move the targets into a folder picked from the open panels.
+    TransferTo(TransferKind, Location),
+    /// A confirmed copy or move across panels.
+    SubmitTransfer(TransferPlan),
+    SaveWorkspace,
+
     DevicesChanged,
     Mount(DeviceId),
     Eject(DeviceId),
@@ -127,19 +175,16 @@ pub enum Msg {
     PasteFiles(Option<ClipboardFiles>),
     RenameSelection,
     TrashSelection,
+    /// Confirmed Trash of items from several panels.
+    TrashPaths(Vec<PathBuf>),
     DeleteSelection,
     RestoreSelection,
     NewItem {
         directory: bool,
     },
     EmptyTrash,
-    DropFiles {
-        paths: Vec<PathBuf>,
-        into: Option<u32>,
-        copy: bool,
-    },
-    /// Submit a request; select `select` once it appears.
-    Submit(OperationRequest, Option<Location>),
+    /// Submit a request; select the given item in that panel once listed.
+    Submit(OperationRequest, Option<(PanelId, Location)>),
     Operation(OperationEvent),
     CancelOperation(OperationId),
     Conflict(ConflictRequest),
@@ -160,13 +205,11 @@ impl std::fmt::Debug for ListingResult {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ContentState {
-    Loading,
-    Ready,
-    Empty,
-    NoResults,
-    Error(String),
+/// Files waiting on the clipboard to be pasted (decision D9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Staged {
+    cut: bool,
+    count: usize,
 }
 
 pub struct App {
@@ -177,35 +220,32 @@ pub struct App {
     launcher: Rc<dyn Launcher>,
     preferences_store: Rc<dyn PreferencesStore>,
     theme_repository: Rc<dyn ThemeRepository>,
+    workspace_store: Rc<dyn WorkspaceStore>,
     sidebar: Controller<Sidebar>,
     actions: Actions,
     ui: Handles,
 
-    history: NavigationHistory,
+    service: WorkspaceService,
+    keys: SharedKeys,
+    command_history: CommandHistory,
+    watches: HashMap<PanelId, WatchGuard>,
+    /// Panels with a debounced reload scheduled.
+    reload_pending: HashSet<PanelId>,
+    /// The panel that last had keyboard focus moved to it.
+    focused_panel: Option<PanelId>,
+    /// Whether that focus went to the file list (not a message page).
+    focused_on_files: bool,
+    /// Last workspace shape logged (active panel, branches, panels, focus).
+    logged_shape: Option<(PanelId, usize, usize, bool)>,
+    /// Search text set by the model, so its echo from the entry is ignored.
+    search_echo: Option<String>,
     devices: Vec<Device>,
-    /// The current location's full listing; what is shown is derived from
-    /// it with `arrange`, so filtering/sorting never re-reads the disk.
-    listing: Vec<FileEntry>,
-    view: ViewOptions,
-    view_mode: ViewMode,
-    state: ContentState,
-    /// Status bar text derived from the selection.
-    selection_summary: Option<String>,
+    preferences: Preferences,
+    staged: Option<Staged>,
     /// Transient message for the status bar (errors, device events).
     notice: Option<String>,
     editing_address: bool,
-
-    /// Incremented per shown location; stale watcher events are dropped.
-    view_generation: u64,
-    /// Incremented per listing; stale listing results are dropped.
-    load_generation: u64,
-    /// Whether the pending listing is a reload of the shown location.
-    reloading: bool,
-    load_started: Option<Instant>,
-    watch: Option<WatchGuard>,
-    reload_pending: bool,
-    /// How long the last view rebuild took; sets the reload debounce.
-    last_rebuild: Duration,
+    save_pending: bool,
 
     theme_choice: ThemeChoice,
     themes: ThemeRegistry,
@@ -219,15 +259,12 @@ pub struct App {
     conflict_dialog: Option<(OperationId, gtk::Window)>,
     /// Keeps the process alive while the window is hidden with work left.
     hold: Option<gtk::gio::ApplicationHoldGuard>,
-    /// Select this entry once it shows up (after create/rename).
-    pending_select: Option<Location>,
 }
 
 impl std::fmt::Debug for App {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("App")
-            .field("current", &self.history.current())
-            .field("state", &self.state)
+            .field("active", &self.service.active_location())
             .finish_non_exhaustive()
     }
 }
@@ -242,8 +279,8 @@ impl SimpleComponent for App {
     fn init_root() -> gtk::Window {
         gtk::Window::builder()
             .title("Seshat")
-            .default_width(1040)
-            .default_height(680)
+            .default_width(1180)
+            .default_height(720)
             .css_classes(["seshat"])
             .build()
     }
@@ -292,34 +329,30 @@ impl SimpleComponent for App {
         let actions = Actions::new(&sender);
         root.insert_action_group(actions::GROUP, Some(&actions.group));
 
-        let file_view = FileView::new({
+        let prefs = init.preferences.load();
+        let (keymap, key_warnings) =
+            KeyMap::new(&prefs.workspace.key_bindings, prefs.workspace.classic_keys);
+        for warning in &key_warnings {
+            tracing::warn!(warning, "key binding");
+        }
+        let keys = KeyRouter::new(keymap);
+
+        let workspace_view = Rc::new(WorkspaceView::new({
             let sender = sender.clone();
-            move |event| match event {
-                FileViewEvent::Activate(position) => {
-                    sender.input_sender().emit(Msg::Activate(position))
-                }
-                FileViewEvent::ContextMenu { position, x, y } => {
-                    sender.input_sender().emit(Msg::ContextMenu {
-                        on_item: position.is_some(),
-                        x,
-                        y,
-                    })
-                }
-                FileViewEvent::SelectionChanged => {
-                    sender.input_sender().emit(Msg::SelectionChanged)
-                }
-                FileViewEvent::Drop { paths, into, copy } => {
-                    sender
-                        .input_sender()
-                        .emit(Msg::DropFiles { paths, into, copy });
-                }
-            }
-        });
+            move |event| sender.input_sender().emit(Msg::Workspace(event))
+        }));
         let panel = OperationsPanel::new({
             let sender = sender.clone();
             move |id| sender.input_sender().emit(Msg::CancelOperation(id))
         });
-        let (widgets, ui) = view::build(&root, sidebar.widget(), file_view, panel, &sender);
+        let (widgets, ui) = view::build(
+            &root,
+            sidebar.widget(),
+            workspace_view,
+            panel,
+            prefs.workspace.classic_keys,
+            &sender,
+        );
         init.operations
             .set_conflict_resolver(std::sync::Arc::new(UiConflictResolver::new(
                 sender.input_sender().clone(),
@@ -332,16 +365,17 @@ impl SimpleComponent for App {
             }));
         }
         {
+            // Keyboard focus decides the cursor: a click or arrow key in a
+            // file list moves it there, and activates that panel.
+            let sender = sender.clone();
+            root.connect_focus_widget_notify(move |_| {
+                sender.input_sender().emit(Msg::FocusMoved);
+            });
+        }
+        {
             // Coming back to the window (e.g. after a dialog closes) puts
             // keyboard focus on the files unless a text field had it.
             let sender = sender.clone();
-            root.connect_focus_widget_notify(|window| {
-                let focus = gtk::prelude::GtkWindowExt::focus(window);
-                tracing::debug!(
-                    widget = focus.as_ref().map(|w| w.type_().name()).unwrap_or("none"),
-                    "keyboard focus"
-                );
-            });
             root.connect_is_active_notify(move |window| {
                 let typing = gtk::prelude::GtkWindowExt::focus(window)
                     .is_some_and(|w| w.is::<gtk::Text>() || w.is::<gtk::Entry>());
@@ -364,9 +398,36 @@ impl SimpleComponent for App {
                 }
             });
         }
-        shortcuts::install(&root, &sender);
+        shortcuts::install(&root, &keys, &ui.command_entry, &sender);
 
-        let prefs = init.preferences.load();
+        let defaults = PanelState {
+            options: ViewOptions {
+                show_hidden: prefs.show_hidden,
+                sort: prefs.sort,
+                query: String::new(),
+            },
+            mode: prefs.view_mode,
+            ..PanelState::default()
+        };
+        let restored = if prefs.workspace.restore {
+            init.workspace_store.load()
+        } else {
+            None
+        };
+        let restored_any = restored.is_some();
+        let mut service = match restored {
+            Some(workspace) => WorkspaceService::new(workspace, defaults),
+            None => WorkspaceService::starting_at(Location::Path(init.home.clone()), defaults),
+        };
+        service.set_wrap_cursor(prefs.workspace.wrap_cursor);
+        service.set_retain_focus_on_branch_switch(prefs.workspace.retain_focus_mode);
+        tracing::info!(
+            restored = restored_any,
+            panels = service.workspace().panel_count(),
+            branches = service.workspace().branch_count(),
+            "workspace ready"
+        );
+
         let mut model = App {
             home: init.home,
             list_directory: init.list_directory,
@@ -375,30 +436,28 @@ impl SimpleComponent for App {
             launcher: init.launcher,
             preferences_store: init.preferences,
             theme_repository: init.themes,
+            workspace_store: init.workspace_store,
             sidebar,
             actions,
             ui,
-            history: NavigationHistory::default(),
+            service,
+            keys,
+            command_history: CommandHistory::default(),
+            watches: HashMap::new(),
+            reload_pending: HashSet::new(),
+            focused_panel: None,
+            focused_on_files: false,
+            logged_shape: None,
+            search_echo: None,
             devices,
-            listing: Vec::new(),
-            view: ViewOptions {
-                show_hidden: prefs.show_hidden,
-                sort: prefs.sort,
-                query: String::new(),
-            },
-            view_mode: prefs.view_mode,
-            state: ContentState::Loading,
-            selection_summary: None,
-            notice: None,
+            theme_choice: prefs.theme.clone(),
+            preferences: prefs,
+            staged: None,
+            notice: key_warnings
+                .first()
+                .map(|w| format!("Key bindings: {w} (see the log)")),
             editing_address: false,
-            view_generation: 0,
-            load_generation: 0,
-            reloading: false,
-            load_started: None,
-            watch: None,
-            reload_pending: false,
-            last_rebuild: Duration::ZERO,
-            theme_choice: prefs.theme,
+            save_pending: false,
             themes: ThemeRegistry::default(),
             themes_watch: None,
             themes_reload_pending: false,
@@ -407,122 +466,110 @@ impl SimpleComponent for App {
             conflict_queue: std::collections::VecDeque::new(),
             conflict_dialog: None,
             hold: None,
-            pending_select: None,
         };
-        model.ui.file_view.set_mode(model.view_mode);
         model.load_themes();
         model.watch_themes(&sender);
         model.apply_theme();
-        model.go(Location::Path(model.home.clone()), &sender);
+        model.sync(&sender);
 
         ComponentParts { model, widgets }
     }
 
     fn update(&mut self, msg: Msg, sender: ComponentSender<Self>) {
         match msg {
-            Msg::Navigate(location) => self.go(location, &sender),
+            Msg::Navigate(location) => {
+                self.editing_address = false;
+                self.service.open_location(location);
+            }
+            Msg::Crumb(location) => self.service.open_ancestor(location),
             Msg::Back => {
-                if self.history.go_back().is_some() {
-                    self.show_current(&sender);
-                }
+                self.service.go_back();
             }
             Msg::Forward => {
-                if self.history.go_forward().is_some() {
-                    self.show_current(&sender);
-                }
+                self.service.go_forward();
             }
             Msg::GoUp => {
-                if let Some(parent) = self.history.current().and_then(Location::parent) {
-                    self.go(parent, &sender);
-                }
+                self.service.go_parent();
             }
-            Msg::Refresh => self.show_current(&sender),
-            Msg::Activate(position) => {
-                if let Some(entry) = self.ui.file_view.entry(position) {
-                    self.open_entries(vec![entry], &sender);
-                }
+            Msg::Refresh => {
+                let active = self.service.active_panel();
+                self.service.reload(active);
             }
-            Msg::OpenSelection => {
-                let selected = self.ui.file_view.selected();
-                self.open_entries(selected, &sender);
-            }
+            Msg::OpenSelection => self.open_targets(),
             Msg::CopyPaths => self.copy_paths(),
             Msg::KeyboardContextMenu => {
-                let on_item = !self.ui.file_view.selected().is_empty();
-                let root = &self.ui.file_view.root;
-                let (x, y) = (
-                    f64::from(root.width()) / 2.0,
-                    f64::from(root.height()) / 3.0,
-                );
-                sender
-                    .input_sender()
-                    .emit(Msg::ContextMenu { on_item, x, y });
+                let panel = self.service.active_panel();
+                let on_item = !self.service.targets().is_empty();
+                let size = self
+                    .ui
+                    .workspace
+                    .with_panel(panel, |v| (v.files.root.width(), v.files.root.height()));
+                if let Some((w, h)) = size {
+                    sender.input_sender().emit(Msg::ContextMenu {
+                        panel,
+                        on_item,
+                        x: f64::from(w) / 2.0,
+                        y: f64::from(h) / 3.0,
+                    });
+                }
             }
-            Msg::ContextMenu { on_item, x, y } => {
-                let menu = if on_item {
-                    actions::item_menu(self.in_trash())
-                } else {
-                    actions::background_menu(self.in_trash())
-                };
-                let popover = &self.ui.context_menu;
-                popover.set_menu_model(Some(&menu));
-                // Event coordinates are relative to the file view; the popover
-                // hangs off its container.
-                let (x, y) = popover
-                    .parent()
-                    .and_then(|parent| {
-                        self.ui
-                            .file_view
-                            .root
-                            .compute_point(&parent, &gtk::graphene::Point::new(x as f32, y as f32))
-                    })
-                    .map_or((x, y), |p| (f64::from(p.x()), f64::from(p.y())));
-                popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
-                popover.popup();
-            }
-            Msg::SelectionChanged => self.update_selection_summary(),
+            Msg::ContextMenu {
+                panel,
+                on_item,
+                x,
+                y,
+            } => self.context_menu(panel, on_item, x, y),
             Msg::ToggleHidden => {
-                self.view.show_hidden = !self.view.show_hidden;
-                self.rearrange(true);
+                let active = self.service.active_panel();
+                self.service.toggle_hidden(active);
                 self.save_preferences();
             }
             Msg::SetViewMode(id) => {
                 if let Some(mode) = ViewMode::from_id(&id) {
-                    self.view_mode = mode;
-                    self.ui.file_view.set_mode(mode);
-                    // Keep keyboard focus on the visible view (the hidden one
-                    // would swallow shortcuts like Ctrl+A).
-                    self.ui.file_view.focus();
+                    let active = self.service.active_panel();
+                    self.service.set_view_mode(active, mode);
                     self.save_preferences();
+                    self.focused_panel = None; // the visible view changed
                 }
             }
             Msg::SetSortKey(id) => {
                 if let Some(key) = SortKey::from_id(&id) {
-                    self.view.sort.key = key;
-                    self.rearrange(true);
+                    let active = self.service.active_panel();
+                    self.service.set_sort_key(active, key);
                     self.save_preferences();
                 }
             }
             Msg::ToggleSortDescending => {
-                self.view.sort.descending = !self.view.sort.descending;
-                self.rearrange(true);
+                let active = self.service.active_panel();
+                self.service.toggle_sort_descending(active);
                 self.save_preferences();
             }
-            Msg::FocusResults => self.ui.file_view.focus_results(),
-            Msg::FocusFiles => self.ui.file_view.focus(),
+            Msg::FocusResults => {
+                let active = self.service.active_panel();
+                if self
+                    .service
+                    .state(active)
+                    .is_some_and(|s| s.cursor.is_none())
+                {
+                    self.service.cursor_to_first(active);
+                }
+                self.focus_active();
+            }
+            Msg::FocusFiles => {
+                if !self.typing() {
+                    self.focus_active();
+                }
+            }
             Msg::CloseSearch => {
                 if self.ui.search_bar.is_search_mode() {
                     self.ui.search_bar.set_search_mode(false);
                 }
             }
-            Msg::StartSearch => {
-                self.ui.search_bar.set_search_mode(true);
-                self.ui.search_entry.grab_focus();
-            }
+            Msg::StartSearch => self.start_search(),
             Msg::Search(query) => {
-                if query != self.view.query {
-                    self.view.query = query;
-                    self.rearrange(false);
+                if self.search_echo.take().as_deref() != Some(query.as_str()) {
+                    let active = self.service.active_panel();
+                    self.service.set_query(active, &query);
                 }
             }
             Msg::SetTheme(id) => {
@@ -546,7 +593,7 @@ impl SimpleComponent for App {
             }
             Msg::ThemesChanged => {}
             Msg::OpenThemesFolder => match self.theme_repository.ensure_directory() {
-                Ok(directory) => self.go(Location::Path(directory), &sender),
+                Ok(directory) => self.service.open_location(Location::Path(directory)),
                 Err(err) => self.notice = Some(format!("Cannot open the themes folder: {err}")),
             },
             Msg::SystemColorSchemeChanged => {
@@ -557,27 +604,54 @@ impl SimpleComponent for App {
             Msg::EditAddress => self.editing_address = true,
             Msg::CancelAddress => self.editing_address = false,
             Msg::AddressSubmitted(text) => {
-                match parse_address(&text, &self.home, self.history.current()) {
+                let current = self.service.active_location().clone();
+                match parse_address(&text, &self.home, Some(&current)) {
                     Ok(location) => {
                         self.editing_address = false;
-                        self.go(location, &sender);
+                        self.service.open_location(location);
                     }
                     Err(err) => self.notice = Some(err.to_string()),
                 }
             }
-            Msg::Loaded { generation, result } => self.finish_load(generation, result.0),
-            Msg::DirectoryChanged { view, change } => {
-                self.directory_changed(view, change, &sender);
+
+            Msg::Workspace(event) => self.workspace_event(event, &sender),
+            Msg::PanelLoaded {
+                panel,
+                generation,
+                result,
+            } => self.service.listing_loaded(panel, generation, result.0),
+            Msg::PanelChanged {
+                panel,
+                generation,
+                change,
+            } => self.panel_changed(panel, generation, change, &sender),
+            Msg::ReloadPanel { panel, generation } => {
+                self.reload_pending.remove(&panel);
+                self.service.reload_if_current(panel, generation);
             }
-            Msg::ReloadNow { view } => {
-                self.reload_pending = false;
-                if view == self.view_generation
-                    && let Some(location) = self.history.current().cloned()
-                {
-                    self.start_listing(location, true, &sender);
-                }
+            Msg::Intent(intent) => self.intent(intent, &sender),
+            Msg::CycleBranch(forward) => {
+                self.service.cycle_branch(forward);
             }
-            Msg::DevicesChanged => self.devices_changed(&sender),
+            Msg::CloseBranch => self.close_branch(None),
+            Msg::ToggleFocusMode => {
+                self.service.toggle_focus_mode();
+            }
+            Msg::FocusMoved => self.focus_moved(),
+            Msg::CommandSubmitted(text) => self.command_submitted(&text, &sender),
+            Msg::CommandCancelled => self.close_command_line(),
+            Msg::CommandHistory { older } => self.command_history_step(older),
+            Msg::CommandComplete => self.complete_command(),
+            Msg::ShowHelp => self.show_help(),
+            Msg::ShowBranches => self.show_branches(),
+            Msg::TransferTo(kind, destination) => self.plan_transfer(kind, &destination, &sender),
+            Msg::SubmitTransfer(plan) => self.submit_transfer(plan),
+            Msg::SaveWorkspace => {
+                self.save_pending = false;
+                self.save_workspace();
+            }
+
+            Msg::DevicesChanged => self.devices_changed(),
             Msg::Mount(id) => {
                 let monitor = self.device_monitor.clone();
                 let sender = sender.clone();
@@ -590,14 +664,15 @@ impl SimpleComponent for App {
             }
             Msg::Eject(id) => self.eject(id, &sender),
             Msg::DeviceActionFinished(result) => match result {
-                Ok(Some(root)) => self.go(Location::Path(root), &sender),
+                Ok(Some(root)) => self.service.open_location(Location::Path(root)),
                 Ok(None) => self.notice = Some("The device can be removed safely.".to_owned()),
                 Err(err) => {
                     tracing::warn!(error = %err, "device action failed");
                     self.notice = Some(format!("Device action failed: {err}"));
                     // Reselect the current location instead of the device row.
-                    self.sidebar
-                        .emit(SidebarInput::SetCurrent(self.history.current().cloned()));
+                    self.sidebar.emit(SidebarInput::SetCurrent(Some(
+                        self.service.active_location().clone(),
+                    )));
                 }
             },
             Msg::OpenFailed(err) => self.notice = Some(format!("Could not open: {err}")),
@@ -606,11 +681,11 @@ impl SimpleComponent for App {
             Msg::PasteFiles(files) => self.paste_files(files, &sender),
             Msg::RenameSelection => self.rename_selection(&sender),
             Msg::TrashSelection => self.trash_selection(&sender),
+            Msg::TrashPaths(paths) => self.submit(OperationRequest::Trash { paths }, None),
             Msg::DeleteSelection => self.delete_selection(&sender),
-            Msg::RestoreSelection => self.restore_selection(&sender),
-            Msg::NewItem { directory } => self.new_item(directory, &sender),
+            Msg::RestoreSelection => self.restore_selection(),
+            Msg::NewItem { directory } => self.new_item(directory, None, &sender),
             Msg::EmptyTrash => self.empty_trash(&sender),
-            Msg::DropFiles { paths, into, copy } => self.drop_files(paths, into, copy, &sender),
             Msg::Submit(request, select) => self.submit(request, select),
             Msg::Operation(event) => self.operation_event(event, &sender),
             Msg::CancelOperation(id) => {
@@ -629,84 +704,76 @@ impl SimpleComponent for App {
                     active = self.operations.active_count(),
                     "window closed; finishing operations in the background"
                 );
+                self.save_workspace();
                 self.hold = Some(relm4::main_application().hold());
             }
         }
+        self.sync(&sender);
     }
 
     fn update_view(&self, widgets: &mut AppWidgets, sender: ComponentSender<Self>) {
-        let current = self.history.current();
+        let active = self.service.active_panel();
+        let current = self.service.active_location();
+        let ws = self.service.workspace();
+        let state = self.service.state(active).expect("active panel exists");
+        let targets: usize = self.service.targets().iter().map(|g| g.items.len()).sum();
 
         self.actions.sync(
-            self.view.show_hidden,
-            self.view_mode,
-            self.view.sort,
+            state.options.show_hidden,
+            state.mode,
+            state.options.sort,
             &self.theme_choice,
+            ws.focus_mode(),
             ActionContext {
-                selected: self.ui.file_view.selected().len(),
-                in_trash: self.in_trash(),
-                in_folder: matches!(current, Some(Location::Path(_))),
+                selected: targets,
+                in_trash: current.is_trash(),
+                in_folder: matches!(current, Location::Path(_)),
+                branches: ws.branch_count(),
             },
         );
-        widgets
-            .back_button
-            .set_sensitive(self.history.can_go_back());
-        widgets
-            .forward_button
-            .set_sensitive(self.history.can_go_forward());
-        widgets
-            .up_button
-            .set_sensitive(current.and_then(Location::parent).is_some());
+        widgets.back_button.set_sensitive(ws.can_go_back());
+        widgets.forward_button.set_sensitive(ws.can_go_forward());
+        widgets.up_button.set_sensitive(
+            ws.panel(active).and_then(|p| p.parent()).is_some() || current.parent().is_some(),
+        );
 
-        if widgets.rendered_crumbs.as_ref() != current {
-            if let Some(location) = current {
-                let sender = sender.clone();
-                widgets
-                    .pathbar
-                    .set_crumbs(&breadcrumbs(location, &self.home), move |target| {
-                        sender.input_sender().emit(Msg::Navigate(target));
-                    });
-            }
-            widgets.rendered_crumbs = current.cloned();
+        if widgets.rendered_crumbs.as_ref() != Some(current) {
+            let sender = sender.clone();
+            widgets
+                .pathbar
+                .set_crumbs(&breadcrumbs(current, &self.home), move |target| {
+                    sender.input_sender().emit(Msg::Crumb(target));
+                });
+            widgets.rendered_crumbs = Some(current.clone());
         }
         if self.editing_address != widgets.editing_address {
             widgets.editing_address = self.editing_address;
             if self.editing_address {
-                widgets
-                    .pathbar
-                    .show_entry(&current.map(address_text).unwrap_or_default());
+                widgets.pathbar.show_entry(&address_text(current));
             } else {
                 widgets.pathbar.show_crumbs();
             }
         }
 
-        widgets.status_title.remove_css_class("seshat-error");
-        let (page, message) = match &self.state {
-            ContentState::Loading => ("status", "Loading…".to_owned()),
-            ContentState::Empty if current.is_some_and(Location::is_trash) => {
-                ("status", "Trash is empty".to_owned())
+        // Mode and status bar.
+        let router = self.keys.borrow();
+        let mode = router.mode();
+        let pending = format_sequence(router.interaction.pending());
+        widgets.mode_label.set_label(mode.label());
+        for (class, on) in [
+            ("seshat-mode-visual", matches!(mode, Mode::Visual { .. })),
+            ("seshat-mode-command", mode == Mode::Command),
+        ] {
+            if on {
+                widgets.mode_label.add_css_class(class);
+            } else {
+                widgets.mode_label.remove_css_class(class);
             }
-            ContentState::Empty => ("status", "This folder is empty".to_owned()),
-            ContentState::NoResults => (
-                "status",
-                format!("No items match “{}”", self.view.query.trim()),
-            ),
-            ContentState::Error(err) => {
-                widgets.status_title.add_css_class("seshat-error");
-                ("status", err.clone())
-            }
-            ContentState::Ready => ("files", String::new()),
-        };
-        widgets.stack.set_visible_child_name(page);
-        widgets.status_title.set_label(&message);
+        }
+        widgets.pending_label.set_label(&pending);
+        widgets.focus_label.set_visible(ws.focus_mode());
 
-        let status = match (&self.notice, &self.selection_summary, &self.state) {
-            (Some(notice), _, _) => notice.clone(),
-            (None, Some(summary), _) => summary.clone(),
-            (None, None, ContentState::Loading) => "Loading…".to_owned(),
-            (None, None, ContentState::Error(_)) => "Error".to_owned(),
-            (None, None, _) => item_count(self.ui.file_view.len(), self.listing.len()),
-        };
+        let status = self.status_text();
         widgets.status_bar.set_label(&status);
         if self.notice.is_some() {
             widgets.status_bar.add_css_class("seshat-notice");
@@ -714,157 +781,82 @@ impl SimpleComponent for App {
             widgets.status_bar.remove_css_class("seshat-notice");
         }
     }
+
+    fn shutdown(&mut self, _widgets: &mut AppWidgets, _output: relm4::Sender<()>) {
+        self.save_workspace();
+    }
 }
 
 impl App {
-    /// Navigates to `location`, recording history. Going to the current
-    /// location is a no-op (use Refresh to reload).
-    fn go(&mut self, location: Location, sender: &ComponentSender<Self>) {
-        self.editing_address = false;
-        if self.history.visit(location) {
-            self.show_current(sender);
+    fn status_text(&self) -> String {
+        if let Some(notice) = &self.notice {
+            return notice.clone();
+        }
+        let selection = self.service.selection();
+        if !selection.is_empty() {
+            let items: usize = selection.iter().map(|g| g.items.len()).sum();
+            let panels = selection.len();
+            return match panels {
+                1 => format!("{items} selected"),
+                n => format!("{items} selected in {n} panels"),
+            };
+        }
+        if let Some(staged) = self.staged {
+            let what = if staged.count == 1 {
+                "1 item".to_owned()
+            } else {
+                format!("{} items", staged.count)
+            };
+            let verb = if staged.cut { "move" } else { "copy" };
+            return format!("{what} ready to {verb}: paste (p or Ctrl+V) into a panel");
+        }
+        let active = self.service.active_panel();
+        match self.service.listing(active) {
+            Some(listing) => item_count(listing.shown().len(), listing.total()),
+            None => "Loading…".to_owned(),
         }
     }
 
-    /// Shows the history's current location from scratch: new watch, new
-    /// listing, search cleared.
-    fn show_current(&mut self, sender: &ComponentSender<Self>) {
-        let Some(location) = self.history.current().cloned() else {
-            return;
-        };
-        tracing::debug!(?location, "showing location");
-        self.view_generation += 1;
-        self.reload_pending = false;
-        self.notice = None;
-        self.selection_summary = None;
-        self.state = ContentState::Loading;
-        self.listing.clear();
-        self.ui.file_view.replace(Vec::new(), false);
-        if self.ui.search_bar.is_search_mode() {
-            self.ui.search_bar.set_search_mode(false);
-        }
-        self.ui.search_entry.set_text("");
-        self.view.query.clear();
-
-        // Watch before listing so changes between the two aren't missed.
-        self.watch = None;
-        let view = self.view_generation;
-        let watch_sender = sender.clone();
-        match self.directory_watcher.watch(
-            &location,
-            Box::new(move |change| {
-                watch_sender
-                    .input_sender()
-                    .emit(Msg::DirectoryChanged { view, change })
-            }),
-        ) {
-            Ok(guard) => self.watch = Some(guard),
-            Err(err) => tracing::debug!(error = %err, "cannot watch location; no live updates"),
-        }
-
-        self.sidebar
-            .emit(SidebarInput::SetCurrent(Some(location.clone())));
-        self.start_listing(location, false, sender);
+    fn typing(&self) -> bool {
+        crate::keys::typing_elsewhere(gtk::prelude::GtkWindowExt::focus(&self.ui.window).as_ref())
     }
 
-    /// Starts an asynchronous listing; the result arrives as
-    /// [`Msg::Loaded`]. A `reload` keeps selection and scroll position.
-    fn start_listing(&mut self, location: Location, reload: bool, sender: &ComponentSender<Self>) {
-        self.load_generation += 1;
-        self.reloading = reload;
-        self.load_started = Some(Instant::now());
-        let generation = self.load_generation;
-        let use_case = self.list_directory.clone();
-        let sender = sender.clone();
-        relm4::spawn_local(async move {
-            let result = use_case.execute(&location).await;
-            sender.input_sender().emit(Msg::Loaded {
-                generation,
-                result: ListingResult(result),
-            });
-        });
+    /// Moves keyboard focus to the active panel's cursor.
+    fn focus_active(&mut self) {
+        let active = self.service.active_panel();
+        let cursor = self.service.state(active).and_then(|s| s.cursor.clone());
+        self.ui.workspace.focus_panel(active, cursor.as_ref());
+        self.focused_panel = Some(active);
+        self.focused_on_files = self.active_ready();
     }
 
-    fn finish_load(&mut self, generation: u64, result: Result<Vec<FileEntry>, ListingError>) {
-        if generation != self.load_generation {
-            return; // superseded by a newer listing
-        }
-        let elapsed = self.load_started.take().map(|t| t.elapsed());
-        match result {
-            Ok(entries) => {
-                tracing::debug!(count = entries.len(), ?elapsed, "listing loaded");
-                self.listing = entries;
-                self.state = ContentState::Ready;
-                self.rearrange(self.reloading);
-                if let Some(location) = self.pending_select.take()
-                    && !self.ui.file_view.select_location(&location)
-                {
-                    // Not shown yet (e.g. filtered or not reloaded): keep waiting.
-                    self.pending_select = Some(location);
-                }
-                if !self.reloading {
-                    self.ui.file_view.focus();
-                }
-            }
-            Err(err) => {
-                tracing::warn!(error = %err, "listing failed");
-                self.listing.clear();
-                self.ui.file_view.replace(Vec::new(), false);
-                self.state = ContentState::Error(error_message(&err));
-            }
-        }
+    fn active_ready(&self) -> bool {
+        self.service
+            .listing(self.service.active_panel())
+            .is_some_and(|l| *l.content() == seshat_application::workspace::Content::Ready)
     }
 
-    /// Re-derives the shown entries from the listing and view options.
-    fn rearrange(&mut self, preserve: bool) {
-        let initial_load_pending = self.load_started.is_some() && !self.reloading;
-        if initial_load_pending || matches!(self.state, ContentState::Error(_)) {
-            return; // nothing to arrange yet
-        }
-        let started = Instant::now();
-        let shown = arrange(&self.listing, &self.view);
-        let arranged = started.elapsed();
-        let count = shown.len();
-        self.state = match (shown.is_empty(), self.view.query.trim().is_empty()) {
-            (false, _) => ContentState::Ready,
-            (true, false) => ContentState::NoResults,
-            (true, true) => ContentState::Empty,
-        };
-        self.ui.file_view.replace(shown, preserve);
-        self.update_selection_summary();
-        self.last_rebuild = started.elapsed();
-        tracing::debug!(count, ?arranged, total = ?self.last_rebuild, "view updated");
+    fn open_targets(&mut self) {
+        let active = self.service.active_panel();
+        let entries: Vec<FileEntry> = self
+            .service
+            .targets()
+            .iter()
+            .flat_map(|g| {
+                let listing = self.service.listing(g.panel);
+                g.items
+                    .iter()
+                    .filter_map(move |l| listing.and_then(|li| li.entry(l)).cloned())
+            })
+            .collect();
+        self.open_entries(active, entries);
     }
 
-    /// Live-reload debounce: at least [`RELOAD_DEBOUNCE`], and three times the
-    /// last rebuild so a huge, constantly changing folder (e.g. 100k files
-    /// while downloading) cannot keep the UI busy rebuilding.
-    fn reload_delay(&self) -> Duration {
-        (self.last_rebuild * 3).clamp(RELOAD_DEBOUNCE, MAX_RELOAD_DEBOUNCE)
-    }
-
-    fn update_selection_summary(&mut self) {
-        let selected = self.ui.file_view.selected();
-        self.selection_summary = match selected.len() {
-            0 => None,
-            n => {
-                let bytes: u64 = selected.iter().filter_map(|e| e.size).sum();
-                let total = self.ui.file_view.len();
-                let size = if bytes > 0 {
-                    format!(" ({})", gtk::glib::format_size(bytes))
-                } else {
-                    String::new()
-                };
-                Some(format!("{n} of {total} selected{size}"))
-            }
-        };
-    }
-
-    fn open_entries(&mut self, entries: Vec<FileEntry>, sender: &ComponentSender<Self>) {
+    fn open_entries(&mut self, panel: PanelId, entries: Vec<FileEntry>) {
         if let [single] = entries.as_slice()
             && single.is_browsable()
         {
-            self.go(single.location.clone(), sender);
+            let _ = self.service.open_entry(panel, single);
             return;
         }
         let files: Vec<Location> = entries
@@ -878,25 +870,16 @@ impl App {
             ));
             return;
         }
-        for location in files {
-            let launcher = self.launcher.clone();
-            let sender = sender.clone();
-            relm4::spawn_local(async move {
-                if let Err(err) = launcher.open(&location).await {
-                    sender.input_sender().emit(Msg::OpenFailed(err));
-                }
-            });
-        }
+        self.launch(files);
     }
 
-    /// Copies the selected entries' paths (one per line) to the clipboard.
+    /// Copies the target items' paths (one per line) to the clipboard.
     fn copy_paths(&mut self) {
         let paths: Vec<String> = self
-            .ui
-            .file_view
-            .selected()
+            .service
+            .targets()
             .iter()
-            .map(|e| address_text(&e.location))
+            .flat_map(|g| g.items.iter().map(address_text))
             .collect();
         if paths.is_empty() {
             return;
@@ -910,55 +893,63 @@ impl App {
         }
     }
 
-    fn directory_changed(
-        &mut self,
-        view: u64,
-        change: DirectoryChange,
-        sender: &ComponentSender<Self>,
-    ) {
-        if view != self.view_generation {
-            return;
-        }
-        match change {
-            DirectoryChange::Removed => {
-                self.fall_back("The folder was deleted or moved.", sender);
-            }
-            DirectoryChange::Modified if !self.reload_pending => {
-                self.reload_pending = true;
-                let sender = sender.clone();
-                gtk::glib::timeout_add_local_once(self.reload_delay(), move || {
-                    sender.input_sender().emit(Msg::ReloadNow { view });
-                });
-            }
-            DirectoryChange::Modified => {}
-        }
+    fn context_menu(&mut self, panel: PanelId, on_item: bool, x: f64, y: f64) {
+        let _ = self.service.activate_panel(panel);
+        let in_trash = self.service.active_location().is_trash();
+        let menu = if on_item {
+            actions::item_menu(in_trash)
+        } else {
+            actions::background_menu(in_trash)
+        };
+        let popover = &self.ui.context_menu;
+        popover.set_menu_model(Some(&menu));
+        // Event coordinates are relative to the panel's file view; the
+        // popover hangs off the content container.
+        let point = self.ui.workspace.with_panel(panel, |v| {
+            popover.parent().and_then(|parent| {
+                v.files
+                    .root
+                    .compute_point(&parent, &gtk::graphene::Point::new(x as f32, y as f32))
+            })
+        });
+        let (x, y) = point
+            .flatten()
+            .map_or((x, y), |p| (f64::from(p.x()), f64::from(p.y())));
+        popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+        popover.popup();
     }
 
-    fn devices_changed(&mut self, sender: &ComponentSender<Self>) {
+    fn devices_changed(&mut self) {
         let devices = self.device_monitor.devices();
-        let lost = self
-            .history
-            .current()
-            .is_some_and(|current| location_lost(current, &self.devices, &devices));
-        tracing::debug!(count = devices.len(), lost, "devices changed");
+        let vanished = seshat_application::ports::vanished_roots(&self.devices, &devices);
+        tracing::debug!(
+            count = devices.len(),
+            vanished = vanished.len(),
+            "devices changed"
+        );
         self.devices = devices.clone();
         self.sidebar.emit(SidebarInput::SetDevices(devices));
-        if lost {
-            self.fall_back("The device was removed.", sender);
+        let lost: usize = vanished
+            .iter()
+            .map(|root| self.service.detach_device(root))
+            .sum();
+        if lost > 0 {
+            self.notice = Some(
+                "The device was removed. Its panels are kept until you close them.".to_owned(),
+            );
         }
     }
 
     fn eject(&mut self, id: DeviceId, sender: &ComponentSender<Self>) {
-        // Leave the device first so we don't keep it busy.
+        // Stop watching panels on the device first, so we don't keep it busy.
         let root = self
             .devices
             .iter()
             .find(|d| d.id == id)
             .and_then(|d| d.root().map(PathBuf::from));
-        if let Some(root) = root
-            && self.history.current().is_some_and(|c| c.is_within(&root))
-        {
-            self.go(Location::Path(self.home.clone()), sender);
+        if let Some(root) = root {
+            self.service.detach_device(&root);
+            self.run_effects(sender);
         }
         let monitor = self.device_monitor.clone();
         let sender = sender.clone();
@@ -968,16 +959,6 @@ impl App {
                 .input_sender()
                 .emit(Msg::DeviceActionFinished(result));
         });
-    }
-
-    /// The current location became unavailable: show Home instead, without
-    /// adding a history entry, and tell the user why.
-    fn fall_back(&mut self, reason: &str, sender: &ComponentSender<Self>) {
-        tracing::info!(reason, "current location unavailable; returning home");
-        self.history
-            .replace_current(Location::Path(self.home.clone()));
-        self.show_current(sender);
-        self.notice = Some(reason.to_owned());
     }
 
     fn load_themes(&mut self) {
@@ -1040,22 +1021,22 @@ impl App {
         self.css_provider.load_from_string(&render_css(&theme));
     }
 
-    fn save_preferences(&self) {
-        let prefs = Preferences {
-            theme: self.theme_choice.clone(),
-            show_hidden: self.view.show_hidden,
-            view_mode: self.view_mode,
-            sort: self.view.sort,
-        };
-        if let Err(err) = self.preferences_store.save(&prefs) {
+    /// Saves the theme and the defaults for new panels (decision D11: the
+    /// last changed panel setting becomes the default).
+    fn save_preferences(&mut self) {
+        let defaults = self.service.defaults();
+        self.preferences.theme = self.theme_choice.clone();
+        self.preferences.show_hidden = defaults.options.show_hidden;
+        self.preferences.view_mode = defaults.mode;
+        self.preferences.sort = defaults.options.sort;
+        if let Err(err) = self.preferences_store.save(&self.preferences) {
             tracing::warn!(error = %err, "preferences not saved");
         }
     }
 }
 
-fn item_count(shown: u32, total: usize) -> String {
+fn item_count(shown: usize, total: usize) -> String {
     let plural = |n: usize| if n == 1 { "" } else { "s" };
-    let shown = shown as usize;
     if shown == total {
         format!("{total} item{}", plural(total))
     } else {
@@ -1066,16 +1047,4 @@ fn item_count(shown: u32, total: usize) -> String {
 fn system_prefers_dark() -> bool {
     gtk::Settings::default()
         .is_some_and(|s| s.gtk_interface_color_scheme() == gtk::InterfaceColorScheme::Dark)
-}
-
-fn error_message(err: &ListingError) -> String {
-    match err {
-        ListingError::NotFound => "This location no longer exists.".to_owned(),
-        ListingError::PermissionDenied => {
-            "You don't have permission to view this folder.".to_owned()
-        }
-        ListingError::NotADirectory => "This is not a folder.".to_owned(),
-        ListingError::Unavailable(detail) => format!("This location is unavailable.\n{detail}"),
-        ListingError::Other(detail) => format!("Could not open this folder.\n{detail}"),
-    }
 }

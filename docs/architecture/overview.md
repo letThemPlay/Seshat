@@ -23,10 +23,10 @@ Seshat follows Clean Architecture. Dependencies point inwards and are enforced b
 
 | Crate | Owns | May depend on |
 |---|---|---|
-| `seshat-domain` | `FileEntry`, `Location` (path or Trash-relative), `Device`, `StandardLocation`, `OperationId`, `OperationStatus` (lifecycle with explicit transitions), `Progress` (determinate/indeterminate), `DomainError` | `thiserror`, `uuid` |
-| `seshat-application` | Ports: `DirectoryReader`, `DirectoryWatcher`, `DeviceMonitor`, `StandardLocations`, `Launcher`. Use cases: `ListDirectory`. Navigation: `NavigationHistory`, `breadcrumbs`, `parse_address`. View: `arrange` (filter, search, natural sort). `Preferences` + `PreferencesStore` port, `ThemeRepository` port | domain |
-| `seshat-infrastructure` | GIO implementations of the filesystem ports (see [filesystem.md](filesystem.md)); `LocalFileSystem` for operations; TOML settings and theme files (`persistence`); the D-Bus service (`ipc`, see [protocol](../ipc/protocol.md)) | application, domain, gio/glib |
-| `seshat-presentation` | Window (`app/`), sidebar component, path bar, list/grid file views (`files`), actions and menus, shortcuts, theme system, display-backend diagnostics | application, domain, gtk4, relm4 |
+| `seshat-domain` | `FileEntry`, `Location` (path or Trash-relative), `Device`, `StandardLocation`, `OperationId`, `OperationStatus` (lifecycle with explicit transitions), `Progress` (determinate/indeterminate), `DomainError`; view value types (`SortOrder`, `ViewMode`, `ViewOptions`); the spatial **`Workspace`** (panels, branches, panel state, invariants) | `thiserror`, `uuid` |
+| `seshat-application` | Ports: `DirectoryReader`, `DirectoryWatcher`, `DeviceMonitor`, `StandardLocations`, `Launcher`. Use cases: `ListDirectory`. Navigation: `NavigationHistory`, `breadcrumbs`, `parse_address`. View: `arrange` (filter, search, natural sort). `Preferences` + `PreferencesStore` port, `ThemeRepository` port. **`WorkspaceService`** (navigation, listings, selection, effects), `TransferPlan`, `WorkspaceStore` port; `interaction` (key notation, keymap, modes, command line) | domain |
+| `seshat-infrastructure` | GIO implementations of the filesystem ports (see [filesystem.md](filesystem.md)); `LocalFileSystem` for operations; TOML settings, theme files and the saved workspace (`persistence`); the D-Bus service (`ipc`, see [protocol](../ipc/protocol.md)) | application, domain, gio/glib |
+| `seshat-presentation` | Window (`app/`, a shell around the workspace service), workspace strip and panels (`workspace_view`, `panel_view`), key routing (`keys`), sidebar component, path bar, list/grid file views (`files`), actions and menus, shortcuts, theme system, display-backend diagnostics | application, domain, gtk4, relm4 |
 | `seshat` | `main`, CLI flags, logging setup, dependency wiring, starts the D-Bus service | everything |
 | `seshat-progress` | Example D-Bus client; speaks only the protocol | zbus |
 
@@ -39,6 +39,10 @@ The four layers are separate crates. Anything smaller (views, theme, diagnostics
 - Names and paths are `OsString`/`PathBuf` end to end. `FileEntry::display_name` is lossy and display-only.
 - Symlinks are never followed during listing (`NOFOLLOW_SYMLINKS`).
 - Logs never include file listings or contents. Relm4 logs input messages at debug level, so `Msg::Loaded` prints only an entry count.
+
+## Spatial workspace
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) and [ADR 0004](../decisions/0004-spatial-workspace.md): panel and branch state lives in the domain `Workspace`, the `WorkspaceService` turns input into state changes and I/O effects, and the UI is rebuilt from it.
 
 ## File Operation Manager
 

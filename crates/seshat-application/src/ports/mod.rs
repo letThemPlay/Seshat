@@ -5,7 +5,7 @@ mod launcher;
 mod standard_locations;
 mod theme_repository;
 
-pub use device_monitor::{DeviceError, DeviceMonitor, location_lost};
+pub use device_monitor::{DeviceError, DeviceMonitor, location_lost, vanished_roots};
 pub use directory_reader::{DirectoryReader, ListingError};
 pub use directory_watcher::{DirectoryChange, DirectoryWatcher, WatchGuard};
 pub use launcher::Launcher;

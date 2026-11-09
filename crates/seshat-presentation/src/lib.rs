@@ -10,10 +10,13 @@ mod conflicts;
 pub mod diagnostics;
 mod dialogs;
 mod files;
+mod keys;
 mod operations_panel;
+mod panel_view;
 mod pathbar;
 mod sidebar;
 pub mod theme;
+mod workspace_view;
 
 pub use app::AppInit;
 

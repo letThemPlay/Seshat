@@ -30,14 +30,14 @@ Moving files to Trash, restoring and permanent deletion are file *operations* (s
 
 ## Live updates
 
-When a location is shown, it is watched *before* it is listed, so changes made between the two aren't missed. Events are classified as:
+Every panel whose listing is cached (the 16 most recently used, decision D13) is watched. A panel is watched *before* it is listed, so changes made between the two aren’t missed. Events are classified as:
 
 - `Modified`: created, deleted, moved, renamed, attribute changed, or a write finished. Reloads are debounced (300 ms), so bursts like extracting an archive cause one reload. Plain `Changed` events, which fire repeatedly during a write, are ignored until `ChangesDoneHint`.
-- `Removed`: the watched directory itself was deleted, moved away or unmounted. The UI returns to Home without adding a history entry and shows why.
+- `Removed`: the watched directory itself was deleted, moved away or unmounted. The panel and the panels below it stay in the workspace, marked unavailable, with Retry, Go to Parent and Close Branch actions (decision D14). No branch is closed for you.
 
-Each navigation increments a view generation. Events and listings from superseded views are dropped.
+Each watch and listing carries a generation; events and listings from superseded ones are dropped.
 
-Reloads keep the selection (matched by location) and the scroll position. Filtering, search and sorting run in memory on the last listing (`view::arrange`), so changing them never re-reads the disk.
+Reloads keep each panel’s cursor (or move it to the nearest item), selection (minus vanished items) and scroll position. Filtering, search and sorting run in memory on the last listing (`view::arrange`), so changing them never re-reads the disk.
 
 ## Devices
 
@@ -49,8 +49,8 @@ Reloads keep the selection (matched by location) and the scroll position. Filter
 GIO's user-visibility rules already hide system mounts (`/`, `/boot`, …). A device's id comes from its volume (UUID, then unix device, then label), so it stays stable across mount and unmount.
 
 - **Mount:** selecting an unmounted device mounts it and opens its root. No interactive `GMountOperation` is wired up yet, so encrypted volumes report an error instead of prompting for a passphrase.
-- **Eject/unmount:** if the current location is on the device, Seshat navigates Home first so it doesn't keep the device busy. Success is reported as "can be removed safely".
-- **Disappearance:** when the device list changes, `location_lost(current, before, after)` checks whether the current location lived on a device that vanished or was unmounted, and falls back to Home.
+- **Eject/unmount:** panels on the device stop watching first, so Seshat doesn’t keep it busy; they stay in the workspace, marked unavailable. Success is reported as "can be removed safely".
+- **Disappearance:** when the device list changes, `vanished_roots(before, after)` lists the mount points that went away, and every panel on them is marked unavailable (not closed).
 
 ## Testing
 

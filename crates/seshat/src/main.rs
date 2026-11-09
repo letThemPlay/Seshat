@@ -14,7 +14,9 @@ use seshat_infrastructure::filesystem::{
     XdgStandardLocations,
 };
 use seshat_infrastructure::ipc::{IpcConfig, IpcService};
-use seshat_infrastructure::persistence::{FileThemeRepository, TomlPreferencesStore};
+use seshat_infrastructure::persistence::{
+    FileThemeRepository, TomlPreferencesStore, TomlWorkspaceStore,
+};
 use seshat_presentation::AppInit;
 use tracing_subscriber::EnvFilter;
 
@@ -82,6 +84,7 @@ fn run_app() -> ExitCode {
         launcher: Rc::new(GioLauncher::new()),
         preferences: Rc::new(TomlPreferencesStore::default_location()),
         themes: Rc::new(FileThemeRepository::default_location()),
+        workspace_store: Rc::new(TomlWorkspaceStore::default_location()),
         operations: operations.clone(),
     };
 
