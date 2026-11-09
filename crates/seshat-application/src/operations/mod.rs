@@ -13,7 +13,7 @@ mod simple;
 mod transfer;
 
 #[cfg(test)]
-mod memory_fs;
+pub(crate) mod memory_fs;
 #[cfg(test)]
 mod tests;
 

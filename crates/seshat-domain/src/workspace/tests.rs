@@ -18,7 +18,10 @@ fn location_of(ws: &Workspace, id: PanelId) -> String {
 }
 
 fn path_names(ws: &Workspace, branch: BranchId) -> Vec<String> {
-    ws.path(branch).iter().map(|&p| location_of(ws, p)).collect()
+    ws.path(branch)
+        .iter()
+        .map(|&p| location_of(ws, p))
+        .collect()
 }
 
 fn ok(ws: &Workspace) {
@@ -68,7 +71,9 @@ fn spec_16_1_opening_children_extends_the_branch() {
     let h = ws.active_panel();
     let d = ws.open_child(h, loc("/home/u/Documents"), None).unwrap();
     assert!(d.created && !d.new_branch);
-    let p = ws.open_child(d.panel, loc("/home/u/Documents/Projects"), None).unwrap();
+    let p = ws
+        .open_child(d.panel, loc("/home/u/Documents/Projects"), None)
+        .unwrap();
     assert!(p.created && !p.new_branch);
     assert_eq!(ws.branch_count(), 1);
     assert_eq!(ws.panel(p.panel).unwrap().parent(), Some(d.panel));
@@ -96,13 +101,15 @@ fn spec_16_1_returning_home_and_opening_downloads_creates_a_separate_branch() {
 #[test]
 fn spec_16_1_shared_ancestor_exists_once() {
     let s = scenario();
-    let homes = s
-        .ws
-        .panels()
-        .filter(|p| *p.location() == loc("/home/u"))
-        .count();
+    let homes =
+        s.ws.panels()
+            .filter(|p| *p.location() == loc("/home/u"))
+            .count();
     assert_eq!(homes, 1);
-    assert_eq!(s.ws.path(s.docs_branch)[0], s.ws.path(s.downloads_branch)[0]);
+    assert_eq!(
+        s.ws.path(s.docs_branch)[0],
+        s.ws.path(s.downloads_branch)[0]
+    );
     assert_eq!(s.ws.panel_count(), 4);
 }
 
@@ -130,7 +137,11 @@ fn spec_16_1_switching_branches_restores_their_position_and_state() {
         SortKey::Modified
     );
     assert!(s.ws.cycle_branch(true));
-    assert_eq!(s.ws.active_panel(), s.projects, "the branch kept its cursor");
+    assert_eq!(
+        s.ws.active_panel(),
+        s.projects,
+        "the branch kept its cursor"
+    );
     ok(&s.ws);
 }
 
@@ -190,7 +201,9 @@ fn spec_16_2_horizontal_movement_stays_within_the_branch() {
 fn spec_16_2_opening_an_existing_child_activates_it() {
     let mut s = scenario();
     s.ws.activate_branch(s.docs_branch).unwrap(); // at Home
-    let again = s.ws.open_child(s.home, loc("/home/u/Downloads"), None).unwrap();
+    let again =
+        s.ws.open_child(s.home, loc("/home/u/Downloads"), None)
+            .unwrap();
     assert_eq!(again.panel, s.downloads);
     assert!(!again.created);
     assert_eq!(s.ws.active_branch().id(), s.downloads_branch);
@@ -203,17 +216,17 @@ fn opening_a_child_shared_by_branches_picks_the_most_recent_one() {
     // Home → Documents → {Projects, Reports}
     let mut s = scenario();
     s.ws.activate_panel(s.documents).unwrap();
-    let reports = s
-        .ws
-        .open_child(s.documents, loc("/home/u/Documents/Reports"), None)
-        .unwrap();
+    let reports =
+        s.ws.open_child(s.documents, loc("/home/u/Documents/Reports"), None)
+            .unwrap();
     assert!(reports.new_branch);
     let reports_branch = s.ws.active_branch().id();
     // From Downloads' branch, reopen Documents from Home: the Reports
     // branch was active more recently than the Projects branch.
     s.ws.activate_branch(s.downloads_branch).unwrap();
     s.ws.move_left();
-    s.ws.open_child(s.home, loc("/home/u/Documents"), None).unwrap();
+    s.ws.open_child(s.home, loc("/home/u/Documents"), None)
+        .unwrap();
     assert_eq!(s.ws.active_branch().id(), reports_branch);
     assert_eq!(s.ws.active_panel(), s.documents);
     ok(&s.ws);
@@ -223,10 +236,9 @@ fn opening_a_child_shared_by_branches_picks_the_most_recent_one() {
 fn opening_from_a_middle_panel_never_replaces_the_existing_child() {
     let mut s = scenario();
     s.ws.activate_panel(s.documents).unwrap();
-    let other = s
-        .ws
-        .open_child(s.documents, loc("/home/u/Documents/Other"), None)
-        .unwrap();
+    let other =
+        s.ws.open_child(s.documents, loc("/home/u/Documents/Other"), None)
+            .unwrap();
     assert!(other.new_branch);
     assert_eq!(s.ws.panel(s.documents).unwrap().children().len(), 2);
     assert!(s.ws.panel(s.projects).is_some());
@@ -255,7 +267,8 @@ fn new_children_inherit_presentation_but_not_position() {
 fn open_root_activates_a_panel_on_the_active_branch() {
     let mut s = scenario();
     s.ws.activate_panel(s.projects).unwrap();
-    let opened = s.ws.open_root(loc("/home/u/Documents"), PanelState::default());
+    let opened =
+        s.ws.open_root(loc("/home/u/Documents"), PanelState::default());
     assert_eq!(opened.panel, s.documents);
     assert!(!opened.created);
 }
@@ -275,7 +288,10 @@ fn open_root_elsewhere_starts_a_new_root_branch() {
 fn insert_parent_reroots_without_changing_branches() {
     let mut ws = Workspace::new(loc("/home/u/Documents"), PanelState::default());
     let docs = ws.active_panel();
-    let p = ws.open_child(docs, loc("/home/u/Documents/P"), None).unwrap().panel;
+    let p = ws
+        .open_child(docs, loc("/home/u/Documents/P"), None)
+        .unwrap()
+        .panel;
     ws.move_left();
     let parent = ws.insert_parent(docs).unwrap();
     assert_eq!(location_of(&ws, parent), "/home/u");
@@ -339,7 +355,8 @@ fn spec_16_4_navigation_and_branch_switching_keep_focus_mode() {
     s.ws.move_left();
     s.ws.move_right();
     s.ws.cycle_branch(true);
-    s.ws.open_child(s.ws.active_panel(), loc("/home/u/x"), None).unwrap();
+    s.ws.open_child(s.ws.active_panel(), loc("/home/u/x"), None)
+        .unwrap();
     assert!(s.ws.focus_mode());
     ok(&s.ws);
 }
@@ -382,7 +399,10 @@ fn unavailable_panels_and_their_descendants_are_kept() {
 fn panels_within_finds_panels_on_a_device() {
     let mut ws = Workspace::new(loc("/run/media/usb"), PanelState::default());
     let r = ws.active_panel();
-    let c = ws.open_child(r, loc("/run/media/usb/a"), None).unwrap().panel;
+    let c = ws
+        .open_child(r, loc("/run/media/usb/a"), None)
+        .unwrap()
+        .panel;
     ws.open_root(loc("/home/u"), PanelState::default());
     let mut within = ws.panels_within(std::path::Path::new("/run/media/usb"));
     within.sort();
@@ -449,7 +469,10 @@ struct Lcg(u64);
 
 impl Lcg {
     fn next(&mut self, n: usize) -> usize {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((self.0 >> 33) as usize) % n
     }
 }

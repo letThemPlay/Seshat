@@ -671,7 +671,12 @@ impl Workspace {
         id
     }
 
-    fn add_panel(&mut self, location: Location, parent: Option<PanelId>, state: PanelState) -> PanelId {
+    fn add_panel(
+        &mut self,
+        location: Location,
+        parent: Option<PanelId>,
+        state: PanelState,
+    ) -> PanelId {
         let id = PanelId::from_raw(self.fresh_id());
         self.panels.insert(
             id,
@@ -737,7 +742,11 @@ impl Workspace {
         path
     }
 
-    fn activate_panel_inner(&mut self, panel: PanelId, record: bool) -> Result<bool, WorkspaceError> {
+    fn activate_panel_inner(
+        &mut self,
+        panel: PanelId,
+        record: bool,
+    ) -> Result<bool, WorkspaceError> {
         if !self.panels.contains_key(&panel) {
             return Err(WorkspaceError::UnknownPanel(panel));
         }

@@ -3,12 +3,14 @@
 //! Defines the ports (traits) infrastructure must implement and the use cases
 //! presentation invokes. Presentation never touches the filesystem directly.
 
+pub mod interaction;
 pub mod navigation;
 pub mod operations;
 pub mod ports;
 pub mod preferences;
 pub mod use_cases;
 pub mod view;
+pub mod workspace;
 
 use std::future::Future;
 use std::pin::Pin;
