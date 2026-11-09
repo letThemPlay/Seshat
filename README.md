@@ -35,7 +35,7 @@ restore = true
 | `y` / `x` / `p` | Copy / cut the selection (from any panels) / paste into this panel |
 | `zz` | Focus Mode |
 | `/` | Search this panel |
-| `:` | Command line: `:copy`, `:move [path \| bN]`, `:delete`, `:rename`, `:mkdir`, `:touch`, `:sort`, `:view`, `:hidden`, `:branch [N \| next \| prev \| close]`, `:focus`, `:open`, `:help` |
+| `:` | Command line: `:copy`, `:move [path \| bN]`, `:delete`, `:rename`, `:mkdir`, `:touch`, `:sort`, `:view`, `:hidden`, `:branch [N \| next \| prev \| close]`, `:focus`, `:open`, `:help`. Tab completes commands, folders and `bN`; Tab / Shift+Tab again cycles through matches |
 | Alt+Left / Alt+Right, Ctrl+O / Ctrl+I, mouse back/forward | Back / Forward (previously active panels) |
 | Alt+Up | Parent panel |
 | F5, Ctrl+R | Refresh |

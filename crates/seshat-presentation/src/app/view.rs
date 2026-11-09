@@ -396,7 +396,8 @@ fn command_line(sender: &ComponentSender<App>) -> gtk::Entry {
                 gtk::gdk::Key::Escape => Msg::CommandCancelled,
                 gtk::gdk::Key::Up => Msg::CommandHistory { older: true },
                 gtk::gdk::Key::Down => Msg::CommandHistory { older: false },
-                gtk::gdk::Key::Tab => Msg::CommandComplete,
+                gtk::gdk::Key::Tab => Msg::CommandComplete { forward: true },
+                gtk::gdk::Key::ISO_Left_Tab => Msg::CommandComplete { forward: false },
                 _ => return gtk::glib::Propagation::Proceed,
             };
             sender.input_sender().emit(msg);

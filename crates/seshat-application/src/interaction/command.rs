@@ -174,19 +174,6 @@ fn branch(rest: &str) -> Result<Command, CommandError> {
     Ok(Command::Branch(command))
 }
 
-/// Completes the command name being typed. Returns the candidates.
-pub fn complete(input: &str) -> Vec<&'static str> {
-    let input = input.trim_start_matches(':');
-    if input.contains(char::is_whitespace) {
-        return Vec::new();
-    }
-    COMMANDS
-        .iter()
-        .map(|(name, _)| *name)
-        .filter(|name| name.starts_with(input))
-        .collect()
-}
-
 /// Command history with Up/Down recall, newest last.
 #[derive(Debug, Default)]
 pub struct CommandHistory {
@@ -309,13 +296,6 @@ mod tests {
             parse("copy backup"),
             Ok(Command::Copy(Some(Destination::Path("backup".into()))))
         );
-    }
-
-    #[test]
-    fn completes_command_names() {
-        assert_eq!(complete("co"), ["copy"]);
-        assert_eq!(complete(":h"), ["hidden", "help"]);
-        assert!(complete("copy x").is_empty());
     }
 
     #[test]

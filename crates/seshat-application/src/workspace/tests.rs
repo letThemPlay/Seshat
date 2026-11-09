@@ -300,6 +300,21 @@ fn filtered_out_items_never_stay_selected() {
 }
 
 #[test]
+fn open_panels_lend_their_listing_to_completion_without_reloading() {
+    let (mut s, [home, ..]) = scenario();
+    s.loads_since();
+    let listing = s
+        .service
+        .listing_for(&loc("/h"))
+        .expect("Home is open and loaded");
+    assert_eq!(listing.entries().len(), 4);
+    assert!(s.service.listing_for(&loc("/elsewhere")).is_none());
+    s.run();
+    assert_eq!(s.loads_since(), 0);
+    let _ = home;
+}
+
+#[test]
 fn settings_change_one_panel_and_become_defaults() {
     let (mut s, [home, documents, _, _]) = scenario();
     s.service.toggle_hidden(home);

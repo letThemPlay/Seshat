@@ -3,6 +3,7 @@
 //! line. Pure logic, independent of the UI toolkit.
 
 pub mod command;
+pub mod completion;
 mod keymap;
 mod keys;
 mod mode;

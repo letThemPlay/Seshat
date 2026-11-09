@@ -46,3 +46,12 @@ Side-by-side branch rendering, [ADR 0005](../decisions/0005-branch-layout.md).
 | L2 | Default layout | Side by side by default, falling back to a single strip when the window is too short for any lane. `[workspace] layout = "strip"` keeps the strip. |
 | L3 | Row order | Fixed `[`/`]` order. Rows stay put while the active branch is in view. |
 | L4 | Many branches | At most six branch rows, fewer in short windows. The rest collapse into "+N branches" stubs that open the branch overview. |
+
+## Command-line completion decisions (approved 2026-11-09)
+
+| # | Topic | Decision |
+|---|---|---|
+| P1 | Several matches | The first Tab fills in the common prefix and lists the matches in the status bar; further Tab and Shift+Tab presses cycle through them. |
+| P2 | Which entries | Folders only (links to folders count), since `:copy`, `:move` and `:open` take a folder. Dot folders appear only after a typed `.`. |
+| P3 | Case | Smartcase: an all-lowercase prefix matches any case; a capital letter makes matching exact. |
+| P4 | Branch targets | `b` + Tab lists `b1 …`, `b2 …` for `:copy` and `:move`. |

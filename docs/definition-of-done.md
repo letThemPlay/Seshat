@@ -21,7 +21,7 @@ Status as of 2026-11-07, test counts updated 2026-11-09. The spatial workspace h
 | Selected navigation background matches the main content | ✅ Verified | both reference `@seshat_surface` (CSS unit test, every built-in theme) |
 | Selected navigation radius is exactly 12px | ✅ Verified | central constant; not overridable by themes (unit tests) |
 | Filesystem errors are handled safely | ✅ Verified | partial failures, permission errors, vanished sources, no data loss on failed overwrites, Trash never deletes ([security](review/security.md)) |
-| Automated tests pass | ✅ Verified | 264 Rust tests + 54 UI end-to-end checks (`scripts/check.sh --ui`: file operations 20, spatial workspace 34) |
+| Automated tests pass | ✅ Verified | 272 Rust tests + 57 UI end-to-end checks (`scripts/check.sh --ui`: file operations 20, spatial workspace 37) |
 | Documentation is complete | ✅ | see the README's documentation list (all 13 items from spec §15) |
 
 ## Not yet verified (manual or environment-dependent)

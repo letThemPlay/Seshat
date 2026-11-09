@@ -103,6 +103,20 @@ check "restored branches keep their position"       active_is "$H"   # left at H
 type_text l
 check "and their path"                              active_is "$H/Downloads"
 shot restored
+
+# Path completion on the command line. Without it, ~/Doc would open a
+# folder called "Doc".
+type_text :; type_text "open ~/Doc"; press Tab; shot completion-unique
+press Return 1
+check "Tab completes a unique folder"               active_is "$H/Documents"
+# Two matches: Tab fills in "Do", then cycles Documents/, Downloads/.
+type_text :; type_text "open ~/D"; press Tab; shot completion-matches
+press Tab; press Tab; press Return 1
+check "repeated Tab cycles through the matches"     active_is "$H/Downloads"
+# A folder no panel shows is read in the background.
+mkdir -p "$H/Archive/2024-photos"
+type_text :; type_text "open ~/Archive/20"; press Tab 1; press Return 1
+check "folders that are not open complete too"      active_is "$H/Archive/2024-photos"
 swaycmd '[title="^Seshat$"] kill'
 check "the app exits again"                         wait_exit 10
 
