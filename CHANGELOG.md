@@ -2,7 +2,7 @@
 
 ## 0.1.0 (unreleased)
 
-First complete version, built in six phases (see `spec.md` §17).
+First complete version, built in six phases (see `docs/specifications/0-INITIAL-PRODUCT-SPEC.md` §17).
 
 - **Foundation:** GTK4 + Relm4 ([ADR 0001](docs/decisions/0001-ui-framework.md)), Clean Architecture workspace, native Wayland verification.
 - **Filesystem:** XDG locations, async GIO listing, navigation history, breadcrumbs, address bar, live updates, Trash browsing, removable and network devices.

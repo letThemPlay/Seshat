@@ -5,7 +5,7 @@
 
 A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4.
 
-> **Status:** 0.1.0, all six phases of `spec.md` §17 are complete. See [Definition of Done](docs/definition-of-done.md) for what is verified and what still needs manual checks (GNOME and KDE sessions, removable devices).
+> **Status:** 0.1.0, all six phases of `docs/specifications/0-INITIAL-PRODUCT-SPEC.md` §17 are complete. See [Definition of Done](docs/definition-of-done.md) for what is verified and what still needs manual checks (GNOME and KDE sessions, removable devices).
 
 ## Keyboard
 

@@ -1,3 +1,6 @@
+//! How a panel presents its listing: sort order, view mode and filters.
+//! Pure value objects shared by panel state and the application view logic.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SortKey {
     #[default]
