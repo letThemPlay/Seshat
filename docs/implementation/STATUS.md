@@ -4,7 +4,7 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 264 Rust tests (up from 165), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (34 checks).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 272 Rust tests (up from 165), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (37 checks).
 
 ## Spatial file manager specification
 
@@ -26,7 +26,7 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 | 6 | Focus Mode: presentation only, navigation and branch switching keep working, preference for keeping it across branches | ✅ Verified | `spec_16_4_*` (domain and application); UI test steps 9–12. The transition itself is not animated |
 | 6.6, 9 | Mouse: Focus Mode toggle, panel and branch activation, neighbour hints | ✅ / *manual* | Toolbar toggle, prev/next arrows in Focus Mode, branch bar, click to activate |
 | 7.1 | Normal Mode with configurable bindings | ✅ Verified | `KeyMap` tests (overrides, conflicts, prefixes, classic keys); `[keybindings]` in `settings.toml` |
-| 7.2 | Command Mode: prompt, history, completion, errors, Esc | ✅ Verified | Command parser tests; UI test step 14. Completion covers command names only, not paths |
+| 7.2 | Command Mode: prompt, history, completion, errors, Esc | ✅ Verified | Command parser and `completion` tests (command names, folder paths for `:copy`/`:move`/`:open`, branch targets, smartcase, cycling); UI test step 14 and the completion steps |
 | 7.3 | Visual Selection Mode with anchor and range | ✅ Verified | `spec_16_5_visual_mode_supports_range_selection`, `range_selection_covers_anchor_to_cursor` |
 | 7.4 | Mode indicator; consistent Esc; no keys routed to the wrong mode | ✅ Verified | Mode bar; `spec_16_5_*`; key routing goes through one capture controller |
 | 8.3 | Selection across panels and branches, with absolute sources | ✅ Verified | `spec_16_6_selection_spans_panels_and_branches`; UI test step 13 |
@@ -42,7 +42,6 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 ## Known gaps and follow-ups
 
 1. **Drag and drop between panels** is wired through the existing drop targets with explicit destinations, but needs a *manual* check: the UI harness cannot drag.
-2. **Path completion** on the command line.
-3. **A performance run with many panels** and large folders (§16.8 "many panels").
-4. **Manual Wayland matrix** (GNOME, KDE, fractional scaling, touchpad horizontal scrolling, connectors at fractional scales). Pending, as before.
-5. **D12 panel features** (columns, expanded metadata, preview), if they are wanted later.
+2. **A performance run with many panels** and large folders (§16.8 "many panels").
+3. **Manual Wayland matrix** (GNOME, KDE, fractional scaling, touchpad horizontal scrolling, connectors at fractional scales). Pending, as before.
+4. **D12 panel features** (columns, expanded metadata, preview), if they are wanted later.

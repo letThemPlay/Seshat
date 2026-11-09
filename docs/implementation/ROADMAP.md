@@ -18,12 +18,12 @@ The phases follow the approved plan, which refines [the spatial specification](.
 | 5. Cross-panel operations | Workspace-wide selection; explicit destinations (paste, `:copy`/`:move`, picker, drop); confirmation across panels (D7); clipboard staging (D9) | ✅ Done |
 | 6. Persistence and refinement | Versioned workspace store; restore on launch; UI end-to-end test of the definition of done | ✅ Done; refinements open (see below) |
 | 7. Branches side by side | Grid layout (depth across, branches down), shared ancestors spanning rows, connectors, compact cards for other branches, overflow stubs, short-window fallback ([ADR 0005](../decisions/0005-branch-layout.md), decisions L1–L4) | ✅ Done |
+| 8. Command-line completion | Folder paths for `:copy`, `:move` and `:open`, branch targets, smartcase, Tab and Shift+Tab cycling (decisions P1–P4) | ✅ Done |
 
 ### Open refinements
 
 See [STATUS.md](STATUS.md) for detail.
 
-- Path completion on the command line.
 - A performance run with many panels.
 - Manual checks:
   - drag and drop between panels
