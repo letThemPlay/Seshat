@@ -2,6 +2,7 @@
 
 ## Unreleased: spatial workspace
 
+- **Software centre metadata:** the developer (Kelvin Morris) is named, and the description now covers the spatial workspace.
 - **Licence:** GPL-3.0-or-later confirmed; the full text is in `LICENSE` and installed with the package (`share/licenses/seshat`).
 - **Performance run** ([results](docs/review/performance.md)): all approved targets met at 50 branches and 211 panels. Saving the workspace no longer blocks the UI (the write and its `fsync` run on a writer thread). Opt-in benchmarks and `scripts/ui/workspace-perf.sh` for reruns.
 - **Command-line completion:** Tab completes command names, folder paths for `:copy`, `:move` and `:open` (with `~`, relative paths and `..`), and branch targets such as `b2`. Repeated Tab and Shift+Tab cycle through several matches, which are listed in the status bar.

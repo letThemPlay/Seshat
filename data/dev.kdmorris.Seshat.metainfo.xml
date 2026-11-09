@@ -5,17 +5,26 @@
   <project_license>GPL-3.0-or-later</project_license>
   <name>Seshat</name>
   <summary>Browse and manage your files</summary>
+  <developer id="dev.kdmorris">
+    <name>Kelvin Morris</name>
+  </developer>
   <description>
     <p>
-      Seshat is a native Wayland file manager for Linux. It focuses on reliable file
-      operations that you can follow, cancel and recover from, and on a clean interface
-      that adapts to your theme.
+      Seshat is a native Wayland file manager for Linux that works as a spatial,
+      keyboard-first workspace. Opening a folder adds a panel instead of replacing the
+      view, and every panel keeps its place, selection and settings while you move around.
+    </p>
+    <p>
+      Different paths through your folders become branches that are shown side by side,
+      so you can work in several places at once and copy or move files between them.
     </p>
     <ul>
-      <li>List and grid views, search, natural sorting and multi-selection</li>
+      <li>Persistent folder panels and branches, with shared folders shown once</li>
+      <li>Focus Mode expands the current folder without losing your place</li>
+      <li>Vim-style keys and a command line, with full mouse support</li>
+      <li>Select files across folders and branches, then copy or move them to one place</li>
       <li>Copy, move, rename, Trash and restore with progress, cancellation and conflict resolution</li>
-      <li>Operations keep running when the window is closed</li>
-      <li>Other applications can follow file operations over D-Bus</li>
+      <li>Operations keep running when the window is closed, and other applications can follow them over D-Bus</li>
       <li>Light, dark and custom themes</li>
     </ul>
   </description>
