@@ -49,6 +49,8 @@ Compositor-specific checks:
 
 ## Manual matrix
 
+The steps for each row are in [manual-verification.md](manual-verification.md).
+
 | Check | Hyprland | GNOME Wayland | KDE Plasma Wayland |
 |---|---|---|---|
 | Native launch (`--check-backend`) | ✅ 2026-11-06 | ☐ | ☐ |

@@ -93,7 +93,7 @@ cargo run -p seshat -- --check-backend
 - [Filesystem integration](docs/architecture/filesystem.md)
 - [File operations](docs/architecture/operations.md)
 - [D-Bus protocol](docs/ipc/protocol.md)
-- [Wayland verification](docs/development/wayland-verification.md)
+- [Wayland verification](docs/development/wayland-verification.md) and the [manual verification checklist](docs/development/manual-verification.md)
 - [Writing themes](docs/development/themes.md)
 - [Testing](docs/development/testing.md)
 - [Continuous integration](docs/development/ci.md)

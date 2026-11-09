@@ -26,6 +26,8 @@ Status as of 2026-11-07, test counts updated 2026-11-09. The spatial workspace h
 
 ## Not yet verified (manual or environment-dependent)
 
+All of these are covered step by step in [the manual verification checklist](development/manual-verification.md).
+
 - **GNOME and KDE Plasma Wayland sessions**, multi-monitor setups and fractional scaling: the manual matrix is in [wayland-verification.md](development/wayland-verification.md). Development used Hyprland and headless compositors.
 - **Hardware and session-dependent features:**
   - drag and drop between applications
