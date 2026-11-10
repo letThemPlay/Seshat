@@ -51,6 +51,7 @@ pub struct PanelView {
     pub id: PanelId,
     pub root: gtk::Box,
     pub files: FileView,
+    header: gtk::Box,
     title: gtk::Label,
     branch: gtk::Label,
     forks: gtk::MenuButton,
@@ -120,6 +121,7 @@ impl PanelView {
             .build();
         let branch = gtk::Label::builder()
             .css_classes(["seshat-branch-badge"])
+            .valign(gtk::Align::Center)
             .visible(false)
             .build();
         let forks = gtk::MenuButton::builder()
@@ -196,6 +198,7 @@ impl PanelView {
             id,
             root,
             files,
+            header: header.clone(),
             title,
             branch,
             forks,
@@ -348,6 +351,11 @@ impl PanelView {
                 button.set_tooltip_text(Some(name));
             }
         }
+    }
+
+    /// The header bar, for layout diagnostics.
+    pub fn header(&self) -> &gtk::Box {
+        &self.header
     }
 
     /// The scroll offset to remember before this view goes away.
