@@ -24,6 +24,7 @@
               ./crates
               ./data
               ./docs/themes # an integration test reads the example theme
+              ./docs/examples # a test checks the example settings
             ];
           };
           cargoLock.lockFile = ./Cargo.lock;
