@@ -98,14 +98,14 @@ impl Action {
     pub fn description(self) -> &'static str {
         match self {
             Self::PanelLeft => "Previous panel",
-            Self::PanelRight => "Next panel",
+            Self::PanelRight => "Next panel of the branch (without opening)",
             Self::CursorDown => "Move down",
             Self::CursorUp => "Move up",
             Self::CursorFirst => "First item",
             Self::CursorLast => "Last item",
             Self::HalfPageDown => "Scroll down",
             Self::HalfPageUp => "Scroll up",
-            Self::Open => "Open folder or file",
+            Self::Open => "Open: continue, return to or start a branch; files open",
             Self::Parent => "Parent panel",
             Self::BranchPrevious => "Previous branch",
             Self::BranchNext => "Next branch",
@@ -127,14 +127,15 @@ impl Action {
     fn defaults(self) -> &'static [&'static str] {
         match self {
             Self::PanelLeft => &["h"],
-            Self::PanelRight => &["l"],
+            Self::PanelRight => &["L"],
             Self::CursorDown => &["j"],
             Self::CursorUp => &["k"],
             Self::CursorFirst => &["gg"],
             Self::CursorLast => &["G"],
             Self::HalfPageDown => &["<C-d>"],
             Self::HalfPageUp => &["<C-u>"],
-            Self::Open => &["<CR>"],
+            // Context-aware navigation §3: `l` opens, and `Enter` is the same.
+            Self::Open => &["l", "<CR>"],
             Self::Parent => &["<BS>"],
             Self::BranchPrevious => &["["],
             Self::BranchNext => &["]"],
@@ -300,7 +301,13 @@ mod tests {
     fn defaults_follow_the_spec_and_do_not_conflict() {
         let map = KeyMap::default();
         assert_eq!(map.lookup(&keys("h")), Lookup::Bound(Action::PanelLeft));
-        assert_eq!(map.lookup(&keys("l")), Lookup::Bound(Action::PanelRight));
+        assert_eq!(map.lookup(&keys("l")), Lookup::Bound(Action::Open));
+        assert_eq!(
+            map.lookup(&keys("<CR>")),
+            Lookup::Bound(Action::Open),
+            "Enter ≡ l"
+        );
+        assert_eq!(map.lookup(&keys("L")), Lookup::Bound(Action::PanelRight));
         assert_eq!(map.lookup(&keys("gg")), Lookup::Bound(Action::CursorFirst));
         assert_eq!(map.lookup(&keys("g")), Lookup::Prefix);
         assert_eq!(map.lookup(&keys("zz")), Lookup::Bound(Action::FocusMode));

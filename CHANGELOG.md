@@ -2,6 +2,7 @@
 
 ## Unreleased: spatial workspace
 
+- **Context-aware navigation** ([ADR 0006](docs/decisions/0006-context-aware-navigation.md)): `l`, like `Enter`, opens the folder under the cursor, and Seshat decides whether that continues the current branch, returns to the branch that already has that folder (where you left it, with its panels and state), or starts a new branch. Nothing is duplicated. The plain move to the next panel is now `L`. Folders renamed in place are followed; a folder replaced under the same name starts fresh. Sidebar locations reuse their existing branch. The saved workspace is format 2; older files still load. `/` now replaces a panel's remembered search instead of appending to it.
 - **UI fixes:** every panel header now has the same height, whether or not it shows a branch badge, a fork button or Focus Mode arrows. Moving to a panel scrolls it fully into view, including the rightmost panel and panels that widen as they become active, and the view no longer drifts when keyboard focus moves or the layout changes.
 - **Software centre metadata:** the developer (Kelvin Morris) is named, and the description now covers the spatial workspace.
 - **Licence:** GPL-3.0-or-later confirmed; the full text is in `LICENSE` and installed with the package (`share/licenses/seshat`).
@@ -22,7 +23,7 @@ Implements the [spatial file manager specification](docs/specifications/1-SPATIA
   - Sidebar and address-bar locations open as new branches (D3).
   - A deleted folder or removed device leaves its panels in place, marked unavailable, instead of returning Home (D14).
   - Selections never include items hidden by a search filter.
-- **Tests:** 274 Rust tests (from 165) and a second sandboxed UI test, `scripts/ui/workspace.sh`, which walks the spec's definition of done.
+- **Tests:** 294 Rust tests (from 165) and a second sandboxed UI test, `scripts/ui/workspace.sh`, which walks the spec's definition of done.
 
 ## 0.1.0 (unreleased)
 

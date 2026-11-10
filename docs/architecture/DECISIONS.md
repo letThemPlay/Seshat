@@ -9,6 +9,7 @@ Full ADRs live in [`docs/decisions/`](../decisions):
 | [0003](../decisions/0003-packaging.md) | Nix package first |
 | [0004](../decisions/0004-spatial-workspace.md) | Spatial workspace: panel tree, branches, effects-based workspace service |
 | [0005](../decisions/0005-branch-layout.md) | Branches side by side with connectors |
+| [0006](../decisions/0006-context-aware-navigation.md) | Context-aware navigation: continue, reactivate or create |
 
 ## Spatial file manager: product decisions (approved 2026-11-09)
 
@@ -82,3 +83,17 @@ Results in [review/performance.md](../review/performance.md).
 | Developer | Kelvin Morris, AppStream developer id `dev.kdmorris` (matching the app id). |
 | Description | The AppStream description covers the spatial workspace: panels, side-by-side branches, Focus Mode, Vim-style keys and the command line. |
 | App id | `dev.kdmorris.Seshat` stays, despite AppStream's pedantic note about capitals: the desktop file, icon and D-Bus name all use it. |
+
+## Context-aware navigation decisions (approved 2026-11-10)
+
+[ADR 0006](../decisions/0006-context-aware-navigation.md) and the [specification](../specifications/2-CONTEXT-AWARE-NAVIGATION.md).
+
+| # | Topic | Decision |
+|---|---|---|
+| C1 | Where reactivation lands | On the reactivated branch's remembered panel when it lies at or below the opened folder, otherwise on the folder itself. |
+| C2 | What `l` means | `l` opens the folder under the cursor, exactly like `Enter`. The plain move to the next panel stays as `panel-right` on `L`. With nothing under the cursor, `l` moves to the next panel. The spatial specification §4.1 and §7.1 note this. |
+| C3 | Folder identity | Device and inode, recorded per panel. Matching stays by location within the parent folder; a changed identity at the same name resets the panel's state and marks its descendants unavailable; the same identity under a new name is followed. Symbolic links keep their own identity. |
+| C4 | Folders open elsewhere | Only children of the current panel are matched; distinct navigation contexts are never merged. |
+| C5 | Sidebar and address bar | Reuse an existing root panel for the same location (its branch comes back where it was left) before creating a new root. Refines D3. |
+| C6 | Visual Mode | `l` and `Enter` navigate into folders, but never launch files; a hint says to press Esc first. |
+| C7 | Branch history | A branch's history is its path, its remembered panel and each panel's state; the global Back/Forward (D2) is unchanged. |

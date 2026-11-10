@@ -76,8 +76,11 @@ check "a tall window shows both rows again"         layout_now "rows=2 "
 # 7–8. Switch to the Projects branch (left at Home) and keep navigating it
 type_text "["
 check "[ restores the other branch where it was"    active_is "$H"
-type_text ll
+# l opens the folder under the cursor (context-aware navigation): back up
+# to Documents, then l continues this branch twice.
+type_text k; type_text ll
 check "8. the other branch navigates independently" active_is "$H/Documents/Projects"
+check "    l continued the branch, adding nothing"  state_has "branches=2 panels=4 "
 sleep 1
 check "    the rightmost panel is fully in view"    active_in_view
 
@@ -98,9 +101,25 @@ check "12. zz restores the workspace"               state_has "focus_mode=false"
 check "    all panels and branches remain"          state_has "branches=2 panels=4 "
 shot workspace-restored
 
+# Context-aware navigation (2-CONTEXT-AWARE-NAVIGATION.md §4, §16.2).
+# From the Downloads branch, back to Home, l on Documents: the Documents
+# branch comes back (it was left at Documents), with Projects still there.
+type_text h; type_text gg; type_text l
+check "nav: l on an existing child reactivates its branch" active_is "$H/Documents"
+check "    no duplicate panel or branch"                state_has "branches=2 panels=4 "
+check "    resolved as a reactivation"                  log_has "resolution=ReactivateExistingBranch"
+type_text l
+check "nav: l continues into the existing Projects"    active_is "$H/Documents/Projects"
+type_text h; press Return 1
+check "nav: Enter does exactly what l does"            active_is "$H/Documents/Projects"
+check "    still no duplicates"                         state_has "branches=2 panels=4 "
+# Leave things as steps 13 onwards expect: Documents branch at Documents,
+# Downloads branch active.
+type_text h; type_text "]"
+
 # 13. Select files in two branches: notes.txt in Home, x.rs in Projects
 type_text h; type_text G; type_text v; press Escape
-type_text "["; type_text ll; type_text gg; type_text v; press Escape
+type_text "["; type_text l; type_text gg; type_text v; press Escape
 shot cross-branch-selection
 
 # 14. Copy them into Downloads, named explicitly; the selection spans two
@@ -125,7 +144,7 @@ check "the workspace is restored on launch"         log_has "restored=true panel
 check "the active panel is restored"                active_is "$H/Documents/Projects"
 type_text "]"
 check "restored branches keep their position"       active_is "$H"   # left at Home in step 13
-type_text l
+type_text L   # the plain move to the next panel, without opening (C2)
 check "and their path"                              active_is "$H/Downloads"
 shot restored
 

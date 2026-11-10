@@ -116,7 +116,7 @@ in_session() {
 # navigates somewhere unexpected and presses Delete) cannot touch real files.
 launch() {
     "${clean_env[@]}" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" GDK_BACKEND=wayland GSK_RENDERER=cairo \
-        RUST_LOG="${RUST_LOG:-info,seshat_presentation=debug}" \
+        RUST_LOG="${RUST_LOG:-info,seshat_presentation=debug,seshat_application=debug}" \
         SESHAT_STALL_MONITOR="${SESHAT_STALL_MONITOR:-}" \
         bwrap --ro-bind / / --dev /dev --proc /proc --bind "$SESSION" "$SESSION" \
         --die-with-parent -- "$BIN" >>"$SESSION/seshat.log" 2>&1 &
