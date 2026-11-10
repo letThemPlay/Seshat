@@ -341,6 +341,16 @@ mod tests {
     }
 
     #[test]
+    fn catppuccin_mocha_example_theme_is_valid() {
+        let source = include_str!("../../../../docs/themes/catppuccin-mocha.toml");
+        let t = parse_custom_theme("catppuccin-mocha", source).expect("example parses");
+        assert!(t.warnings.is_empty(), "{:#?}", t.warnings);
+        assert!(t.theme.dark);
+        assert_eq!(t.theme.name, "Catppuccin Mocha");
+        assert_eq!(t.theme.colors.accent, Color::rgb(0xcb, 0xa6, 0xf7));
+    }
+
+    #[test]
     fn syntax_errors_reject_the_theme() {
         assert!(parse_custom_theme("bad", "name = ").is_err());
     }

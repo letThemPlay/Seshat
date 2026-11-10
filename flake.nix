@@ -23,7 +23,7 @@
               ./LICENSE # installed with the package
               ./crates
               ./data
-              ./docs/themes # an integration test reads the example theme
+              ./docs/themes # tests read the example themes; one is installed
               ./docs/examples # a test checks the example settings
             ];
           };
@@ -56,6 +56,8 @@
             install -Dm644 LICENSE $out/share/licenses/seshat/LICENSE
             install -Dm644 docs/examples/settings.toml \
               $out/share/doc/seshat/examples/settings.toml
+            install -Dm644 docs/themes/catppuccin-mocha.toml \
+              $out/share/doc/seshat/examples/themes/catppuccin-mocha.toml
           '';
 
           meta = {
