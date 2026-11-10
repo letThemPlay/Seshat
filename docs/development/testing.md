@@ -49,11 +49,15 @@ Notes for writing scripts:
 
 ## Manual checks
 
-The Wayland matrix (GNOME, KDE, scaling, multi-monitor) is in `wayland-verification.md`. Things automation can't cover yet:
+Everything automation can't cover is in one step-by-step checklist, [manual-verification.md](manual-verification.md), with fixtures from `scripts/manual/verification-fixtures.sh`. It covers:
 
-- drag and drop between applications
+- real GNOME and KDE Plasma sessions, scaling and multiple monitors
+- drag and drop and the clipboard with other applications
 - removable devices (plug in, mount, eject, unplug while viewing)
 - the real session Trash and restoring from it
+- Orca, and D-Bus requests from another user
+
+Results go into the matrix in [wayland-verification.md](wayland-verification.md).
 
 ## Performance measurements
 
