@@ -78,7 +78,9 @@ pub struct WorkspaceView {
     /// Where each widget is attached in the grid.
     placed: RefCell<HashMap<gtk::Widget, Placement>>,
     branches_shown: RefCell<Vec<(BranchId, String, bool)>>,
-    last_reveal: Cell<Option<(PanelId, bool, i32)>>,
+    last_reveal: Cell<Option<(PanelId, bool, i32, i32)>>,
+    /// Identifies the latest reveal animation; older ones stop.
+    reveal_generation: Rc<Cell<u64>>,
     first_row: Cell<Option<usize>>,
     last_logged: RefCell<Option<(usize, usize, usize, usize)>>,
     /// The single-strip layout was chosen (decision L2).
@@ -114,8 +116,16 @@ impl WorkspaceView {
             .row_spacing(ROW_SPACING)
             .css_classes(["seshat-strip"])
             .build();
-        let scroller = gtk::ScrolledWindow::builder()
+        // GTK's own scroll-to-focus is off: it scrolls whenever keyboard
+        // focus moves (e.g. to a row of a neighbouring panel) and pushed the
+        // active panel back out of view. `reveal` keeps the active panel
+        // visible instead.
+        let viewport = gtk::Viewport::builder()
             .child(&grid)
+            .scroll_to_focus(false)
+            .build();
+        let scroller = gtk::ScrolledWindow::builder()
+            .child(&viewport)
             .vscrollbar_policy(gtk::PolicyType::Never)
             .hscrollbar_policy(gtk::PolicyType::Automatic)
             .vexpand(true)
@@ -125,6 +135,12 @@ impl WorkspaceView {
             let on_event = on_event.clone();
             adjustment.connect_page_size_notify(move |_| on_event(WorkspaceEvent::Resized));
         }
+        // The strip got wider or narrower (a layout change, not the user
+        // scrolling): keep the active panel in view.
+        scroller.hadjustment().connect_upper_notify({
+            let on_event = on_event.clone();
+            move |_| on_event(WorkspaceEvent::Resized)
+        });
 
         let stub = || {
             let button = gtk::Button::builder()
@@ -156,6 +172,7 @@ impl WorkspaceView {
             placed: RefCell::default(),
             branches_shown: RefCell::default(),
             last_reveal: Cell::new(None),
+            reveal_generation: Rc::default(),
             first_row: Cell::new(None),
             last_logged: RefCell::new(None),
             strip: Cell::new(strip),
@@ -364,7 +381,10 @@ impl WorkspaceView {
         let refocus = self.apply(desired, widgets.get(&active));
         self.render_branch_bar(ws);
 
-        let reveal = (active, focus, viewport);
+        // Reveal again whenever the active panel, Focus Mode, the view width or
+        // the strip's width changes; a manual scroll changes none of these.
+        let strip_width = self.scroller.hadjustment().upper() as i32;
+        let reveal = (active, focus, viewport, strip_width);
         if self.last_reveal.replace(Some(reveal)) != Some(reveal) {
             self.reveal(active);
         }
@@ -541,7 +561,12 @@ impl WorkspaceView {
         *self.branches_shown.borrow_mut() = branches;
     }
 
-    /// Smoothly scrolls sideways so the active panel is fully visible.
+    /// Smoothly scrolls sideways until the active panel is fully visible.
+    ///
+    /// The remaining distance is measured again on every frame from where
+    /// the panel actually is, so a panel that widens while it becomes
+    /// active, or a layout that settles a frame late, is still revealed
+    /// completely. A newer reveal takes over from an older one.
     fn reveal(&self, panel: PanelId) {
         let Some(widget) = self
             .panels
@@ -551,40 +576,112 @@ impl WorkspaceView {
         else {
             return;
         };
-        let grid = self.grid.clone();
+        let headers: Vec<gtk::Box> = self
+            .panels
+            .borrow()
+            .values()
+            .map(|v| v.header().clone())
+            .collect();
+        let generation = self.reveal_generation.get() + 1;
+        self.reveal_generation.set(generation);
+        let current = self.reveal_generation.clone();
         let adjustment = self.scroller.hadjustment();
-        let scroller = self.scroller.clone();
-        // After layout, so the new widths and positions are known.
-        gtk::glib::idle_add_local_once(move || {
-            let Some(bounds) = widget.compute_bounds(&grid) else {
-                return;
-            };
-            let (left, right) = (
-                f64::from(bounds.x()),
-                f64::from(bounds.x() + bounds.width()),
-            );
-            let (value, page) = (adjustment.value(), adjustment.page_size());
-            let target = if left < value {
-                left
-            } else if right > value + page {
-                (right - page).min(left)
-            } else {
-                return;
-            };
-            let start = value;
-            let begun = Instant::now();
-            scroller.add_tick_callback(move |_, _| {
-                let t = (begun.elapsed().as_secs_f64() / SCROLL_ANIMATION.as_secs_f64()).min(1.0);
-                let eased = 1.0 - (1.0 - t).powi(3);
-                adjustment.set_value(start + (target - start) * eased);
-                if t < 1.0 {
-                    gtk::glib::ControlFlow::Continue
+        let begun = Instant::now();
+        self.scroller.add_tick_callback(move |scroller, _| {
+            if current.get() != generation {
+                return gtk::glib::ControlFlow::Break; // a newer reveal took over
+            }
+            let elapsed = begun.elapsed();
+            let Some(shift) = reveal_shift(&widget, scroller) else {
+                return if elapsed < REVEAL_TIMEOUT {
+                    gtk::glib::ControlFlow::Continue // not laid out yet
                 } else {
                     gtk::glib::ControlFlow::Break
+                };
+            };
+            let before = adjustment.value();
+            if shift.abs() > 0.5 && elapsed < REVEAL_TIMEOUT {
+                // Part of the way each frame: an ease-out that follows the
+                // panel if it moves or grows meanwhile.
+                // Rounded away from zero so the last pixels still move.
+                let step = shift * REVEAL_STEP;
+                adjustment.set_value(
+                    before
+                        + if step > 0.0 {
+                            step.ceil()
+                        } else {
+                            step.floor()
+                        },
+                );
+                let stuck =
+                    (adjustment.value() - before).abs() < 0.01 && elapsed > SCROLL_ANIMATION;
+                if !stuck {
+                    return gtk::glib::ControlFlow::Continue;
                 }
-            });
+            } else if shift != 0.0 {
+                adjustment.set_value(before + shift);
+            }
+            log_geometry(&widget, scroller, &headers);
+            gtk::glib::ControlFlow::Break
         });
     }
+}
+
+/// Fraction of the remaining distance scrolled per frame.
+const REVEAL_STEP: f64 = 0.3;
+/// A reveal gives up after this long (e.g. if the panel never gets laid out).
+const REVEAL_TIMEOUT: Duration = Duration::from_millis(800);
+/// Space kept between the active panel and the edge of the workspace.
+const REVEAL_MARGIN: f64 = ROW_SPACING as f64;
+
+/// How far to scroll (positive: to the right) so `panel` is fully inside
+/// `scroller`, with a small margin. A panel wider than the view is aligned
+/// to its left edge. `None` while it has no allocation.
+fn reveal_shift(panel: &gtk::Widget, scroller: &gtk::ScrolledWindow) -> Option<f64> {
+    let bounds = panel.compute_bounds(scroller)?;
+    let width = f64::from(scroller.width());
+    if width <= 0.0 || bounds.width() <= 0.0 {
+        return None;
+    }
+    Some(shift_into_view(
+        f64::from(bounds.x()),
+        f64::from(bounds.x() + bounds.width()),
+        width,
+        REVEAL_MARGIN,
+    ))
+}
+
+/// The scroll needed to bring `[left, right]` inside `[margin, width - margin]`.
+fn shift_into_view(left: f64, right: f64, width: f64, margin: f64) -> f64 {
+    if right - left > width - 2.0 * margin || left < margin {
+        left - margin
+    } else if right > width - margin {
+        right - (width - margin)
+    } else {
+        0.0
+    }
+}
+
+/// One debug line after the active panel was revealed: its edges within
+/// the visible area and the height of every panel header. The UI tests
+/// check that the panel is fully visible and the headers are all the same
+/// height.
+fn log_geometry(active: &gtk::Widget, scroller: &gtk::ScrolledWindow, headers: &[gtk::Box]) {
+    let Some(bounds) = active.compute_bounds(scroller) else {
+        return;
+    };
+    let heights: Vec<String> = headers
+        .iter()
+        .filter(|h| h.is_mapped())
+        .map(|h| h.height().to_string())
+        .collect();
+    tracing::debug!(
+        active_left = bounds.x().round() as i32,
+        active_right = (bounds.x() + bounds.width()).round() as i32,
+        viewport = scroller.width(),
+        headers = heights.join(","),
+        "workspace geometry"
+    );
 }
 
 /// How many branches fit: the active one keeps [`MIN_ACTIVE_HEIGHT`], each
@@ -629,7 +726,7 @@ fn header_info(
 
 #[cfg(test)]
 mod tests {
-    use super::rows_for_height;
+    use super::{rows_for_height, shift_into_view};
 
     #[test]
     fn lanes_depend_on_height_and_are_capped() {
@@ -638,5 +735,17 @@ mod tests {
         assert_eq!(rows_for_height(300 + 70), 2);
         assert_eq!(rows_for_height(300 + 3 * 70), 4);
         assert_eq!(rows_for_height(5000), 6, "at most six branches (L4)");
+    }
+
+    #[test]
+    fn panels_are_scrolled_fully_into_view_with_a_margin() {
+        // Visible already: nothing to do.
+        assert_eq!(shift_into_view(100.0, 600.0, 1059.0, 6.0), 0.0);
+        // The rightmost panel 7 px past the edge (the reported bug).
+        assert_eq!(shift_into_view(537.0, 1066.0, 1059.0, 6.0), 13.0);
+        // Partly off the left edge.
+        assert_eq!(shift_into_view(-124.0, 176.0, 1059.0, 6.0), -130.0);
+        // Wider than the view: its left edge wins.
+        assert_eq!(shift_into_view(200.0, 1400.0, 1059.0, 6.0), 194.0);
     }
 }

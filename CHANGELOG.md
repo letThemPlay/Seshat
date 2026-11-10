@@ -2,6 +2,7 @@
 
 ## Unreleased: spatial workspace
 
+- **UI fixes:** every panel header now has the same height, whether or not it shows a branch badge, a fork button or Focus Mode arrows. Moving to a panel scrolls it fully into view, including the rightmost panel and panels that widen as they become active, and the view no longer drifts when keyboard focus moves or the layout changes.
 - **Software centre metadata:** the developer (Kelvin Morris) is named, and the description now covers the spatial workspace.
 - **Licence:** GPL-3.0-or-later confirmed; the full text is in `LICENSE` and installed with the package (`share/licenses/seshat`).
 - **Performance run** ([results](docs/review/performance.md)): all approved targets met at 50 branches and 211 panels. Saving the workspace no longer blocks the UI (the write and its `fsync` run on a writer thread). Opt-in benchmarks and `scripts/ui/workspace-perf.sh` for reruns.
@@ -21,7 +22,7 @@ Implements the [spatial file manager specification](docs/specifications/1-SPATIA
   - Sidebar and address-bar locations open as new branches (D3).
   - A deleted folder or removed device leaves its panels in place, marked unavailable, instead of returning Home (D14).
   - Selections never include items hidden by a search filter.
-- **Tests:** 273 Rust tests (from 165) and a second sandboxed UI test, `scripts/ui/workspace.sh`, which walks the spec's definition of done.
+- **Tests:** 274 Rust tests (from 165) and a second sandboxed UI test, `scripts/ui/workspace.sh`, which walks the spec's definition of done.
 
 ## 0.1.0 (unreleased)
 

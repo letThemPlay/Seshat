@@ -281,9 +281,25 @@ window.seshat popover separator {{
   box-shadow: inset 0 0 0 2px @seshat_accent;
 }}
 
+/* Every panel header has the same height, whatever it contains (branch
+   badge, fork button, Focus Mode arrows): one row sized from the icon
+   size, with compact buttons that cannot stretch it. */
 .seshat-panel-header {{
+  min-height: {header_row}px;
   padding: {spacing}px {padding}px;
   border-bottom: 1px solid @seshat_border;
+}}
+
+.seshat-panel-header button {{
+  min-height: 0;
+  min-width: 0;
+  padding: 0 4px;
+  margin: 0;
+}}
+
+.seshat-panel-header .seshat-branch-badge {{
+  min-height: 0;
+  padding: 0 6px;
 }}
 
 .seshat-panel-title {{
@@ -454,6 +470,7 @@ window.seshat button.destructive-action {{
         radius = g.border_radius,
         row_height = g.row_height,
         icon_size = g.icon_size,
+        header_row = g.icon_size + 8,
     );
     css
 }

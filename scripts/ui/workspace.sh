@@ -19,6 +19,24 @@ log_has() { log_text | grep -c -- "$1" >/dev/null; }
 state() { log_text | grep "workspace state" | tail -1; }
 state_has() { state | grep -q -- "$1"; }
 layout_now() { log_text | grep "workspace layout" | tail -1 | grep -q -- "$1"; }
+# The latest "workspace geometry" line, logged when a reveal settles.
+geometry_field() {
+    log_text | grep "workspace geometry" | tail -1 | grep -o "$1=-\?[0-9]*" | cut -d= -f2
+}
+# The active panel lies entirely inside the visible workspace.
+active_in_view() {
+    local left right width
+    left=$(geometry_field active_left); right=$(geometry_field active_right); width=$(geometry_field viewport)
+    [[ -n "$left" && -n "$right" && -n "$width" ]] && ((left >= 0 && right <= width))
+}
+# Every shown panel header has the same height (a fork button or branch
+# badge must not make one taller).
+headers_equal() {
+    local heights
+    heights=$(log_text | grep "workspace geometry" | tail -1 | grep -o 'headers="[0-9,]*"' |
+        sed 's/headers="//; s/"//' | tr ',' '\n' | grep -v '^0$' | sort -u | wc -l)
+    ((heights == 1))
+}
 active_is() { state_has "location=Path(\"$1\")"; }
 
 launch
@@ -42,6 +60,9 @@ check "Downloads opens"                             active_is "$H/Downloads"
 check "6. both branches coexist"                    state_has "branches=2 "
 check "Downloads is not a child of Projects"        state_has "panels=4 "
 shot two-branches
+sleep 1   # let the reveal settle
+check "panel headers are all the same height"       headers_equal
+check "the active panel is fully in view"           active_in_view
 
 # Side by side: Home spans both rows; three connectors; the other branch's
 # panels are cards. A short window falls back to one row (decisions L2, L4).
@@ -57,6 +78,8 @@ type_text "["
 check "[ restores the other branch where it was"    active_is "$H"
 type_text ll
 check "8. the other branch navigates independently" active_is "$H/Documents/Projects"
+sleep 1
+check "    the rightmost panel is fully in view"    active_in_view
 
 # 9–11. Focus Mode, with spatial navigation and branch switching
 type_text zz
