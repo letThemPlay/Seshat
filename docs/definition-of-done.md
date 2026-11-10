@@ -29,11 +29,6 @@ Status as of 2026-11-07, test counts updated 2026-11-09. The spatial workspace h
 All of these are covered step by step in [the manual verification checklist](development/manual-verification.md).
 
 - **GNOME and KDE Plasma Wayland sessions**, multi-monitor setups and fractional scaling: the manual matrix is in [wayland-verification.md](development/wayland-verification.md). Development used Hyprland and headless compositors.
-- **Hardware and session-dependent features:**
-  - drag and drop between applications
-  - removable devices (mount, eject, unplug while viewing)
-  - restoring from the real session Trash
-- **D-Bus caller rejection** for a different Unix user (needs a second account).
 - **Real-world accessibility** with a screen reader (Orca): labels and keyboard navigation are in place but not yet checked with Orca.
 
 ## Decisions still open
