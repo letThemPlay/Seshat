@@ -210,4 +210,54 @@ mod tests {
         std::fs::write(&store.path, "this is = = not toml").unwrap();
         assert_eq!(store.load(), Preferences::default());
     }
+
+    /// docs/examples/settings.toml must stay complete and correct: it
+    /// lists every configurable action with its default binding, and its
+    /// other values are the defaults too.
+    #[test]
+    fn the_example_settings_list_every_binding_with_its_default() {
+        use seshat_application::interaction::{Action, KeyMap};
+
+        let (_dir, store) = store();
+        std::fs::create_dir_all(store.path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &store.path,
+            include_str!("../../../../docs/examples/settings.toml"),
+        )
+        .unwrap();
+        let prefs = store.load();
+
+        let listed: Vec<&str> = prefs
+            .workspace
+            .key_bindings
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .collect();
+        for action in Action::ALL {
+            assert!(listed.contains(&action.id()), "missing {}", action.id());
+        }
+        assert_eq!(listed.len(), Action::ALL.len(), "unknown actions listed");
+
+        let (example, warnings) = KeyMap::new(&prefs.workspace.key_bindings, false);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let defaults = KeyMap::default();
+        for action in Action::ALL {
+            assert_eq!(
+                example.keys_for(action),
+                defaults.keys_for(action),
+                "{} differs from its default",
+                action.id()
+            );
+        }
+
+        // Apart from the bindings, it is exactly the defaults.
+        let without_bindings = Preferences {
+            workspace: WorkspacePreferences {
+                key_bindings: Vec::new(),
+                ..prefs.workspace.clone()
+            },
+            ..prefs
+        };
+        assert_eq!(without_bindings, Preferences::default());
+    }
 }

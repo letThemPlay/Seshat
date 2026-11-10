@@ -11,7 +11,7 @@ A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4: a
 
 Opening a folder adds a **panel** to the right instead of replacing the view. Panels keep their cursor, scroll position, sort order, view, search and selection while you move around. Opening a different folder from a panel that already has a child starts a new **branch**. Branches coexist side by side: each row is a branch, a shared folder spans the rows of its branches, and connectors link folders to their subfolders. The active branch gets the space; the others are compact cards you can click. **Focus Mode** (`zz`) expands the active panel without closing anything; navigation keeps working. The workspace is restored when Seshat starts.
 
-Keys follow Vim. `:help` lists every key and command. Bindings can be changed in `~/.config/seshat/settings.toml`:
+Keys follow Vim. `:help` lists every key and command. Bindings can be changed in `~/.config/seshat/settings.toml`; [docs/examples/settings.toml](docs/examples/settings.toml) lists every setting and every configurable key binding with its default. For example:
 
 ```toml
 [keybindings]

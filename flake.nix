@@ -24,6 +24,7 @@
               ./crates
               ./data
               ./docs/themes # an integration test reads the example theme
+              ./docs/examples # a test checks the example settings
             ];
           };
           cargoLock.lockFile = ./Cargo.lock;
@@ -53,6 +54,8 @@
             install -Dm644 data/dev.kdmorris.Seshat.metainfo.xml \
               $out/share/metainfo/dev.kdmorris.Seshat.metainfo.xml
             install -Dm644 LICENSE $out/share/licenses/seshat/LICENSE
+            install -Dm644 docs/examples/settings.toml \
+              $out/share/doc/seshat/examples/settings.toml
           '';
 
           meta = {

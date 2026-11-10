@@ -1,0 +1,88 @@
+# Example Seshat settings: copy to ~/.config/seshat/settings.toml.
+#
+# Every value below is the default, so this file changes nothing until you
+# edit it. Every setting is optional: anything missing or invalid falls back
+# to its default, and a broken file never stops Seshat from starting.
+# Seshat rewrites this file when you change settings in the app (theme,
+# defaults for new panels). Your values and [keybindings] are kept, but the
+# comments are not: keep a copy of this example for reference.
+
+# Theme: "system", "light", "dark", or "custom:<name>" for
+# ~/.config/seshat/themes/<name>.toml (see docs/development/themes.md).
+theme = "system"
+
+# Defaults for new panels. Each panel keeps its own settings afterwards;
+# changing a panel's setting also updates these.
+show_hidden = false
+view_mode = "list"        # "list" or "grid"
+sort_key = "name"         # "name", "size", "modified" or "type"
+sort_descending = false
+
+[workspace]
+restore = true            # restore the previous workspace on launch
+retain_focus_mode = true  # keep Focus Mode when switching branches
+wrap_cursor = false       # moving past the last item wraps to the first
+layout = "tree"           # "tree": branches side by side; "strip": only the active branch
+# true: typing anywhere searches, and every single-key binding below (h, j,
+# l, v, :, …) is turned off. Bindings with Ctrl, Alt or a named key stay.
+classic_keys = false
+
+# ── Key bindings ────────────────────────────────────────────────────────
+#
+# One line per action: action = [key sequences]. Every action and its
+# default is listed. Give an action several sequences to bind it to all of
+# them, or an empty list (action = []) to unbind it.
+#
+# Notation (Vim style):
+#   gg, zz            several keys typed in sequence
+#   G, :, [           one character, shifted as typed
+#   <C-d>             Ctrl+D          <A-x>   Alt+X     <C-A-x>  both
+#   <CR> <Esc> <BS> <Tab> <Del> <Space>
+#   <Up> <Down> <Left> <Right> <Home> <End> <PageUp> <PageDown>
+#   <lt>              a literal <
+#
+# A binding that clashes with another (the same keys, or one sequence the
+# start of another, such as "g" and "gg") is ignored: the action keeps its
+# default, and the status bar and log say why. :help lists the bindings in
+# effect.
+#
+# These keys are not configurable: Ctrl+C / Ctrl+X / Ctrl+V (copy, cut,
+# paste), Ctrl+Shift+C (copy paths), Ctrl+H (hidden files), Ctrl+L (type a
+# location), Ctrl+F (search), Ctrl+R and F5 (refresh), Ctrl+1 / Ctrl+2 (list
+# and grid view), Ctrl+Shift+N (new folder), F2 (rename), Delete and
+# Shift+Delete (Trash and permanent delete), Alt+Left / Alt+Right / Alt+Up
+# and the mouse's back and forward buttons, Shift+F10 and Menu (context
+# menu), and the arrow keys in file lists.
+
+[keybindings]
+# Panels and branches
+panel-left = ["h"]              # previous panel of the branch
+panel-right = ["L"]             # next panel of the branch, without opening anything
+open = ["l", "<CR>"]            # open the folder under the cursor (continue, return to
+                                # or start a branch); files open in their application
+parent = ["<BS>"]               # parent panel (adds one above a root)
+branch-previous = ["["]
+branch-next = ["]"]
+back = ["<C-o>"]                # previously active panel
+forward = ["<C-i>"]
+
+# Moving in a panel
+cursor-down = ["j"]
+cursor-up = ["k"]
+cursor-first = ["gg"]
+cursor-last = ["G"]
+half-page-down = ["<C-d>"]
+half-page-up = ["<C-u>"]
+
+# Modes and selection
+visual = ["v"]                  # Visual Mode; in Visual Mode, toggle the item
+visual-range = ["V"]            # select a range from the cursor
+escape = ["<Esc>"]              # leave Visual Mode; in Normal Mode, clear the selection
+command-line = [":"]
+search = ["/"]
+focus-mode = ["zz"]
+
+# Clipboard (shared with other file managers)
+yank = ["y"]                    # copy the selection
+cut = ["x"]                     # cut the selection
+paste = ["p"]                   # paste into the active panel
