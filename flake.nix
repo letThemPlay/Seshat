@@ -54,6 +54,8 @@
             install -Dm644 data/dev.kdmorris.Seshat.metainfo.xml \
               $out/share/metainfo/dev.kdmorris.Seshat.metainfo.xml
             install -Dm644 LICENSE $out/share/licenses/seshat/LICENSE
+            install -Dm644 docs/examples/settings.toml \
+              $out/share/doc/seshat/examples/settings.toml
           '';
 
           meta = {

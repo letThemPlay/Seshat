@@ -22,6 +22,8 @@ On NixOS, add the flake as an input and put `inputs.seshat.packages.${system}.de
 | `share/applications/dev.kdmorris.Seshat.desktop` | desktop entry (validated with `desktop-file-validate`) |
 | `share/icons/hicolor/scalable/apps/dev.kdmorris.Seshat.svg` | application icon |
 | `share/metainfo/dev.kdmorris.Seshat.metainfo.xml` | AppStream metadata (`appstreamcli validate --pedantic` passes; one pedantic note: the app id contains capitals) |
+| `share/licenses/seshat/LICENSE` | the licence (GPL-3.0-or-later) |
+| `share/doc/seshat/examples/settings.toml` | example settings with every configurable key binding and its default; copy to `~/.config/seshat/settings.toml` |
 
 The build runs the whole workspace test suite in the Nix sandbox, including the D-Bus tests on a private bus.
 
