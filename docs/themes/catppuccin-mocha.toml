@@ -1,0 +1,29 @@
+# Example Seshat theme using the Catppuccin Mocha palette
+# (https://catppuccin.com, MIT licence). Copy to
+# ~/.config/seshat/themes/catppuccin-mocha.toml and pick "Catppuccin Mocha"
+# from the theme menu. Changes are picked up live.
+name = "Catppuccin Mocha"
+extends = "dark"
+
+[colors]
+app_background = "#181825"     # mantle
+navigation_surface = "#181825" # mantle
+surface = "#1e1e2e"            # base: content pane AND selected navigation item
+text_primary = "#cdd6f4"       # text
+text_secondary = "#bac2de"     # subtext1
+text_muted = "#9399b2"         # overlay2
+accent = "#cba6f7"             # mauve
+border = "#313244"             # surface0
+hover = "#cdd6f412"            # text, faint
+selected = "#cba6f74d"         # mauve, translucent
+focus = "#b4befe"              # lavender
+error = "#f38ba8"              # red
+warning = "#f9e2af"            # yellow
+success = "#a6e3a1"            # green
+
+[geometry]
+border_radius = 8
+
+[typography]
+font_family = "Inter"
+font_size = 11

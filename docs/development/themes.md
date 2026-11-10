@@ -12,7 +12,7 @@ The file stem is the theme's id. Seshat watches this folder, so saving a file re
 
 ## Format
 
-Start from [`docs/themes/nord.toml`](../themes/nord.toml). Every key is optional: anything you leave out comes from the base theme.
+Start from [`docs/themes/nord.toml`](../themes/nord.toml) or [`docs/themes/catppuccin-mocha.toml`](../themes/catppuccin-mocha.toml) (installed with the package as `share/doc/seshat/examples/themes/catppuccin-mocha.toml`). Every key is optional: anything you leave out comes from the base theme.
 
 | Key | Values |
 |---|---|

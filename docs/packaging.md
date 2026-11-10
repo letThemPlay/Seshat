@@ -24,6 +24,7 @@ On NixOS, add the flake as an input and put `inputs.seshat.packages.${system}.de
 | `share/metainfo/dev.kdmorris.Seshat.metainfo.xml` | AppStream metadata (`appstreamcli validate --pedantic` passes; one pedantic note: the app id contains capitals) |
 | `share/licenses/seshat/LICENSE` | the licence (GPL-3.0-or-later) |
 | `share/doc/seshat/examples/settings.toml` | example settings with every configurable key binding and its default; copy to `~/.config/seshat/settings.toml` |
+| `share/doc/seshat/examples/themes/catppuccin-mocha.toml` | example theme (Catppuccin Mocha); copy to `~/.config/seshat/themes/` and pick it from the theme menu |
 
 The build runs the whole workspace test suite in the Nix sandbox, including the D-Bus tests on a private bus.
 
