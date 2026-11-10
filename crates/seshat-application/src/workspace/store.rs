@@ -2,7 +2,7 @@ use seshat_domain::workspace::Workspace;
 
 /// Version of the persisted workspace format. Bump it when the format
 /// changes incompatibly and add a migration in the store implementation.
-pub const WORKSPACE_SCHEMA_VERSION: u32 = 1;
+pub const WORKSPACE_SCHEMA_VERSION: u32 = 2;
 
 /// Saves and restores the workspace between sessions.
 pub trait WorkspaceStore {

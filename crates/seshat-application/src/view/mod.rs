@@ -81,6 +81,7 @@ mod tests {
             hidden: name.starts_with('.'),
             content_type: None,
             trash_info: None,
+            identity: None,
         }
     }
 

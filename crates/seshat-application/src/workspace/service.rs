@@ -4,7 +4,7 @@ use std::path::Path;
 use seshat_domain::entities::{FileEntry, Location};
 use seshat_domain::view::{SortKey, ViewMode};
 use seshat_domain::workspace::{
-    BranchId, PanelId, PanelState, ScrollAnchor, Unavailability, Workspace, WorkspaceError,
+    BranchId, Opened, PanelId, PanelState, ScrollAnchor, Unavailability, Workspace, WorkspaceError,
 };
 
 use super::listing::{Content, PanelListing};
@@ -217,22 +217,51 @@ impl WorkspaceService {
         Ok(removed)
     }
 
-    /// Opens `entry` from `panel`: folders open as a child panel (creating
-    /// or activating a branch), files are launched.
-    pub fn open_entry(&mut self, panel: PanelId, entry: &FileEntry) -> Result<(), WorkspaceError> {
-        if entry.is_browsable() {
-            self.workspace.activate_panel(panel)?;
-            self.workspace
-                .open_child(panel, entry.location.clone(), None)?;
-            if let Some(state) = self.workspace.state_mut(panel) {
-                state.cursor = Some(entry.location.clone());
-            }
-            self.after_navigation();
-        } else {
+    /// Opens `entry` from `panel`. This is the single entry point for
+    /// opening: `l`, `Enter`, double-click and the command line all come
+    /// here, so they resolve navigation identically.
+    ///
+    /// Folders are resolved by the workspace (context-aware navigation):
+    /// continue the active branch, reactivate an existing branch, or create
+    /// a new one; see [`Workspace::open_directory`]. Files are launched.
+    /// Returns how a folder was resolved, or `None` for a file.
+    ///
+    /// [`Workspace::open_directory`]: seshat_domain::workspace::Workspace::open_directory
+    pub fn open_entry(
+        &mut self,
+        panel: PanelId,
+        entry: &FileEntry,
+    ) -> Result<Option<Opened>, WorkspaceError> {
+        if !entry.is_browsable() {
             self.effects
                 .push(Effect::Launch(vec![entry.location.clone()]));
+            return Ok(None);
         }
-        Ok(())
+        self.workspace.activate_panel(panel)?;
+        let opened =
+            self.workspace
+                .open_directory(panel, entry.location.clone(), entry.identity, None)?;
+        if let Some(state) = self.workspace.state_mut(panel) {
+            state.cursor = Some(entry.location.clone());
+        }
+        // Renamed or replaced folders: their listings and watches belong to
+        // the old folder and are read again.
+        for &refreshed in &opened.refreshed {
+            self.visible.remove(&refreshed);
+            if self.listings.remove(&refreshed).is_some() {
+                self.effects.push(Effect::Unwatch { panel: refreshed });
+            }
+        }
+        tracing::debug!(
+            resolution = ?opened.resolution,
+            branch = %opened.branch,
+            panel = %opened.active,
+            created = opened.created,
+            refreshed = opened.refreshed.len(),
+            "navigation resolved"
+        );
+        self.after_navigation();
+        Ok(Some(opened))
     }
 
     /// Opens a location from outside the tree (sidebar, address bar,
@@ -644,11 +673,15 @@ impl WorkspaceService {
         let Some(p) = self.workspace.panel(panel) else {
             return;
         };
-        if p.unavailable() == Some(Unavailability::DeviceRemoved) {
+        if let Some(reason) = p.unavailable() {
             // Nothing to read until the user retries (Refresh).
             let mut listing = PanelListing::new(0, now);
-            listing.content =
-                Content::Failed(ListingError::Unavailable("The device was removed.".into()));
+            listing.content = Content::Failed(match reason {
+                Unavailability::DeviceRemoved => {
+                    ListingError::Unavailable("The device was removed.".into())
+                }
+                Unavailability::Missing => ListingError::NotFound,
+            });
             self.listings.insert(panel, listing);
             return;
         }

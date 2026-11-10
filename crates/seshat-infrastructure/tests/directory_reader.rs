@@ -149,3 +149,40 @@ fn broken_and_file_symlinks_are_not_browsable() {
         assert!(!entry.is_browsable());
     }
 }
+
+/// Context-aware navigation tells folders apart by device and inode (C3).
+#[test]
+fn reports_device_and_inode_and_never_a_link_targets_identity() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("sub")).unwrap();
+    symlink(dir.path().join("sub"), dir.path().join("link")).unwrap();
+    let entries = read(&Location::Path(dir.path().to_path_buf())).unwrap();
+
+    let sub = find(&entries, OsStr::new("sub"))
+        .identity
+        .expect("identity");
+    let meta = fs::metadata(dir.path().join("sub")).unwrap();
+    assert_eq!((sub.device, sub.inode), (meta.dev(), meta.ino()));
+
+    let link = find(&entries, OsStr::new("link"))
+        .identity
+        .expect("identity");
+    let link_meta = fs::symlink_metadata(dir.path().join("link")).unwrap();
+    assert_eq!(
+        link.inode,
+        link_meta.ino(),
+        "the link itself, not its target"
+    );
+    assert_ne!(link.inode, sub.inode);
+
+    // A folder deleted and recreated under the same name gets the new
+    // folder's identity.
+    fs::remove_dir(dir.path().join("sub")).unwrap();
+    fs::create_dir(dir.path().join("sub")).unwrap();
+    let again = read(&Location::Path(dir.path().to_path_buf())).unwrap();
+    let new_sub = find(&again, OsStr::new("sub")).identity.unwrap();
+    assert_eq!(
+        new_sub.inode,
+        fs::metadata(dir.path().join("sub")).unwrap().ino()
+    );
+}

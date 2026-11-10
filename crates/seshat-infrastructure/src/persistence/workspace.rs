@@ -11,7 +11,7 @@ use std::sync::{Mutex, mpsc};
 
 use serde::{Deserialize, Serialize};
 use seshat_application::workspace::{WORKSPACE_SCHEMA_VERSION, WorkspaceStore};
-use seshat_domain::entities::Location;
+use seshat_domain::entities::{DirectoryIdentity, Location};
 use seshat_domain::view::{SortKey, SortOrder, ViewMode, ViewOptions};
 use seshat_domain::workspace::{
     BranchId, BranchParts, PanelId, PanelParts, PanelState, ScrollAnchor, Selection, Workspace,
@@ -211,6 +211,10 @@ struct PanelV1 {
     selection: Vec<LocationV1>,
     #[serde(skip_serializing_if = "Option::is_none")]
     anchor: Option<LocationV1>,
+    /// Format 2: the folder's identity as "device:inode" (a string, because
+    /// TOML integers cannot hold every 64-bit inode).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    identity: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -316,6 +320,7 @@ fn encode(workspace: &Workspace) -> Result<String, String> {
                     query: s.options.query.clone(),
                     selection: s.selection.items().iter().map(location_to_file).collect(),
                     anchor: s.selection.anchor().map(location_to_file),
+                    identity: p.identity.map(|i| format!("{}:{}", i.device, i.inode)),
                 }
             })
             .collect(),
@@ -389,6 +394,7 @@ fn decode(text: &str) -> Result<Workspace, String> {
             location: location_from_file(p.location)?,
             parent: p.parent.map(PanelId::from_raw),
             children: p.children.into_iter().map(PanelId::from_raw).collect(),
+            identity: p.identity.as_deref().and_then(identity_from_file),
             state,
         });
     }
@@ -420,9 +426,20 @@ fn decode(text: &str) -> Result<Workspace, String> {
 /// here (e.g. `1 => rename fields`, then fall through to the next).
 fn migrate(table: toml::Table, from: u32) -> Result<toml::Table, String> {
     match from {
-        WORKSPACE_SCHEMA_VERSION => Ok(table),
+        // Version 2 only added the optional panel `identity`: a version 1
+        // file reads as is, with identities unknown.
+        1 | WORKSPACE_SCHEMA_VERSION => Ok(table),
         other => Err(format!("unsupported workspace format {other}")),
     }
+}
+
+/// "device:inode" back to an identity; anything else counts as unknown.
+fn identity_from_file(text: &str) -> Option<DirectoryIdentity> {
+    let (device, inode) = text.split_once(':')?;
+    Some(DirectoryIdentity {
+        device: device.parse().ok()?,
+        inode: inode.parse().ok()?,
+    })
 }
 
 #[cfg(test)]
@@ -508,7 +525,7 @@ mod tests {
         store.save(&sample()).unwrap();
         store.flush(); // the file is read directly below
         let text = std::fs::read_to_string(store.path()).unwrap();
-        std::fs::write(store.path(), text.replace("version = 1", "version = 99")).unwrap();
+        std::fs::write(store.path(), text.replace("version = 2", "version = 99")).unwrap();
         assert!(store.load().is_none());
 
         std::fs::write(store.path(), "not = = toml").unwrap();
@@ -560,5 +577,63 @@ last_active = 1
 "#;
         assert!(decode(file).is_err());
         assert!(decode(&file.replace("relative/dir", "/abs")).is_ok());
+    }
+
+    #[test]
+    fn version_1_files_restore_with_identities_unknown() {
+        let file = r#"
+version = 1
+active_branch = 3
+focus_mode = false
+retain_focus_on_branch_switch = true
+roots = [1]
+[[panels]]
+id = 1
+location = { path = "/home/u" }
+children = [2]
+[[panels]]
+id = 2
+parent = 1
+location = { path = "/home/u/Documents" }
+cursor = { path = "/home/u/Documents/a.txt" }
+[[branches]]
+id = 3
+tip = 2
+cursor = 2
+created = 1
+last_active = 1
+"#;
+        let ws = decode(file).expect("a version 1 file still restores");
+        assert_eq!(ws.panel_count(), 2);
+        assert_eq!(ws.branch_count(), 1, "no duplicate branches");
+        assert!(ws.panels().all(|p| p.identity().is_none()));
+        let docs = ws.panels().find(|p| p.parent().is_some()).unwrap();
+        assert_eq!(docs.state.cursor, Some(loc("/home/u/Documents/a.txt")));
+    }
+
+    #[test]
+    fn identities_round_trip_including_full_64_bit_inodes() {
+        let (_dir, store) = store();
+        let mut ws = Workspace::new(loc("/home/u"), PanelState::default());
+        let home = ws.active_panel();
+        let identity = DirectoryIdentity {
+            device: u64::MAX,
+            inode: u64::MAX - 1,
+        };
+        let docs = ws
+            .open_directory(home, loc("/home/u/Docs"), Some(identity), None)
+            .unwrap()
+            .panel;
+        store.save(&ws).unwrap();
+        store.flush();
+        let text = std::fs::read_to_string(store.path()).unwrap();
+        assert!(text.contains("version = 2"));
+        let restored = store.load().unwrap();
+        assert_eq!(restored.panel(docs).unwrap().identity(), Some(identity));
+        assert_eq!(
+            identity_from_file("12:not-a-number"),
+            None,
+            "malformed is unknown"
+        );
     }
 }

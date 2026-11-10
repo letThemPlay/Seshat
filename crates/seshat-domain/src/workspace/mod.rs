@@ -12,5 +12,7 @@ mod panel;
 mod tests;
 
 pub use ids::{BranchId, PanelId};
-pub use model::{BranchParts, Opened, PanelParts, Workspace, WorkspaceError, WorkspaceParts};
+pub use model::{
+    BranchParts, Opened, PanelParts, Resolution, Workspace, WorkspaceError, WorkspaceParts,
+};
 pub use panel::{Branch, Panel, PanelState, ScrollAnchor, Selection, Unavailability};

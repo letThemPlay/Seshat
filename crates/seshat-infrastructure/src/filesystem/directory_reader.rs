@@ -4,14 +4,14 @@ use std::time::{Duration, SystemTime};
 use gio::prelude::*;
 use seshat_application::LocalBoxFuture;
 use seshat_application::ports::{DirectoryReader, ListingError};
-use seshat_domain::entities::{EntryKind, FileEntry, Location, TrashInfo};
+use seshat_domain::entities::{DirectoryIdentity, EntryKind, FileEntry, Location, TrashInfo};
 
 use super::gio_file::gio_file;
 
 /// Only metadata is queried; file contents are never read.
 const ATTRIBUTES: &str = "standard::name,standard::type,standard::size,\
                           standard::is-hidden,standard::display-name,standard::fast-content-type,standard::is-symlink,time::modified,\
-                          trash::orig-path,trash::deletion-date";
+                          trash::orig-path,trash::deletion-date,unix::device,unix::inode";
 
 /// Entries are fetched in batches so large directories don't need one huge
 /// allocation from GIO and the main loop stays responsive.
@@ -106,7 +106,21 @@ fn to_entry(parent: &Location, info: &gio::FileInfo) -> FileEntry {
             .attribute_string("standard::fast-content-type")
             .map(|s| s.to_string()),
         trash_info: trash_info(info),
+        identity: identity(info),
     }
+}
+
+/// Device and inode from the listing (`unix::*`), when the filesystem
+/// reports them; GVfs locations such as the Trash may not. Listings use
+/// `NOFOLLOW_SYMLINKS`, so a link has its own identity, never its target's.
+fn identity(info: &gio::FileInfo) -> Option<DirectoryIdentity> {
+    if !info.has_attribute("unix::inode") || !info.has_attribute("unix::device") {
+        return None;
+    }
+    Some(DirectoryIdentity {
+        device: u64::from(info.attribute_uint32("unix::device")),
+        inode: info.attribute_uint64("unix::inode"),
+    })
 }
 
 fn trash_info(info: &gio::FileInfo) -> Option<TrashInfo> {

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use thiserror::Error;
 
 use super::{Branch, BranchId, Panel, PanelId, PanelState, Unavailability};
-use crate::entities::Location;
+use crate::entities::{DirectoryIdentity, Location};
 
 /// Back/forward history keeps at most this many panel activations.
 const JUMP_LIMIT: usize = 100;
@@ -25,13 +25,37 @@ pub enum WorkspaceError {
 }
 
 /// Result of opening a directory.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Opened {
+    /// The panel of the opened folder.
     pub panel: PanelId,
+    /// Where the user lands: the opened folder's panel, or, when an
+    /// existing branch is reactivated, that branch's remembered panel if
+    /// it lies at or below the opened folder (decision C1).
+    pub active: PanelId,
+    /// The branch that is now active.
+    pub branch: BranchId,
+    pub resolution: Resolution,
     /// A new panel was created (otherwise an existing one was activated).
     pub created: bool,
     /// A new branch was created for it.
     pub new_branch: bool,
+    /// Panels whose folder changed under them: renamed (their location was
+    /// updated) or replaced by a different folder (their state was reset).
+    /// Their listings must be read again.
+    pub refreshed: Vec<PanelId>,
+}
+
+/// How opening a folder was resolved (context-aware navigation, §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Resolution {
+    /// The folder is, or becomes, the next step of the active branch.
+    ContinueActiveBranch,
+    /// The folder already belonged to another branch, which comes back with
+    /// its remembered panels and state.
+    ReactivateExistingBranch,
+    /// The folder starts a new branch from the current panel.
+    CreateNewBranch,
 }
 
 /// The complete spatial workspace: a forest of persistent directory panels
@@ -82,6 +106,8 @@ pub struct PanelParts {
     pub location: Location,
     pub parent: Option<PanelId>,
     pub children: Vec<PanelId>,
+    /// The folder's identity when last opened, if known (format version 2).
+    pub identity: Option<DirectoryIdentity>,
     pub state: PanelState,
 }
 
@@ -288,25 +314,105 @@ impl Workspace {
         location: Location,
         state: Option<PanelState>,
     ) -> Result<Opened, WorkspaceError> {
+        self.open_directory(from, location, None, state)
+    }
+
+    /// Opens the folder at `location` (with filesystem `identity`, when
+    /// known) from panel `from`, resolving it in this order (§4):
+    ///
+    /// 1. **Continue the active branch**: `from` already has a child for
+    ///    the folder on the active branch (it is activated, its downstream
+    ///    panels kept), or `from` is the branch's tip (the branch grows).
+    /// 2. **Reactivate an existing branch**: `from` has a child for the
+    ///    folder on another branch. The most recently active branch through
+    ///    it comes back, landing on its remembered panel when that lies at
+    ///    or below the folder (C1).
+    /// 3. **Create a new branch** from `from`.
+    ///
+    /// Children are matched by location. With identities (C3): a child at
+    /// the same location whose identity changed is a different folder now,
+    /// so its state is reset and its descendants are marked unavailable; a
+    /// child with the same identity under another name was renamed, so it
+    /// (and everything below it) follows the new name. Nothing is ever
+    /// duplicated, and only children of `from` are considered (C4).
+    pub fn open_directory(
+        &mut self,
+        from: PanelId,
+        location: Location,
+        identity: Option<DirectoryIdentity>,
+        state: Option<PanelState>,
+    ) -> Result<Opened, WorkspaceError> {
         let parent = self
             .panels
             .get(&from)
             .ok_or(WorkspaceError::UnknownPanel(from))?;
-        if let Some(&existing) = parent
-            .children
+        let children = parent.children.clone();
+        let inherited = parent.state.inherit();
+        let by_location = children
             .iter()
-            .find(|c| self.panels[c].location == location)
-        {
-            self.activate_panel_inner(existing, true)?;
+            .copied()
+            .find(|c| self.panels[c].location == location);
+        let by_identity = identity.and_then(|id| {
+            children
+                .iter()
+                .copied()
+                .find(|c| self.panels[c].identity == Some(id))
+        });
+
+        let mut refreshed = Vec::new();
+        let existing = match (by_location, by_identity) {
+            (Some(child), _) => {
+                let known = self.panels[&child].identity;
+                if let (Some(new), Some(old)) = (identity, known)
+                    && new != old
+                {
+                    // Same name, different folder: never reuse its state.
+                    refreshed = self.reset_replaced(child, new);
+                } else if identity.is_some() {
+                    self.panels.get_mut(&child).expect("child").identity = identity;
+                }
+                Some(child)
+            }
+            (None, Some(child)) => {
+                // Same folder under a new name: follow the rename.
+                refreshed = self.relocate(child, &location);
+                Some(child)
+            }
+            (None, None) => None,
+        };
+
+        if let Some(child) = existing {
+            let (branch, active, resolution) = if self.active_path().contains(&child) {
+                (self.active, child, Resolution::ContinueActiveBranch)
+            } else {
+                let branch = *self
+                    .branches_through(child)
+                    .first()
+                    .expect("every panel lies on a branch");
+                let cursor = self.branches[&branch].cursor;
+                let land = if self.ancestors_or_self(cursor).contains(&child) {
+                    cursor
+                } else {
+                    child
+                };
+                (branch, land, Resolution::ReactivateExistingBranch)
+            };
+            self.set_active(branch, active, true);
             return Ok(Opened {
-                panel: existing,
+                panel: child,
+                active,
+                branch,
+                resolution,
                 created: false,
                 new_branch: false,
+                refreshed,
             });
         }
-        let state = state.unwrap_or_else(|| parent.state.inherit());
+
+        let state = state.unwrap_or(inherited);
         let extends = self.branch_with_tip(from).map(|b| b.id);
         let child = self.add_panel(location, Some(from), state);
+        self.panels.get_mut(&child).expect("just added").identity = identity;
         self.panels
             .get_mut(&from)
             .expect("checked above")
@@ -322,21 +428,63 @@ impl Workspace {
         self.set_active(branch, child, true);
         Ok(Opened {
             panel: child,
+            active: child,
+            branch,
+            resolution: if new_branch {
+                Resolution::CreateNewBranch
+            } else {
+                Resolution::ContinueActiveBranch
+            },
             created: true,
             new_branch,
+            refreshed,
         })
     }
 
     /// Opens `location` from outside the tree (sidebar, address bar,
-    /// devices). If the active branch already shows it, that panel is
-    /// activated; otherwise it becomes a new root with its own branch.
+    /// devices). In order: the active branch's panel for it; an existing
+    /// root panel for it, whose branch comes back where it was left
+    /// (decision C5); otherwise a new root with its own branch.
     pub fn open_root(&mut self, location: Location, state: PanelState) -> Opened {
         if let Some(existing) = self.find_on_active_path(&location) {
             self.set_active(self.active, existing, true);
             return Opened {
                 panel: existing,
+                active: existing,
+                branch: self.active,
+                resolution: Resolution::ContinueActiveBranch,
                 created: false,
                 new_branch: false,
+                refreshed: Vec::new(),
+            };
+        }
+        let root = self
+            .roots
+            .iter()
+            .copied()
+            .filter(|r| self.panels[r].location == location)
+            .max_by_key(|&r| {
+                self.branches_through(r)
+                    .first()
+                    .map_or(0, |b| self.branches[b].last_active)
+            });
+        if let Some(root) = root {
+            let branch = *self
+                .branches_through(root)
+                .first()
+                .expect("every panel lies on a branch");
+            // A root is above every panel of its branch, so the remembered
+            // panel is always at or below it.
+            let active = self.branches[&branch].cursor;
+            self.set_active(branch, active, true);
+            return Opened {
+                panel: root,
+                active,
+                branch,
+                resolution: Resolution::ReactivateExistingBranch,
+                created: false,
+                new_branch: false,
+                refreshed: Vec::new(),
             };
         }
         let panel = self.add_panel(location, None, state);
@@ -345,8 +493,12 @@ impl Workspace {
         self.set_active(branch, panel, true);
         Opened {
             panel,
+            active: panel,
+            branch,
+            resolution: Resolution::CreateNewBranch,
             created: true,
             new_branch: true,
+            refreshed: Vec::new(),
         }
     }
 
@@ -499,6 +651,7 @@ impl Workspace {
                     location: p.location.clone(),
                     parent: p.parent,
                     children: p.children.clone(),
+                    identity: p.identity,
                     state: p.state.clone(),
                 })
                 .collect(),
@@ -548,6 +701,7 @@ impl Workspace {
                         parent: p.parent,
                         children: p.children,
                         unavailable: None,
+                        identity: p.identity,
                         state: p.state,
                     },
                 )
@@ -660,6 +814,55 @@ impl Workspace {
 
     // ── Internals ───────────────────────────────────────────────────────
 
+    /// `panel`'s folder was replaced by a different one with the same
+    /// name: its view settings stay, but its cursor, scroll position and
+    /// selection belonged to the old folder and are dropped, and the panels
+    /// below it (inside the old folder) are marked unavailable. Returns
+    /// the panel and its descendants, whose listings must be read again.
+    fn reset_replaced(&mut self, panel: PanelId, identity: DirectoryIdentity) -> Vec<PanelId> {
+        let below = self.descendants(panel);
+        if let Some(p) = self.panels.get_mut(&panel) {
+            p.state = p.state.inherit();
+            p.identity = Some(identity);
+            p.unavailable = None;
+        }
+        for id in below.iter().skip(1) {
+            if let Some(p) = self.panels.get_mut(id) {
+                p.unavailable = Some(Unavailability::Missing);
+            }
+        }
+        below
+    }
+
+    /// `panel`'s folder was renamed to `location`: it and every panel
+    /// below it take the new path (cursors, selections and scroll anchors
+    /// inside it too). Returns the moved panels.
+    fn relocate(&mut self, panel: PanelId, location: &Location) -> Vec<PanelId> {
+        let old = self.panels[&panel].location.clone();
+        let moved = self.descendants(panel);
+        for id in &moved {
+            let p = self.panels.get_mut(id).expect("descendant exists");
+            p.location = rebase(&p.location, &old, location);
+            let state = &mut p.state;
+            if let Some(cursor) = &mut state.cursor {
+                *cursor = rebase(cursor, &old, location);
+            }
+            if let Some(scroll) = &mut state.scroll {
+                scroll.item = rebase(&scroll.item, &old, location);
+            }
+            let items: Vec<Location> = state
+                .selection
+                .items()
+                .iter()
+                .map(|l| rebase(l, &old, location))
+                .collect();
+            let anchor = state.selection.anchor().map(|a| rebase(a, &old, location));
+            state.selection.replace(items);
+            state.selection.set_anchor(anchor);
+        }
+        moved
+    }
+
     fn tick(&mut self) -> u64 {
         self.clock += 1;
         self.clock
@@ -686,6 +889,7 @@ impl Workspace {
                 parent,
                 children: Vec::new(),
                 unavailable: None,
+                identity: None,
                 state,
             },
         );
@@ -810,5 +1014,23 @@ impl Workspace {
                 .expect("jump target exists");
             return true;
         }
+    }
+}
+
+/// `location` with its `old` prefix replaced by `new` (after a rename).
+/// Locations outside `old` are returned unchanged.
+fn rebase(location: &Location, old: &Location, new: &Location) -> Location {
+    match (location, old, new) {
+        (Location::Path(p), Location::Path(o), Location::Path(n)) => match p.strip_prefix(o) {
+            Ok(rest) if rest.as_os_str().is_empty() => Location::Path(n.clone()),
+            Ok(rest) => Location::Path(n.join(rest)),
+            Err(_) => location.clone(),
+        },
+        (Location::Trash(p), Location::Trash(o), Location::Trash(n)) => match p.strip_prefix(o) {
+            Ok(rest) if rest.as_os_str().is_empty() => Location::Trash(n.clone()),
+            Ok(rest) => Location::Trash(n.join(rest)),
+            Err(_) => location.clone(),
+        },
+        _ => location.clone(),
     }
 }

@@ -254,6 +254,7 @@ mod tests {
             hidden: false,
             content_type: None,
             trash_info: None,
+            identity: None,
         }
     }
 
