@@ -28,7 +28,7 @@ Status as of 2026-11-07, test counts updated 2026-11-09. The spatial workspace h
 
 All of these are covered step by step in [the manual verification checklist](development/manual-verification.md).
 
-- **GNOME and KDE Plasma Wayland sessions**, multi-monitor setups and fractional scaling: the manual matrix is in [wayland-verification.md](development/wayland-verification.md). Development used Hyprland and headless compositors.
+- **GNOME and KDE Plasma Wayland sessions**, multi-monitor setups and fractional scaling: the manual matrix is in [wayland-verification.md](development/wayland-verification.md). The full checklist (except Orca) passed on Hyprland and Niri on 2026-11-10 ([results](development/verification-results/2026-11-10-hyprland-niri.md)); GNOME and KDE are still to do.
 - **Real-world accessibility** with a screen reader (Orca): labels and keyboard navigation are in place but not yet checked with Orca.
 
 ## Decisions still open

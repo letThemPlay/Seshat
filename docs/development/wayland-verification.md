@@ -51,20 +51,20 @@ Compositor-specific checks:
 
 The steps for each row are in [manual-verification.md](manual-verification.md).
 
-| Check | Hyprland | GNOME Wayland | KDE Plasma Wayland |
-|---|---|---|---|
-| Native launch (`--check-backend`) | ✅ 2026-11-06 | ☐ | ☐ |
-| No XWayland (compositor tool) | ✅ 2026-11-06 | ☐ | ☐ |
-| Window resize / maximise | ☐ | ☐ | ☐ |
-| Fractional scale (125%, 150%) | ☐ | ☐ | ☐ |
-| Multiple monitors, move between outputs | ☐ | ☐ | ☐ |
-| Keyboard navigation (lists, Enter to open) | ☐ | ☐ | ☐ |
-| Theme follows system light/dark | ☐ | ☐ | ☐ |
-| Clipboard, DnD, file dialogs | Phase 3+ | Phase 3+ | Phase 3+ |
-| Workspace: touchpad horizontal scrolling | ☐ | ☐ | ☐ |
-| Workspace: drag files between panels | ☐ | ☐ | ☐ |
-| Workspace: Focus Mode at 125%/150% scale | ☐ | ☐ | ☐ |
-| Workspace: connectors and cards crisp at 125%/150% scale | ☐ | ☐ | ☐ |
-| Workspace: short window falls back to one branch row | ☐ | ☐ | ☐ |
+| Check | Hyprland | Niri | GNOME Wayland | KDE Plasma Wayland |
+|---|---|---|---|---|
+| Native launch (`--check-backend`) | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| No XWayland (compositor tool) | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Window resize / maximise | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Fractional scale (125%, 150%) | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Multiple monitors, move between outputs | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Keyboard navigation (lists, Enter to open) | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Theme follows system light/dark | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Clipboard, drag and drop with other apps, opening files | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Workspace: touchpad horizontal scrolling | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Workspace: drag files between panels | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Workspace: Focus Mode at 125%/150% scale | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Workspace: connectors and cards crisp at 125%/150% scale | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
+| Workspace: short window falls back to one branch row | ✅ 2026-11-10 | ✅ 2026-11-10 | ☐ | ☐ |
 
-Record the detected backend line from the log with every entry.
+Record the detected backend line from the log with every entry. Details of each run are in [verification-results](verification-results/). The 2026-11-10 run did not keep its backend line; `--check-backend` passed on both compositors.
