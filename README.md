@@ -27,9 +27,10 @@ restore = true
 
 | Keys | Action |
 |---|---|
-| `h` / `l` | Previous / next panel of the branch |
+| `h` / `L` | Previous / next panel of the branch (no opening) |
 | `j` / `k`, `gg` / `G`, `Ctrl+d` / `Ctrl+u` | Move the cursor; first / last item; half a page |
-| `Enter` / `Backspace` | Open the folder (new panel) or file / parent panel |
+| `l` or `Enter` | Open the folder under the cursor: continue this branch, return to the branch that already has it, or start a new one. Files open in their application (not in Visual Mode) |
+| `Backspace` | Parent panel |
 | `[` / `]` | Previous / next branch |
 | `v` / `V` / `Esc` | Visual Mode: toggle item / range / leave (selection kept); `Esc` again clears the selection |
 | `y` / `x` / `p` | Copy / cut the selection (from any panels) / paste into this panel |
@@ -86,7 +87,7 @@ cargo run -p seshat -- --check-backend
 
 ## Documentation
 
-- Specifications: [original](docs/specifications/0-INITIAL-PRODUCT-SPEC.md), [spatial file manager](docs/specifications/1-SPATIAL-FILE-MANAGER.md)
+- Specifications: [original](docs/specifications/0-INITIAL-PRODUCT-SPEC.md), [spatial file manager](docs/specifications/1-SPATIAL-FILE-MANAGER.md), [context-aware navigation](docs/specifications/2-CONTEXT-AWARE-NAVIGATION.md)
 - [Implementation status](docs/implementation/STATUS.md) and [roadmap](docs/implementation/ROADMAP.md)
 - [Architecture](docs/architecture/ARCHITECTURE.md), [decisions](docs/architecture/DECISIONS.md), [Linux and Wayland](docs/architecture/LINUX-WAYLAND.md)
 - [Architecture overview](docs/architecture/overview.md)
@@ -101,7 +102,7 @@ cargo run -p seshat -- --check-backend
 - [Packaging](docs/packaging.md)
 - [Definition of Done](docs/definition-of-done.md)
 - Reviews: [security](docs/review/security.md), [performance](docs/review/performance.md), [architecture](docs/review/architecture.md)
-- ADRs: [0001 UI framework](docs/decisions/0001-ui-framework.md), [0002 IPC](docs/decisions/0002-ipc.md), [0003 packaging](docs/decisions/0003-packaging.md), [0004 spatial workspace](docs/decisions/0004-spatial-workspace.md), [0005 branch layout](docs/decisions/0005-branch-layout.md)
+- ADRs: [0001 UI framework](docs/decisions/0001-ui-framework.md), [0002 IPC](docs/decisions/0002-ipc.md), [0003 packaging](docs/decisions/0003-packaging.md), [0004 spatial workspace](docs/decisions/0004-spatial-workspace.md), [0005 branch layout](docs/decisions/0005-branch-layout.md), [0006 context-aware navigation](docs/decisions/0006-context-aware-navigation.md)
 - [Changelog](CHANGELOG.md)
 
 ## Layout

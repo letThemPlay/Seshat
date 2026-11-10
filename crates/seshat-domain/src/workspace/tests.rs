@@ -1,5 +1,5 @@
 use super::*;
-use crate::entities::Location;
+use crate::entities::{DirectoryIdentity, Location};
 use crate::view::{SortKey, ViewMode};
 
 fn loc(s: &str) -> Location {
@@ -225,10 +225,14 @@ fn opening_a_child_shared_by_branches_picks_the_most_recent_one() {
     // branch was active more recently than the Projects branch.
     s.ws.activate_branch(s.downloads_branch).unwrap();
     s.ws.move_left();
-    s.ws.open_child(s.home, loc("/home/u/Documents"), None)
-        .unwrap();
+    let opened =
+        s.ws.open_child(s.home, loc("/home/u/Documents"), None)
+            .unwrap();
     assert_eq!(s.ws.active_branch().id(), reports_branch);
-    assert_eq!(s.ws.active_panel(), s.documents);
+    assert_eq!(opened.resolution, Resolution::ReactivateExistingBranch);
+    // C1: the branch comes back at its remembered panel, below Documents.
+    assert_eq!(opened.panel, s.documents);
+    assert_eq!(s.ws.active_panel(), reports.panel);
     ok(&s.ws);
 }
 
@@ -493,8 +497,15 @@ fn invariants_hold_across_random_operation_sequences() {
                     ws.open_child(from, location, None).unwrap();
                 }
                 2 => {
+                    // Identities independent of names: exercises renames
+                    // (same identity, new name) and replacements (same
+                    // name, new identity).
                     let location = ws.panel(any).unwrap().location().child(name.as_ref());
-                    ws.open_child(any, location, None).unwrap();
+                    let identity = (rng.next(3) > 0).then(|| DirectoryIdentity {
+                        device: 1,
+                        inode: rng.next(6) as u64,
+                    });
+                    ws.open_directory(any, location, identity, None).unwrap();
                 }
                 3 => {
                     ws.move_left();
@@ -531,4 +542,242 @@ fn invariants_hold_across_random_operation_sequences() {
             }
         }
     }
+}
+
+// ── Context-aware navigation (2-CONTEXT-AWARE-NAVIGATION.md) ────────────
+
+fn id(inode: u64) -> Option<DirectoryIdentity> {
+    Some(DirectoryIdentity { device: 1, inode })
+}
+
+#[test]
+fn nav_16_2_1_opening_a_child_continues_the_active_branch() {
+    let mut ws = home();
+    let h = ws.active_panel();
+    let branch = ws.active_branch().id();
+    let d = ws
+        .open_directory(h, loc("/home/u/Documents"), id(10), None)
+        .unwrap();
+    assert_eq!(d.resolution, Resolution::ContinueActiveBranch);
+    assert_eq!((d.branch, d.active, d.created), (branch, d.panel, true));
+    let p = ws
+        .open_directory(d.panel, loc("/home/u/Documents/Projects"), id(11), None)
+        .unwrap();
+    assert_eq!(p.resolution, Resolution::ContinueActiveBranch);
+    assert_eq!(ws.branch_count(), 1);
+    ok(&ws);
+}
+
+#[test]
+fn nav_16_2_2_a_different_child_of_an_ancestor_creates_a_new_branch() {
+    let mut ws = home();
+    let h = ws.active_panel();
+    ws.open_child(h, loc("/home/u/Documents"), None).unwrap();
+    ws.move_left();
+    let dl = ws.open_child(h, loc("/home/u/Downloads"), None).unwrap();
+    assert_eq!(dl.resolution, Resolution::CreateNewBranch);
+    assert!(dl.new_branch);
+    assert_eq!(ws.branch_count(), 2);
+    ok(&ws);
+}
+
+#[test]
+fn nav_16_2_3_reopening_an_existing_child_reactivates_its_branch_with_downstream_panels() {
+    // Home → Documents → Projects, then Home → Downloads (active).
+    let mut s = scenario();
+    let before = s.ws.panel_count();
+    s.ws.move_left(); // Downloads branch, at Home
+    let opened =
+        s.ws.open_child(s.home, loc("/home/u/Documents"), None)
+            .unwrap();
+    assert_eq!(opened.resolution, Resolution::ReactivateExistingBranch);
+    assert_eq!(opened.branch, s.docs_branch);
+    // C1: the Documents branch was left at Home (moved left before
+    // Downloads was opened), above Documents, so it lands on Documents...
+    assert_eq!(s.ws.active_panel(), s.documents);
+    // ...with Projects still downstream, and nothing duplicated.
+    assert_eq!(s.ws.panel(s.documents).unwrap().children(), [s.projects]);
+    assert_eq!(s.ws.panel_count(), before);
+    ok(&s.ws);
+}
+
+#[test]
+fn nav_c1_reactivation_restores_the_remembered_panel_below_the_folder() {
+    let mut s = scenario();
+    // Leave the Documents branch at Projects, then go to Downloads.
+    s.ws.activate_panel(s.projects).unwrap();
+    s.ws.activate_branch(s.downloads_branch).unwrap();
+    s.ws.move_left();
+    let opened =
+        s.ws.open_child(s.home, loc("/home/u/Documents"), None)
+            .unwrap();
+    assert_eq!(opened.resolution, Resolution::ReactivateExistingBranch);
+    assert_eq!(opened.active, s.projects);
+    assert_eq!(s.ws.active_panel(), s.projects);
+}
+
+#[test]
+fn nav_16_2_1_the_next_panel_of_the_active_branch_is_reused() {
+    let mut s = scenario();
+    s.ws.activate_panel(s.documents).unwrap();
+    s.ws.move_left(); // on the Documents branch, at Home
+    let opened =
+        s.ws.open_child(s.home, loc("/home/u/Documents"), None)
+            .unwrap();
+    assert_eq!(opened.resolution, Resolution::ContinueActiveBranch);
+    assert_eq!(
+        s.ws.active_panel(),
+        s.documents,
+        "lands on the opened folder"
+    );
+    assert_eq!(s.ws.panel(s.documents).unwrap().children(), [s.projects]);
+}
+
+#[test]
+fn nav_16_2_5_repeated_opens_never_duplicate() {
+    let mut s = scenario();
+    let before = (s.ws.panel_count(), s.ws.branch_count());
+    for _ in 0..20 {
+        s.ws.activate_panel(s.home).unwrap();
+        s.ws.open_child(s.home, loc("/home/u/Documents"), None)
+            .unwrap();
+        s.ws.activate_panel(s.home).unwrap();
+        s.ws.open_child(s.home, loc("/home/u/Downloads"), None)
+            .unwrap();
+        s.ws.activate_panel(s.documents).unwrap();
+        s.ws.open_child(s.documents, loc("/home/u/Documents/Projects"), None)
+            .unwrap();
+    }
+    assert_eq!((s.ws.panel_count(), s.ws.branch_count()), before);
+    ok(&s.ws);
+}
+
+#[test]
+fn nav_c3_a_renamed_folder_is_followed_with_everything_below_it() {
+    let mut ws = home();
+    let h = ws.active_panel();
+    let old = ws
+        .open_directory(h, loc("/home/u/Old"), id(42), None)
+        .unwrap()
+        .panel;
+    let below = ws
+        .open_directory(old, loc("/home/u/Old/sub"), id(43), None)
+        .unwrap()
+        .panel;
+    let state = ws.state_mut(below).unwrap();
+    state.cursor = Some(loc("/home/u/Old/sub/a.txt"));
+    state.selection.replace([loc("/home/u/Old/sub/a.txt")]);
+    ws.activate_panel(h).unwrap();
+
+    let opened = ws
+        .open_directory(h, loc("/home/u/New"), id(42), None)
+        .unwrap();
+    assert_eq!(opened.panel, old, "the same panel, not a new one");
+    assert_eq!(ws.panel(old).unwrap().location(), &loc("/home/u/New"));
+    assert_eq!(ws.panel(below).unwrap().location(), &loc("/home/u/New/sub"));
+    let state = &ws.panel(below).unwrap().state;
+    assert_eq!(state.cursor, Some(loc("/home/u/New/sub/a.txt")));
+    assert_eq!(state.selection.items(), [loc("/home/u/New/sub/a.txt")]);
+    assert_eq!(opened.refreshed, [old, below]);
+    assert_eq!(ws.panel_count(), 3);
+    ok(&ws);
+}
+
+#[test]
+fn nav_c3_a_replaced_folder_never_inherits_the_old_state() {
+    let mut ws = home();
+    let h = ws.active_panel();
+    let docs = ws
+        .open_directory(h, loc("/home/u/Docs"), id(7), None)
+        .unwrap()
+        .panel;
+    let sub = ws
+        .open_directory(docs, loc("/home/u/Docs/sub"), id(8), None)
+        .unwrap()
+        .panel;
+    let state = ws.state_mut(docs).unwrap();
+    state.cursor = Some(loc("/home/u/Docs/old.txt"));
+    state.options.sort.key = SortKey::Size;
+    ws.activate_panel(h).unwrap();
+
+    // Deleted and recreated: same name, different inode.
+    let opened = ws
+        .open_directory(h, loc("/home/u/Docs"), id(99), None)
+        .unwrap();
+    assert_eq!(opened.panel, docs);
+    let p = ws.panel(docs).unwrap();
+    assert_eq!(
+        p.state.cursor, None,
+        "the old cursor belonged to the old folder"
+    );
+    assert_eq!(
+        p.state.options.sort.key,
+        SortKey::Size,
+        "view settings stay"
+    );
+    assert_eq!(p.identity(), id(99));
+    assert_eq!(
+        ws.panel(sub).unwrap().unavailable(),
+        Some(Unavailability::Missing)
+    );
+    assert_eq!(opened.refreshed, [docs, sub]);
+    ok(&ws);
+}
+
+#[test]
+fn nav_c3_an_unknown_identity_is_learned_not_treated_as_a_change() {
+    let mut ws = home();
+    let h = ws.active_panel();
+    let docs = ws.open_child(h, loc("/home/u/Docs"), None).unwrap().panel;
+    ws.state_mut(docs).unwrap().cursor = Some(loc("/home/u/Docs/x"));
+    ws.activate_panel(h).unwrap();
+    let opened = ws
+        .open_directory(h, loc("/home/u/Docs"), id(5), None)
+        .unwrap();
+    assert!(opened.refreshed.is_empty());
+    assert_eq!(ws.panel(docs).unwrap().identity(), id(5));
+    assert_eq!(
+        ws.panel(docs).unwrap().state.cursor,
+        Some(loc("/home/u/Docs/x"))
+    );
+}
+
+#[test]
+fn nav_c5_sidebar_locations_reuse_an_existing_root() {
+    let mut s = scenario();
+    let first = s.ws.open_root(loc("/mnt/usb"), PanelState::default());
+    assert_eq!(first.resolution, Resolution::CreateNewBranch);
+    let usb_child =
+        s.ws.open_child(first.panel, loc("/mnt/usb/photos"), None)
+            .unwrap()
+            .panel;
+    s.ws.activate_branch(s.docs_branch).unwrap();
+    let before = (s.ws.panel_count(), s.ws.branch_count(), s.ws.roots().len());
+
+    let again = s.ws.open_root(loc("/mnt/usb"), PanelState::default());
+    assert_eq!(again.resolution, Resolution::ReactivateExistingBranch);
+    assert_eq!(again.panel, first.panel);
+    assert_eq!(
+        s.ws.active_panel(),
+        usb_child,
+        "back where the branch was left"
+    );
+    assert_eq!(
+        (s.ws.panel_count(), s.ws.branch_count(), s.ws.roots().len()),
+        before,
+        "no duplicate root"
+    );
+    ok(&s.ws);
+}
+
+#[test]
+fn nav_identities_survive_persistence() {
+    let mut ws = home();
+    let h = ws.active_panel();
+    let docs = ws
+        .open_directory(h, loc("/home/u/Docs"), id(77), None)
+        .unwrap()
+        .panel;
+    let restored = Workspace::from_parts(ws.to_parts()).unwrap();
+    assert_eq!(restored.panel(docs).unwrap().identity(), id(77));
 }

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use super::{BranchId, PanelId};
-use crate::entities::Location;
+use crate::entities::{DirectoryIdentity, Location};
 use crate::view::{ViewMode, ViewOptions};
 
 /// Where a panel's list was scrolled to: an item and how far it was
@@ -136,6 +136,8 @@ pub struct Panel {
     pub(super) parent: Option<PanelId>,
     pub(super) children: Vec<PanelId>,
     pub(super) unavailable: Option<Unavailability>,
+    /// The folder's filesystem identity when last opened, if known.
+    pub(super) identity: Option<DirectoryIdentity>,
     pub state: PanelState,
 }
 
@@ -167,6 +169,10 @@ impl Panel {
 
     pub fn unavailable(&self) -> Option<Unavailability> {
         self.unavailable
+    }
+
+    pub fn identity(&self) -> Option<DirectoryIdentity> {
+        self.identity
     }
 }
 

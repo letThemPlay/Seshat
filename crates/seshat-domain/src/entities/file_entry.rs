@@ -26,6 +26,15 @@ pub struct TrashInfo {
     pub deleted_at: Option<SystemTime>,
 }
 
+/// A filesystem object's identity: device and inode. It tells "the same
+/// folder, renamed" apart from "a different folder that now has this name".
+/// Plain numbers, so the domain stays free of platform APIs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DirectoryIdentity {
+    pub device: u64,
+    pub inode: u64,
+}
+
 /// A single entry of a directory listing.
 ///
 /// Names are kept as OS strings: filenames on Linux are not guaranteed to be
@@ -46,6 +55,9 @@ pub struct FileEntry {
     pub content_type: Option<String>,
     /// Present only for top-level items in the Trash.
     pub trash_info: Option<TrashInfo>,
+    /// Device and inode, when the filesystem reports them. Symbolic links
+    /// are never followed, so a link has its own identity.
+    pub identity: Option<DirectoryIdentity>,
 }
 
 impl FileEntry {
@@ -92,6 +104,7 @@ mod tests {
             hidden: false,
             content_type: None,
             trash_info: None,
+            identity: None,
         }
     }
 

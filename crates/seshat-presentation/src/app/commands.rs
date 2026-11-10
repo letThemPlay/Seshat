@@ -76,6 +76,7 @@ impl App {
                 }
             }
             Intent::OpenCommandLine => self.open_command_line(),
+            Intent::Open { launch_files } => self.open_cursor(launch_files),
             Intent::Perform(action) => self.perform(action, sender),
         }
     }
@@ -92,7 +93,11 @@ impl App {
             Action::Parent => {
                 self.service.go_parent();
             }
-            Action::Open => self.open_cursor(),
+            Action::Open => {
+                // Through the mode machine, which decides whether files may open.
+                let intent = self.keys.borrow_mut().interaction.apply(action);
+                self.intent(intent, sender);
+            }
             Action::BranchPrevious => {
                 self.service.cycle_branch(false);
             }
@@ -140,12 +145,32 @@ impl App {
 
     /// Enter: open the cursor item; with several files selected in the
     /// panel and the cursor among them, open them all.
-    fn open_cursor(&mut self) {
+    /// `l` and `Enter` (the same action). A folder under the cursor opens
+    /// through the workspace's context-aware resolution (continue, return
+    /// to or start a branch). A file opens in its application, but not in
+    /// Visual Mode (`launch_files` is false there, decision C6). With
+    /// nothing under the cursor (an empty folder), it moves to the next
+    /// panel of the branch, as `L` does (decision C2).
+    fn open_cursor(&mut self, launch_files: bool) {
         let active = self.service.active_panel();
         let Some(entry) = self.service.cursor_entry(active).cloned() else {
-            self.open_targets();
+            // Only this panel's selection: never open something selected
+            // elsewhere just because this panel has no cursor.
+            let selected_here = self
+                .service
+                .state(active)
+                .is_some_and(|s| !s.selection.is_empty());
+            if launch_files && selected_here {
+                self.open_targets();
+            } else {
+                self.service.move_right();
+            }
             return;
         };
+        if !entry.is_browsable() && !launch_files {
+            self.notice = Some("Files don't open in Visual Mode; press Esc first.".to_owned());
+            return;
+        }
         let selected = self
             .service
             .state(active)

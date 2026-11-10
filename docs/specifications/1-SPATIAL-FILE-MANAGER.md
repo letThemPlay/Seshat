@@ -206,6 +206,8 @@ Requirements:
 - Opening a directory is a separate action from moving right.
 - Horizontal movement must not unexpectedly create branches.
 
+> **Superseded (2026-11-10, decision C2):** [Context-aware navigation](2-CONTEXT-AWARE-NAVIGATION.md) §3 makes `l` open the selected directory, the same as `Enter`, resolving it as a continuation of the active branch, a return to an existing branch or a new branch. Moving to the next existing panel without opening anything stays available as the configurable `panel-right` action, bound to `L` by default. The other requirements of this section still apply.
+
 ### 4.2 Vertical navigation
 
 Vertical movement navigates the contents of the active panel.
@@ -462,6 +464,8 @@ Suggested default bindings:
 | `Esc` | Cancel transient interaction |
 
 Bindings must be configurable.
+
+> **Superseded (2026-11-10, decision C2):** `l` opens the selected directory, the same as `Enter`; see [context-aware navigation](2-CONTEXT-AWARE-NAVIGATION.md) §3. The plain move to the next panel is bound to `L`.
 
 ### 7.2 Command Mode
 

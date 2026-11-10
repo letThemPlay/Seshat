@@ -35,6 +35,7 @@ fn entry(path: &str, dir: bool) -> FileEntry {
         hidden: name.starts_with('.'),
         content_type: None,
         trash_info: None,
+        identity: None,
     }
 }
 
@@ -751,4 +752,150 @@ fn d15_same_named_sources_from_different_folders_never_overwrite() {
     // Without a UI resolver, the second conflicting item is skipped.
     assert_eq!(op.status(), OperationStatus::Completed);
     assert_eq!(fs.content("/h/Target/a.txt").as_deref(), Some("a"));
+}
+
+// ── Context-aware navigation (2-CONTEXT-AWARE-NAVIGATION.md) ────────────
+
+use seshat_domain::entities::DirectoryIdentity;
+use seshat_domain::workspace::Resolution;
+
+fn dir_with_identity(path: &str, inode: u64) -> FileEntry {
+    FileEntry {
+        identity: Some(DirectoryIdentity { device: 1, inode }),
+        ..entry(path, true)
+    }
+}
+
+#[test]
+fn nav_open_entry_reports_how_a_folder_was_resolved() {
+    let mut s = Shell::new();
+    let home = s.active();
+    let docs = s
+        .service
+        .open_entry(home, &entry("/h/Documents", true))
+        .unwrap()
+        .expect("a folder");
+    assert_eq!(docs.resolution, Resolution::ContinueActiveBranch);
+    s.run();
+    s.service.move_left();
+    let downloads = s
+        .service
+        .open_entry(home, &entry("/h/Downloads", true))
+        .unwrap()
+        .unwrap();
+    assert_eq!(downloads.resolution, Resolution::CreateNewBranch);
+    s.run();
+    s.service.move_left();
+    let again = s
+        .service
+        .open_entry(home, &entry("/h/Documents", true))
+        .unwrap()
+        .unwrap();
+    assert_eq!(again.resolution, Resolution::ReactivateExistingBranch);
+    assert_eq!(again.panel, docs.panel);
+    // Files are launched, not navigated.
+    assert!(
+        s.service
+            .open_entry(home, &entry("/h/notes.txt", false))
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn nav_6_reactivation_reads_and_watches_nothing_new() {
+    let (mut s, [home, documents, projects, _]) = scenario();
+    s.service.activate_panel(projects).unwrap();
+    s.service.cycle_branch(true);
+    s.service.move_left();
+    s.run();
+    s.loads_since();
+    let watched = s.watched.len();
+    let opened = s
+        .service
+        .open_entry(home, &entry("/h/Documents", true))
+        .unwrap()
+        .unwrap();
+    s.run();
+    assert_eq!(opened.resolution, Resolution::ReactivateExistingBranch);
+    assert_eq!(s.active(), projects, "back at the remembered panel (C1)");
+    assert_eq!(s.loads_since(), 0, "cached listings are reused");
+    assert_eq!(s.watched.len(), watched, "no extra watches");
+    let _ = documents;
+}
+
+#[test]
+fn nav_16_3_reactivation_restores_panel_state() {
+    let (mut s, [home, documents, projects, _]) = scenario();
+    s.service.activate_panel(projects).unwrap();
+    s.service.move_cursor(projects, 1);
+    s.service.set_sort_key(documents, SortKey::Size);
+    s.service.set_query(documents, "a");
+    s.service.cycle_branch(true);
+    s.service.move_left();
+    s.service
+        .open_entry(home, &entry("/h/Documents", true))
+        .unwrap();
+    s.run();
+    let docs = s.service.state(documents).unwrap();
+    assert_eq!(docs.options.sort.key, SortKey::Size);
+    assert_eq!(docs.options.query, "a");
+    assert_eq!(
+        s.service.state(projects).unwrap().cursor,
+        Some(loc("/h/Documents/Projects/x.rs"))
+    );
+}
+
+#[test]
+fn nav_c3_a_renamed_folder_is_read_again_under_its_new_name() {
+    let mut s = Shell::new();
+    let home = s.active();
+    s.tree.insert("/h/Old".into(), vec![("f".into(), false)]);
+    let old = s
+        .service
+        .open_entry(home, &dir_with_identity("/h/Old", 42))
+        .unwrap()
+        .unwrap()
+        .panel;
+    s.run();
+    assert!(s.watched.contains_key(&old));
+    // Renamed elsewhere; the parent now lists "New" with the same inode.
+    let files = s.tree.remove("/h/Old").unwrap();
+    s.tree.insert("/h/New".into(), files);
+    s.service.move_left();
+    s.loads_since();
+    let opened = s
+        .service
+        .open_entry(home, &dir_with_identity("/h/New", 42))
+        .unwrap()
+        .unwrap();
+    s.run();
+    assert_eq!(opened.panel, old, "the same panel follows the rename");
+    assert_eq!(s.service.location(old), Some(&loc("/h/New")));
+    assert_eq!(s.loads_since(), 1, "read again once, at the new path");
+    assert!(s.service.listing(old).is_some_and(|l| l.total() == 1));
+}
+
+#[test]
+fn nav_unavailable_panels_wait_for_retry() {
+    let (mut s, [_, documents, _, _]) = scenario();
+    let generation = s.watched[&documents];
+    s.service
+        .directory_changed(documents, generation, DirectoryChange::Removed);
+    s.run();
+    // Evicted, then shown again: it stays unavailable instead of being read.
+    s.service.set_capacity(1);
+    s.run();
+    s.loads_since();
+    s.service.set_visible(&[documents]);
+    s.run();
+    assert_eq!(s.loads_since(), 0);
+    assert!(matches!(
+        s.service.listing(documents).unwrap().content(),
+        Content::Failed(ListingError::NotFound)
+    ));
+    // Retry reads it.
+    s.service.reload(documents);
+    s.run();
+    assert_eq!(s.loads_since(), 1);
 }

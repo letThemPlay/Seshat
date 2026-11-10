@@ -66,6 +66,7 @@ fn entries(folder: &Location, n: usize) -> Vec<FileEntry> {
                 hidden: false,
                 content_type: None,
                 trash_info: None,
+                identity: None,
             }
         })
         .collect()

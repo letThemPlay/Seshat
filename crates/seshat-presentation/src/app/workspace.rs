@@ -353,9 +353,13 @@ impl App {
         }
     }
 
+    /// `/` or Ctrl+F. Like Vim's `/`, this starts a new search: a panel's
+    /// remembered query (restored with the panel) is selected, so typing
+    /// replaces it and an arrow key keeps it for editing.
     pub(super) fn start_search(&mut self) {
         self.ui.search_bar.set_search_mode(true);
         self.ui.search_entry.grab_focus();
+        self.ui.search_entry.select_region(0, -1);
     }
 
     /// Shows the active panel's own search in the search bar.

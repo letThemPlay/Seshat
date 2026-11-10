@@ -57,6 +57,12 @@ pub enum Intent {
     LeaveVisual,
     ClearSelection,
     OpenCommandLine,
+    /// Open the cursor item (`l`, `Enter`). Folders always navigate; files
+    /// are launched only outside Visual Mode, so selecting never opens
+    /// files (decision C6).
+    Open {
+        launch_files: bool,
+    },
     /// Everything else, carried out the same way in every mode.
     Perform(Action),
 }
@@ -163,6 +169,9 @@ impl Interaction {
                 self.mode = Mode::Command;
                 Intent::OpenCommandLine
             }
+            (mode, Action::Open) => Intent::Open {
+                launch_files: !matches!(mode, Mode::Visual { .. }),
+            },
             (_, other) => Intent::Perform(other),
         }
     }
@@ -258,7 +267,7 @@ mod tests {
         let mut i = Interaction::default();
         type_keys(&mut i, &map, "v");
         assert_eq!(
-            type_keys(&mut i, &map, "hl]"),
+            type_keys(&mut i, &map, "hL]"),
             [
                 Intent::Perform(Action::PanelLeft),
                 Intent::Perform(Action::PanelRight),
@@ -266,6 +275,24 @@ mod tests {
             ]
         );
         assert_eq!(i.mode(), Mode::Visual { range: false });
+    }
+
+    #[test]
+    fn nav_l_and_enter_open_identically_and_visual_mode_never_launches_files() {
+        let map = KeyMap::default();
+        let mut i = Interaction::default();
+        let normal = Intent::Open { launch_files: true };
+        assert_eq!(type_keys(&mut i, &map, "l<CR>"), [normal, normal]);
+        type_keys(&mut i, &map, "v");
+        let visual = Intent::Open {
+            launch_files: false,
+        };
+        assert_eq!(type_keys(&mut i, &map, "l<CR>"), [visual, visual]);
+        assert_eq!(
+            i.mode(),
+            Mode::Visual { range: false },
+            "opening keeps the mode"
+        );
     }
 
     #[test]

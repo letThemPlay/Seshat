@@ -4,7 +4,7 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 274 Rust tests (up from 165), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (40 checks).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 294 Rust tests (up from 165), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (47 checks).
 
 ## Spatial file manager specification
 
@@ -38,6 +38,25 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 | 13 | Versioned persistence; restore; missing paths | ✅ Verified | `TomlWorkspaceStore` tests; UI test restart. Missing folders show as unavailable panels |
 | 14, 16.8 | Performance | ✅ Verified, with two open findings | Performance run of 2026-11-09 ([review](../review/performance.md)): all approved targets met at 50 branches and 211 panels after one fix (saving off the UI thread). Open: re-reads when cycling through more branches than the 16-listing cache covers (D13), and ~250 ms pauses when a 100,000-entry folder reloads live (exempt under R3) |
 | 15 | Edge cases | ⚠️ Partial | Deleted folders and removed devices: panels kept and marked unavailable (D14). External renames are not followed. Closing the active branch in Focus Mode and resizing in Focus Mode are covered |
+
+## Context-aware navigation specification
+
+[2-CONTEXT-AWARE-NAVIGATION.md](../specifications/2-CONTEXT-AWARE-NAVIGATION.md), [ADR 0006](../decisions/0006-context-aware-navigation.md), decisions C1–C7.
+
+| § | Requirement | Status | Evidence / notes |
+|---|---|---|---|
+| 3 | `l` opens the selected folder; `Enter` is exactly the same; files keep opening | ✅ Verified | Keymap and mode tests (`l` ≡ `<CR>` → `Intent::Open`); workspace UI test "Enter does exactly what l does". The plain move to the next panel is on `L` (C2) |
+| 4.1 | Continue the active branch | ✅ Verified | `nav_16_2_1_*` (domain); UI test step 8 (`k`, `l`, `l`) |
+| 4.2, 6 | Reactivate an existing branch with its downstream panels and state | ✅ Verified | `nav_16_2_3_*`, `nav_c1_*`, `nav_16_3_reactivation_restores_panel_state`, `nav_6_reactivation_reads_and_watches_nothing_new`; UI test "l on an existing child reactivates its branch" |
+| 4.3 | Create a new branch from the current panel | ✅ Verified | `nav_16_2_2_*`; UI test step 5 |
+| 5 | Directory identity separate from branch identity | ✅ Verified | Device and inode per panel (`reports_device_and_inode_*`, `nav_c3_*`); branch IDs unchanged and persisted |
+| 7 | `[` and `]` unchanged, deterministic order | ✅ Verified | Existing branch tests and UI steps 7–11 |
+| 8 | `h` returns to the parent without removing descendants | ✅ Verified | Existing tests; UI test |
+| 9 | Focus Mode keeps working | ✅ Verified | Focus Mode tests unchanged; navigation never changes the presentation flag |
+| 10 | Interaction modes | ✅ Verified | Command Mode never routes keys to navigation; in Visual Mode, `l` navigates folders but never launches files (C6) |
+| 11 | Mouse uses the same logic | ✅ Verified | Double-click goes through `WorkspaceService::open_entry`, the single entry point |
+| 12 | Persistence | ✅ Verified | Format 2 with identities; version 1 files restore unchanged (`version_1_files_restore_with_identities_unknown`) |
+| 13 | Edge cases | ✅ Verified | Repeated opens never duplicate (`nav_16_2_5_*`); rename followed and replacement reset (C3); empty folder: `l` moves to the next panel (C2); links keep their own identity. A folder moved into a different parent is found by path only |
 
 ## Known gaps and follow-ups
 
