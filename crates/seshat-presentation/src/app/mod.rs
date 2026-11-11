@@ -8,8 +8,12 @@
 mod commands;
 mod file_ops;
 mod shortcuts;
+mod theme;
 mod view;
 mod workspace;
+
+use theme::ThemeController;
+pub use theme::ThemeMsg;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -29,9 +33,7 @@ use seshat_application::ports::{
     DeviceError, DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError,
     ThemeRepository, WatchGuard,
 };
-use seshat_application::preferences::{
-    Preferences, PreferencesStore, ThemeChoice, WorkspaceLayout,
-};
+use seshat_application::preferences::{Preferences, PreferencesStore, WorkspaceLayout};
 use seshat_application::use_cases::ListDirectory;
 use seshat_application::view::{SortKey, ViewMode};
 use seshat_application::workspace::file_actions::Availability;
@@ -49,7 +51,7 @@ use crate::keys::{KeyRouter, SharedKeys};
 use crate::operations_panel::OperationsPanel;
 use crate::pathbar::address_text;
 use crate::sidebar::{Sidebar, SidebarInit, SidebarInput, SidebarOutput};
-use crate::theme::{ThemeRegistry, render_css};
+
 use crate::workspace_view::{WorkspaceEvent, WorkspaceView};
 use view::{AppWidgets, Handles};
 
@@ -69,6 +71,27 @@ const SAVE_DELAY: Duration = Duration::from_secs(1);
 
 /// Opening many files at once from one action is almost always a mistake.
 const MAX_FILES_TO_OPEN: usize = 20;
+
+/// What a feature controller may use from the window while it handles a
+/// message. Borrowed from the window's own fields for the duration of one
+/// call, so controllers never keep a copy of workspace state.
+pub(super) struct Cx<'a> {
+    pub service: &'a mut WorkspaceService,
+    /// The status bar's transient message.
+    pub notice: &'a mut Option<String>,
+    pub sender: &'a ComponentSender<App>,
+}
+
+/// Lends a controller the window's shared state (see [`Cx`]).
+macro_rules! cx {
+    ($app:expr, $sender:expr) => {
+        Cx {
+            service: &mut $app.service,
+            notice: &mut $app.notice,
+            sender: $sender,
+        }
+    };
+}
 
 /// Dependencies supplied by the composition root.
 pub struct AppInit {
@@ -120,11 +143,7 @@ pub enum Msg {
     FocusFiles,
     CloseSearch,
     Search(String),
-    SetTheme(String),
-    ReloadThemes,
-    ThemesChanged,
-    OpenThemesFolder,
-    SystemColorSchemeChanged,
+    Theme(ThemeMsg),
     EditAddress,
     CancelAddress,
     AddressSubmitted(String),
@@ -230,7 +249,6 @@ pub struct App {
     device_monitor: Rc<dyn DeviceMonitor>,
     launcher: Rc<dyn Launcher>,
     preferences_store: Rc<dyn PreferencesStore>,
-    theme_repository: Rc<dyn ThemeRepository>,
     workspace_store: Rc<dyn WorkspaceStore>,
     sidebar: Controller<Sidebar>,
     actions: Actions,
@@ -262,11 +280,7 @@ pub struct App {
     editing_address: bool,
     save_pending: bool,
 
-    theme_choice: ThemeChoice,
-    themes: ThemeRegistry,
-    themes_watch: Option<WatchGuard>,
-    themes_reload_pending: bool,
-    css_provider: gtk::CssProvider,
+    theme: ThemeController,
 
     operations: OperationManager,
     /// Conflicts waiting for the open dialog to close.
@@ -321,7 +335,9 @@ impl SimpleComponent for App {
         if let Some(settings) = gtk::Settings::default() {
             let sender = sender.clone();
             settings.connect_gtk_interface_color_scheme_notify(move |_| {
-                sender.input_sender().emit(Msg::SystemColorSchemeChanged);
+                sender
+                    .input_sender()
+                    .emit(Msg::Theme(ThemeMsg::SystemColorSchemeChanged));
             });
         }
 
@@ -370,6 +386,7 @@ impl SimpleComponent for App {
             prefs.workspace.classic_keys,
             &sender,
         );
+        let ui_theme_button = ui.theme_button.clone();
         init.operations
             .set_conflict_resolver(std::sync::Arc::new(UiConflictResolver::new(
                 sender.input_sender().clone(),
@@ -452,7 +469,6 @@ impl SimpleComponent for App {
             device_monitor: init.device_monitor,
             launcher: init.launcher,
             preferences_store: init.preferences,
-            theme_repository: init.themes,
             workspace_store: init.workspace_store,
             sidebar,
             actions,
@@ -469,7 +485,12 @@ impl SimpleComponent for App {
             logged_shape: None,
             search_echo: None,
             devices,
-            theme_choice: prefs.theme.clone(),
+            theme: ThemeController::new(
+                init.themes,
+                prefs.theme.clone(),
+                css_provider,
+                ui_theme_button,
+            ),
             preferences: prefs,
             staged: None,
             notice: key_warnings
@@ -477,18 +498,15 @@ impl SimpleComponent for App {
                 .map(|w| format!("Key bindings: {w} (see the log)")),
             editing_address: false,
             save_pending: false,
-            themes: ThemeRegistry::default(),
-            themes_watch: None,
-            themes_reload_pending: false,
-            css_provider,
             operations: init.operations,
             conflict_queue: std::collections::VecDeque::new(),
             conflict_dialog: None,
             hold: None,
         };
-        model.load_themes();
-        model.watch_themes(&sender);
-        model.apply_theme();
+        let watcher = model.directory_watcher.clone();
+        model
+            .theme
+            .start(watcher.as_ref(), &mut cx!(model, &sender));
         model.sync(&sender);
 
         ComponentParts { model, widgets }
@@ -583,33 +601,9 @@ impl SimpleComponent for App {
                     self.service.set_query(active, &query);
                 }
             }
-            Msg::SetTheme(id) => {
-                if let Some(choice) = ThemeChoice::from_id(&id) {
-                    self.theme_choice = choice;
-                    self.apply_theme();
+            Msg::Theme(msg) => {
+                if self.theme.update(msg, &mut cx!(self, &sender)) {
                     self.save_preferences();
-                }
-            }
-            Msg::ReloadThemes => {
-                self.themes_reload_pending = false;
-                self.load_themes();
-                self.apply_theme();
-            }
-            Msg::ThemesChanged if !self.themes_reload_pending => {
-                self.themes_reload_pending = true;
-                let sender = sender.clone();
-                gtk::glib::timeout_add_local_once(RELOAD_DEBOUNCE, move || {
-                    sender.input_sender().emit(Msg::ReloadThemes);
-                });
-            }
-            Msg::ThemesChanged => {}
-            Msg::OpenThemesFolder => match self.theme_repository.ensure_directory() {
-                Ok(directory) => self.service.open_location(Location::Path(directory)),
-                Err(err) => self.notice = Some(format!("Cannot open the themes folder: {err}")),
-            },
-            Msg::SystemColorSchemeChanged => {
-                if self.theme_choice == ThemeChoice::System {
-                    self.apply_theme();
                 }
             }
             Msg::EditAddress => self.editing_address = true,
@@ -731,7 +725,7 @@ impl SimpleComponent for App {
             state.options.show_hidden,
             state.mode,
             state.options.sort,
-            &self.theme_choice,
+            self.theme.choice(),
             ws.focus_mode(),
             ActionContext {
                 files: Availability::of(&self.service),
@@ -970,71 +964,11 @@ impl App {
         });
     }
 
-    fn load_themes(&mut self) {
-        self.themes = ThemeRegistry::from_sources(self.theme_repository.load_all());
-        self.ui
-            .theme_button
-            .set_menu_model(Some(&actions::theme_menu(&self.themes)));
-        if let Some(error) = self.themes.errors().first() {
-            self.notice = Some(format!(
-                "Theme “{}” could not be loaded: {}",
-                error.id, error.message
-            ));
-        }
-    }
-
-    /// Reloads themes when files in the themes folder change.
-    fn watch_themes(&mut self, sender: &ComponentSender<Self>) {
-        let directory = match self.theme_repository.ensure_directory() {
-            Ok(directory) => directory,
-            Err(err) => {
-                tracing::debug!(error = %err, "cannot create themes folder; not watching");
-                return;
-            }
-        };
-        let sender = sender.clone();
-        self.themes_watch = self
-            .directory_watcher
-            .watch(
-                &Location::Path(directory),
-                Box::new(move |_| sender.input_sender().emit(Msg::ThemesChanged)),
-            )
-            .ok();
-    }
-
-    fn apply_theme(&mut self) {
-        let system_dark = system_prefers_dark();
-        let theme = match self.themes.resolve(&self.theme_choice, system_dark) {
-            Some(theme) => theme,
-            None => {
-                self.notice = Some(format!(
-                    "Theme “{}” is not available; following the system theme.",
-                    self.theme_choice.id().trim_start_matches("custom:")
-                ));
-                self.themes
-                    .resolve(&ThemeChoice::System, system_dark)
-                    .expect("built-in themes always resolve")
-            }
-        };
-        if let ThemeChoice::Custom(id) = &self.theme_choice
-            && let Some(custom) = self.themes.custom(id)
-            && !custom.warnings.is_empty()
-        {
-            self.notice = Some(format!(
-                "Theme “{}” has {} issue(s); see the log for details.",
-                custom.theme.name,
-                custom.warnings.len()
-            ));
-        }
-        tracing::debug!(theme = %theme.name, choice = ?self.theme_choice, "applying theme");
-        self.css_provider.load_from_string(&render_css(&theme));
-    }
-
     /// Saves the theme and the defaults for new panels (decision D11: the
     /// last changed panel setting becomes the default).
     fn save_preferences(&mut self) {
         let defaults = self.service.defaults();
-        self.preferences.theme = self.theme_choice.clone();
+        self.preferences.theme = self.theme.choice().clone();
         self.preferences.show_hidden = defaults.options.show_hidden;
         self.preferences.view_mode = defaults.mode;
         self.preferences.sort = defaults.options.sort;
@@ -1051,9 +985,4 @@ fn item_count(shown: usize, total: usize) -> String {
     } else {
         format!("{shown} of {total} item{}", plural(total))
     }
-}
-
-fn system_prefers_dark() -> bool {
-    gtk::Settings::default()
-        .is_some_and(|s| s.gtk_interface_color_scheme() == gtk::InterfaceColorScheme::Dark)
 }
