@@ -6,6 +6,7 @@ use relm4::ComponentSender;
 use super::{App, CommandLineMsg, Msg};
 use crate::keys::{self, SharedKeys};
 use seshat_application::interaction::{Action, Intent, Mode};
+use seshat_application::view::ViewMode;
 
 /// A GTK accelerator and the message it sends.
 type Shortcut = (&'static str, fn() -> Msg);
@@ -21,8 +22,8 @@ const SHORTCUTS: &[Shortcut] = &[
     ("<Control>h", || Msg::ToggleHidden),
     ("<Control>l", || Msg::EditAddress),
     ("<Control>f", || Msg::StartSearch),
-    ("<Control>1", || Msg::SetViewMode("list".to_owned())),
-    ("<Control>2", || Msg::SetViewMode("grid".to_owned())),
+    ("<Control>1", || Msg::SetViewMode(ViewMode::List)),
+    ("<Control>2", || Msg::SetViewMode(ViewMode::Grid)),
     ("<Control><Shift>c", || Msg::CopyPaths),
     ("<Shift>F10", || Msg::KeyboardContextMenu),
     ("Menu", || Msg::KeyboardContextMenu),

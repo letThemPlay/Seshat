@@ -121,24 +121,34 @@ impl Actions {
         let sort_descending = toggle("sort-descending", || Msg::ToggleSortDescending);
         let focus_mode = toggle("focus-mode", || Msg::Perform(Action::FocusMode));
 
-        let string_action = |name: &str, initial: &str, msg: fn(String) -> Msg| {
+        let string_action = |name: &str, initial: &str, parse: fn(&str) -> Option<Msg>| {
             let action = gio::SimpleAction::new_stateful(
                 name,
                 Some(&String::static_variant_type()),
                 &initial.to_variant(),
             );
             let sender = sender.clone();
+            let name = name.to_owned();
             action.connect_activate(move |_, param| {
-                if let Some(value) = param.and_then(|p| p.get::<String>()) {
-                    sender.input_sender().emit(msg(value));
+                let Some(value) = param.and_then(|p| p.get::<String>()) else {
+                    return;
+                };
+                // Ids are parsed here, so messages carry typed values.
+                match parse(&value) {
+                    Some(msg) => sender.input_sender().emit(msg),
+                    None => tracing::warn!(action = %name, value, "unknown action value"),
                 }
             });
             action
         };
-        let view_mode = string_action("view-mode", ViewMode::List.id(), Msg::SetViewMode);
-        let sort_key = string_action("sort-key", SortKey::Name.id(), Msg::SetSortKey);
+        let view_mode = string_action("view-mode", ViewMode::List.id(), |id| {
+            ViewMode::from_id(id).map(Msg::SetViewMode)
+        });
+        let sort_key = string_action("sort-key", SortKey::Name.id(), |id| {
+            SortKey::from_id(id).map(Msg::SetSortKey)
+        });
         let theme = string_action("theme", &ThemeChoice::System.id(), |id| {
-            Msg::Theme(ThemeMsg::Set(id))
+            ThemeChoice::from_id(id).map(|choice| Msg::Theme(ThemeMsg::Set(choice)))
         });
 
         for action in [

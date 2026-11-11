@@ -4,7 +4,6 @@
 use relm4::ComponentSender;
 use seshat_application::interaction::command::{BranchCommand, COMMANDS, Command, Destination};
 use seshat_application::interaction::{Action, Intent};
-use seshat_application::navigation::parse_address;
 use seshat_application::workspace::file_actions::ItemKind;
 use seshat_application::workspace::{TransferKind, TransferPlan};
 use seshat_domain::Direction;
@@ -301,13 +300,10 @@ impl App {
                     None => self.notice = Some(notice::no_branch(n)),
                 }
             }
-            Command::Open(text) => {
-                let current = self.service.active_location().clone();
-                match parse_address(&text, &self.home, Some(&current)) {
-                    Ok(location) => self.service.open_location(location),
-                    Err(err) => self.notice = Some(Notice::from_error(&err)),
-                }
-            }
+            Command::Open(text) => match self.resolve_address(&text) {
+                Ok(location) => self.service.open_location(location),
+                Err(err) => self.notice = Some(Notice::from_error(&err)),
+            },
             Command::Help => self.show_help(),
             // Handled above by `perform` (see `Command::as_action`).
             Command::Branch(BranchCommand::Next | BranchCommand::Previous) | Command::Focus => {}
@@ -343,16 +339,13 @@ impl App {
                     return;
                 }
             },
-            Some(Destination::Path(text)) => {
-                let current = self.service.active_location().clone();
-                match parse_address(&text, &self.home, Some(&current)) {
-                    Ok(location) => Some(location),
-                    Err(err) => {
-                        self.notice = Some(Notice::from_error(&err));
-                        return;
-                    }
+            Some(Destination::Path(text)) => match self.resolve_address(&text) {
+                Ok(location) => Some(location),
+                Err(err) => {
+                    self.notice = Some(Notice::from_error(&err));
+                    return;
                 }
-            }
+            },
             None => None,
         };
         match destination {
