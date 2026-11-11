@@ -46,6 +46,7 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 ### Rules specific to the workspace
 
 - Navigation state never lives in widgets: views are rebuilt from the service.
+- Enums whose variants have stable text ids (settings files, window actions) are declared with `seshat_domain::stable_ids!`, which keeps `ALL`, `id()` and `from_id()` in step with the variants.
 - One dispatcher: an action that a key, menu, toolbar button, mouse button or command can trigger is an `Action` and runs through `App::perform` (`Msg::Perform`). A command maps to its action with `Command::as_action`. Never add a second handler for the same action.
 - Focus Mode changes presentation only, and never creates, destroys or duplicates panels.
 - File action rules live in the application layer (`workspace::file_actions`): what rename, Trash, delete, restore, new item, empty Trash and the clipboard act on, and when they are refused. The window shows the confirmation or name prompt an `ActionPlan` asks for and submits its captured request; it never decides targets itself.

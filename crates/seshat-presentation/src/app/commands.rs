@@ -7,7 +7,7 @@ use seshat_application::interaction::{Action, Intent};
 use seshat_application::navigation::parse_address;
 use seshat_application::workspace::{PruneError, TransferKind, TransferPlan};
 use seshat_domain::entities::Location;
-use seshat_domain::workspace::{BranchId, PruneMotion};
+use seshat_domain::workspace::PruneMotion;
 
 use super::command_line::CommandLineOutcome;
 use super::{App, Msg};
@@ -296,12 +296,14 @@ impl App {
             }
             Command::Branch(BranchCommand::Overview) => self.show_branches(),
             Command::Branch(BranchCommand::Close) => self.close_branch(None),
-            Command::Branch(BranchCommand::Switch(n)) => match self.branch_number(n) {
-                Some(branch) => {
-                    let _ = self.service.activate_branch(branch);
+            Command::Branch(BranchCommand::Switch(n)) => {
+                match self.service.workspace().branch_number(n) {
+                    Some(branch) => {
+                        let _ = self.service.activate_branch(branch);
+                    }
+                    None => self.notice = Some(Notice::error(format!("There is no branch {n}"))),
                 }
-                None => self.notice = Some(Notice::error(format!("There is no branch {n}"))),
-            },
+            }
             Command::Open(text) => {
                 let current = self.service.active_location().clone();
                 match parse_address(&text, &self.home, Some(&current)) {
@@ -313,14 +315,6 @@ impl App {
             // Handled above by `perform` (see `Command::as_action`).
             Command::Branch(BranchCommand::Next | BranchCommand::Previous) | Command::Focus => {}
         }
-    }
-
-    fn branch_number(&self, n: usize) -> Option<BranchId> {
-        self.service
-            .workspace()
-            .branches()
-            .get(n.checked_sub(1)?)
-            .map(|b| b.id())
     }
 
     /// `:copy` / `:move`: to a typed folder, a branch's active panel, or
@@ -339,7 +333,7 @@ impl App {
             return;
         }
         let destination = match destination {
-            Some(Destination::Branch(n)) => match self.branch_number(n) {
+            Some(Destination::Branch(n)) => match self.service.workspace().branch_number(n) {
                 Some(branch) => {
                     let panel = self
                         .service
@@ -400,7 +394,7 @@ impl App {
             .map(|(folder, n)| format!("• {n} from {}", crate::pathbar::address_text(folder)))
             .collect::<Vec<_>>()
             .join("\n");
-        let title = format!("{}?", plan.summary());
+        let title = format!("{}?", super::file_ops::transfer_summary(&plan));
         let verb = plan.kind.verb();
         let sender = sender.clone();
         dialogs::confirm_safe(

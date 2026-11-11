@@ -43,6 +43,50 @@ pub struct Opened {
     pub refreshed: Vec<PanelId>,
 }
 
+impl Opened {
+    /// An existing panel was activated; nothing was created.
+    fn existing(
+        panel: PanelId,
+        active: PanelId,
+        branch: BranchId,
+        resolution: Resolution,
+        refreshed: Vec<PanelId>,
+    ) -> Self {
+        Self {
+            panel,
+            active,
+            branch,
+            resolution,
+            created: false,
+            new_branch: false,
+            refreshed,
+        }
+    }
+
+    /// A new panel was created and became active, extending its branch or,
+    /// with `new_branch`, starting one.
+    fn created(
+        panel: PanelId,
+        branch: BranchId,
+        new_branch: bool,
+        refreshed: Vec<PanelId>,
+    ) -> Self {
+        Self {
+            panel,
+            active: panel,
+            branch,
+            resolution: if new_branch {
+                Resolution::CreateNewBranch
+            } else {
+                Resolution::ContinueActiveBranch
+            },
+            created: true,
+            new_branch,
+            refreshed,
+        }
+    }
+}
+
 /// How opening a folder was resolved (context-aware navigation, §4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Resolution {
@@ -205,6 +249,12 @@ impl Workspace {
             .into_iter()
             .filter_map(|leaf| self.branch_with_tip(leaf))
             .collect()
+    }
+
+    /// Branch number `n`, counting from 1 in the order of [`Self::branches`]:
+    /// the numbers the branch bar shows and `:branch N` uses.
+    pub fn branch_number(&self, n: usize) -> Option<BranchId> {
+        self.branches().get(n.checked_sub(1)?).map(|b| b.id)
     }
 
     /// The panels of `branch`, from its root to its tip.
@@ -394,15 +444,9 @@ impl Workspace {
                 (branch, land, Resolution::ReactivateExistingBranch)
             };
             self.set_active(branch, active, true);
-            return Ok(Opened {
-                panel: child,
-                active,
-                branch,
-                resolution,
-                created: false,
-                new_branch: false,
-                refreshed,
-            });
+            return Ok(Opened::existing(
+                child, active, branch, resolution, refreshed,
+            ));
         }
 
         let state = state.unwrap_or(inherited);
@@ -422,19 +466,7 @@ impl Workspace {
             None => (self.add_branch(child), true),
         };
         self.set_active(branch, child, true);
-        Ok(Opened {
-            panel: child,
-            active: child,
-            branch,
-            resolution: if new_branch {
-                Resolution::CreateNewBranch
-            } else {
-                Resolution::ContinueActiveBranch
-            },
-            created: true,
-            new_branch,
-            refreshed,
-        })
+        Ok(Opened::created(child, branch, new_branch, refreshed))
     }
 
     /// Opens `location` from outside the tree (sidebar, address bar,
@@ -444,15 +476,13 @@ impl Workspace {
     pub fn open_root(&mut self, location: Location, state: PanelState) -> Opened {
         if let Some(existing) = self.find_on_active_path(&location) {
             self.set_active(self.active, existing, true);
-            return Opened {
-                panel: existing,
-                active: existing,
-                branch: self.active,
-                resolution: Resolution::ContinueActiveBranch,
-                created: false,
-                new_branch: false,
-                refreshed: Vec::new(),
-            };
+            return Opened::existing(
+                existing,
+                existing,
+                self.active,
+                Resolution::ContinueActiveBranch,
+                Vec::new(),
+            );
         }
         let root = self
             .roots
@@ -473,29 +503,19 @@ impl Workspace {
             // panel is always at or below it.
             let active = self.branches[&branch].cursor;
             self.set_active(branch, active, true);
-            return Opened {
-                panel: root,
+            return Opened::existing(
+                root,
                 active,
                 branch,
-                resolution: Resolution::ReactivateExistingBranch,
-                created: false,
-                new_branch: false,
-                refreshed: Vec::new(),
-            };
+                Resolution::ReactivateExistingBranch,
+                Vec::new(),
+            );
         }
         let panel = self.add_panel(location, None, state);
         self.roots.push(panel);
         let branch = self.add_branch(panel);
         self.set_active(branch, panel, true);
-        Opened {
-            panel,
-            active: panel,
-            branch,
-            resolution: Resolution::CreateNewBranch,
-            created: true,
-            new_branch: true,
-            refreshed: Vec::new(),
-        }
+        Opened::created(panel, branch, true, Vec::new())
     }
 
     /// Gives root panel `root` a parent panel for its parent folder and

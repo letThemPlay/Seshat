@@ -141,24 +141,6 @@ impl TransferPlan {
             },
         }
     }
-
-    /// "Copy 5 items from 2 folders to “Downloads”".
-    pub fn summary(&self) -> String {
-        let items = match self.sources.len() {
-            1 => "1 item".to_owned(),
-            n => format!("{n} items"),
-        };
-        let from = match self.origins.len() {
-            1 => String::new(),
-            n => format!(" from {n} folders"),
-        };
-        let to = self
-            .destination
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| self.destination.display().to_string());
-        format!("{} {items}{from} to “{to}”", self.kind.verb())
-    }
 }
 
 #[cfg(test)]
@@ -201,7 +183,6 @@ mod tests {
                 destination: "/h/Downloads".into(),
             }
         );
-        assert_eq!(plan.summary(), "Copy 3 items from 2 folders to “Downloads”");
     }
 
     #[test]
@@ -239,6 +220,5 @@ mod tests {
         )
         .unwrap();
         assert!(plan.is_noop());
-        assert_eq!(plan.summary(), "Move 2 items to “a”");
     }
 }

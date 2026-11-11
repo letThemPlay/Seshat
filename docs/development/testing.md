@@ -46,6 +46,7 @@ Notes for writing scripts:
 - Send the shifted character for Shift chords (`chord ctrl shift N`), as a real keyboard would.
 - Headless Sway doesn't refocus a parent window after its dialog closes; call `focus_main`.
 - Navigate with absolute paths in the address bar (`type_text "$H/Notes"`).
+- When a scenario needs an operation to still be running, wait for it in the log (`file-operations.sh` counts "operation queued" against "operation finished"). Don't rely on a fixed sleep: on a fast machine the operation may already have finished.
 
 ## Manual checks
 
