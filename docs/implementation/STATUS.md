@@ -1,10 +1,10 @@
 # Implementation status
 
-Status as of 2026-11-11, branch `refactor-app-controllers`.
+Status as of 2026-11-11, branch `refactor-typed-notices`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 377 Rust tests (up from 341 before the Fuzzy Find engine, 165 originally), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (63 checks, including backward pruning).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 385 Rust tests (up from 341 before the Fuzzy Find engine, 165 originally), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (63 checks, including backward pruning).
 
 ## Spatial file manager specification
 
@@ -102,5 +102,5 @@ Status as of 2026-11-11, branch `refactor-app-controllers`.
 ## Known gaps and follow-ups
 
 1. **Performance follow-ups** from the [2026-11-09 run](../review/performance.md): the listing cache size (D13) for workspaces with many branches, and incremental model updates for live reloads of very large folders. Deferred (2026-11-09, R5): revisit only if needed.
-2. **Manual verification on GNOME and KDE Plasma, and with Orca.** The full checklist passed on Hyprland and Niri ([2026-11-10](../development/verification-results/2026-11-10-hyprland-niri.md)), including drag and drop, scaling, touchpad scrolling, devices and the Trash.
+2. **Manual verification on GNOME and KDE Plasma, and with Orca.** The full checklist passed on Hyprland and Niri ([2026-11-10](../development/verification-results/2026-11-10-hyprland-niri.md)), including drag and drop, scaling, touchpad scrolling, devices and the Trash. The Orca check now also covers error messages being announced (decision N2) and confirmations not being announced.
 3. **D12 panel features** (columns, expanded metadata, preview), if they are wanted later.

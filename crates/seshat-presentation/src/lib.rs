@@ -13,6 +13,7 @@ pub mod diagnostics;
 mod dialogs;
 mod files;
 mod keys;
+mod notice;
 mod operations_panel;
 mod panel_view;
 mod pathbar;

@@ -29,6 +29,9 @@ pub struct AppWidgets {
     pub pending_label: gtk::Label,
     pub focus_label: gtk::Label,
     pub status_bar: gtk::Label,
+    /// The last notice announced to screen readers (by `Notice::id`), so a
+    /// re-render never repeats an announcement.
+    pub announced: Option<u64>,
 }
 
 /// Widgets the model drives directly from `update`.
@@ -353,6 +356,7 @@ pub fn build(
             pending_label,
             focus_label,
             status_bar,
+            announced: None,
         },
         Handles {
             workspace,

@@ -13,6 +13,7 @@ use seshat_application::use_cases::ListDirectory;
 use seshat_domain::entities::FileEntry;
 
 use super::{Cx, ListingResult, Msg};
+use crate::notice::Notice;
 use crate::workspace_view::folder_title;
 
 /// Completion matches shown in the status bar: at most this many.
@@ -129,7 +130,7 @@ impl CommandLineController {
             let next = cycle.step(forward);
             let (candidates, index) = (cycle.candidates().to_vec(), cycle.index());
             self.set_text(&next);
-            *cx.notice = Some(match_list(&candidates, index));
+            *cx.notice = Some(Notice::verbatim(match_list(&candidates, index)));
             return;
         }
         self.completion = None;
@@ -202,7 +203,7 @@ impl CommandLineController {
         keep: String,
         partial: &str,
         result: Result<Vec<FileEntry>, ListingError>,
-        notice: &mut Option<String>,
+        notice: &mut Option<Notice>,
     ) {
         if request != self.request
             || !WidgetExt::is_visible(&self.entry)
@@ -215,7 +216,7 @@ impl CommandLineController {
                 let names = completion::path_candidates(&entries, partial);
                 self.finish(keep, partial, names.clone(), names, notice);
             }
-            Err(err) => *notice = Some(crate::panel_view::error_message(&err, None)),
+            Err(err) => *notice = Some(Notice::error(crate::panel_view::error_message(&err, None))),
         }
     }
 
@@ -227,10 +228,10 @@ impl CommandLineController {
         partial: &str,
         candidates: Vec<String>,
         labels: Vec<String>,
-        notice: &mut Option<String>,
+        notice: &mut Option<Notice>,
     ) {
         match candidates.as_slice() {
-            [] => *notice = Some("No matches".to_owned()),
+            [] => *notice = Some(Notice::info("No matches")),
             [single] => {
                 self.set_text(&format!("{keep}{single}"));
                 *notice = None;
@@ -238,7 +239,7 @@ impl CommandLineController {
             many => {
                 let text = format!("{keep}{}", completion::common_prefix(many, partial));
                 self.set_text(&text);
-                *notice = Some(match_list(&labels, None));
+                *notice = Some(Notice::verbatim(match_list(&labels, None)));
                 self.completion = Some(CompletionCycle::new(keep, candidates, text));
             }
         }

@@ -11,6 +11,7 @@ use seshat_application::workspace::WorkspaceService;
 use seshat_domain::entities::{Device, DeviceId, Location};
 
 use super::{App, Cx, Msg};
+use crate::notice::Notice;
 use crate::sidebar::SidebarInput;
 
 #[derive(Debug)]
@@ -89,12 +90,12 @@ impl DeviceController {
                     None
                 }
                 Ok(None) => {
-                    *cx.notice = Some("The device can be removed safely.".to_owned());
+                    *cx.notice = Some(Notice::info("The device can be removed safely"));
                     None
                 }
                 Err(err) => {
                     tracing::warn!(error = %err, "device action failed");
-                    *cx.notice = Some(format!("Device action failed: {err}"));
+                    *cx.notice = Some(Notice::error(format!("Device action failed: {err}")));
                     // Reselect the current location instead of the device row.
                     Some(SidebarInput::SetCurrent(Some(
                         cx.service.active_location().clone(),
@@ -109,7 +110,7 @@ impl DeviceController {
     fn changed(
         &mut self,
         service: &mut WorkspaceService,
-        notice: &mut Option<String>,
+        notice: &mut Option<Notice>,
     ) -> Option<SidebarInput> {
         let devices = self.monitor.devices();
         let vanished = vanished_roots(&self.devices, &devices);
@@ -124,9 +125,9 @@ impl DeviceController {
             .map(|root| service.detach_device(root))
             .sum();
         if lost > 0 {
-            *notice = Some(
-                "The device was removed. Its panels are kept until you close them.".to_owned(),
-            );
+            *notice = Some(Notice::info(
+                "The device was removed. Its panels are kept until you close them",
+            ));
         }
         Some(SidebarInput::SetDevices(devices))
     }
@@ -207,7 +208,7 @@ mod tests {
             "the panel is kept, marked unavailable"
         );
         assert_eq!(
-            notice.as_deref(),
+            notice.as_ref().map(Notice::text),
             Some("The device was removed. Its panels are kept until you close them.")
         );
     }
