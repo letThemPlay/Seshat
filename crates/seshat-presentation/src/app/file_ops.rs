@@ -33,6 +33,22 @@ fn quoted_or_count(items: &[Location]) -> String {
     }
 }
 
+/// "Copy 5 items from 2 folders to “Downloads”": the heading of a transfer
+/// confirmation.
+pub(super) fn transfer_summary(plan: &TransferPlan) -> String {
+    let items = notice::count(plan.sources.len(), "item", "items");
+    let from = match plan.origins.len() {
+        1 => String::new(),
+        n => format!(" from {n} folders"),
+    };
+    let to = plan
+        .destination
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| plan.destination.display().to_string());
+    format!("{} {items}{from} to “{to}”", plan.kind.verb())
+}
+
 /// "• 2 from ~/Documents" lines for a confirmation.
 fn origin_lines(origins: &[(Location, usize)]) -> String {
     origins
@@ -317,5 +333,40 @@ impl App {
             }
             Err(err) => self.notice = Some(Notice::from_error(&err)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use seshat_application::workspace::{TransferKind, TransferPlan};
+    use seshat_domain::entities::Location;
+
+    use super::transfer_summary;
+
+    fn plan(kind: TransferKind, sources: &[&str], destination: &str) -> TransferPlan {
+        let sources: Vec<PathBuf> = sources.iter().map(PathBuf::from).collect();
+        TransferPlan::from_paths(kind, &sources, &Location::Path(destination.into())).unwrap()
+    }
+
+    #[test]
+    fn transfer_summaries_say_what_goes_where() {
+        assert_eq!(
+            transfer_summary(&plan(
+                TransferKind::Copy,
+                &["/h/Documents/a", "/h/Documents/b", "/h/Pictures/c"],
+                "/h/Downloads"
+            )),
+            "Copy 3 items from 2 folders to “Downloads”"
+        );
+        assert_eq!(
+            transfer_summary(&plan(TransferKind::Move, &["/a/x", "/a/y"], "/a")),
+            "Move 2 items to “a”"
+        );
+        assert_eq!(
+            transfer_summary(&plan(TransferKind::Copy, &["/a/x"], "/d")),
+            "Copy 1 item to “d”"
+        );
     }
 }

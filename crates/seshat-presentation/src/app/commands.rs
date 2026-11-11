@@ -394,7 +394,7 @@ impl App {
             .map(|(folder, n)| format!("• {n} from {}", crate::pathbar::address_text(folder)))
             .collect::<Vec<_>>()
             .join("\n");
-        let title = format!("{}?", plan.summary());
+        let title = format!("{}?", super::file_ops::transfer_summary(&plan));
         let verb = plan.kind.verb();
         let sender = sender.clone();
         dialogs::confirm_safe(
