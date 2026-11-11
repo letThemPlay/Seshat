@@ -406,6 +406,12 @@ impl App {
     }
 
     fn run_command(&mut self, command: Command, sender: &ComponentSender<Self>) {
+        // A command with a key-bindable equivalent goes through the same
+        // dispatcher as keys, menus and the toolbar.
+        if let Some(action) = command.as_action() {
+            self.perform(action, sender);
+            return;
+        }
         let active = self.service.active_panel();
         match command {
             Command::Copy(destination) => {
@@ -468,12 +474,6 @@ impl App {
                 self.save_preferences();
             }
             Command::Branch(BranchCommand::Overview) => self.show_branches(),
-            Command::Branch(BranchCommand::Next) => {
-                self.service.cycle_branch(true);
-            }
-            Command::Branch(BranchCommand::Previous) => {
-                self.service.cycle_branch(false);
-            }
             Command::Branch(BranchCommand::Close) => self.close_branch(None),
             Command::Branch(BranchCommand::Switch(n)) => match self.branch_number(n) {
                 Some(branch) => {
@@ -481,9 +481,6 @@ impl App {
                 }
                 None => self.notice = Some(format!("There is no branch {n}.")),
             },
-            Command::Focus => {
-                self.service.toggle_focus_mode();
-            }
             Command::Open(text) => {
                 let current = self.service.active_location().clone();
                 match parse_address(&text, &self.home, Some(&current)) {
@@ -492,6 +489,8 @@ impl App {
                 }
             }
             Command::Help => self.show_help(),
+            // Handled above by `perform` (see `Command::as_action`).
+            Command::Branch(BranchCommand::Next | BranchCommand::Previous) | Command::Focus => {}
         }
     }
 

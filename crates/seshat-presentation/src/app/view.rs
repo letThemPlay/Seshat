@@ -4,6 +4,7 @@ use gtk::prelude::*;
 use relm4::ComponentSender;
 use std::rc::Rc;
 
+use seshat_application::interaction::Action;
 use seshat_application::view::ViewMode;
 
 use super::{App, Msg};
@@ -91,19 +92,19 @@ pub fn build(
         "go-previous-symbolic",
         "Back (Alt+Left, Ctrl+O)",
         sender,
-        || Msg::Back,
+        || Msg::Perform(Action::Back),
     );
     let forward_button = icon_button(
         "go-next-symbolic",
         "Forward (Alt+Right, Ctrl+I)",
         sender,
-        || Msg::Forward,
+        || Msg::Perform(Action::Forward),
     );
     let up_button = icon_button(
         "go-up-symbolic",
         "Parent panel (Alt+Up, Backspace)",
         sender,
-        || Msg::GoUp,
+        || Msg::Perform(Action::Parent),
     );
     let refresh_button = icon_button("view-refresh-symbolic", "Refresh (F5)", sender, || {
         Msg::Refresh

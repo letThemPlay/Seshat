@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use gtk::gio;
 use gtk::prelude::*;
 use relm4::ComponentSender;
+use seshat_application::interaction::Action;
 use seshat_application::preferences::ThemeChoice;
 use seshat_application::view::{SortKey, SortOrder, ViewMode};
 
@@ -49,8 +50,8 @@ const COMMANDS: &[Command] = &[
     ("empty-trash", || Msg::EmptyTrash),
     ("branches", || Msg::ShowBranches),
     ("close-branch", || Msg::CloseBranch),
-    ("next-branch", || Msg::CycleBranch(true)),
-    ("previous-branch", || Msg::CycleBranch(false)),
+    ("next-branch", || Msg::Perform(Action::BranchNext)),
+    ("previous-branch", || Msg::Perform(Action::BranchPrevious)),
     ("help", || Msg::ShowHelp),
 ];
 
@@ -104,7 +105,7 @@ impl Actions {
         };
         let show_hidden = toggle("show-hidden", || Msg::ToggleHidden);
         let sort_descending = toggle("sort-descending", || Msg::ToggleSortDescending);
-        let focus_mode = toggle("focus-mode", || Msg::ToggleFocusMode);
+        let focus_mode = toggle("focus-mode", || Msg::Perform(Action::FocusMode));
 
         let string_action = |name: &str, initial: &str, msg: fn(String) -> Msg| {
             let action = gio::SimpleAction::new_stateful(
