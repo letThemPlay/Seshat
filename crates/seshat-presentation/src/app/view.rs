@@ -7,7 +7,7 @@ use std::rc::Rc;
 use seshat_application::interaction::Action;
 use seshat_application::view::ViewMode;
 
-use super::{App, Msg};
+use super::{App, CommandLineMsg, Msg};
 use crate::actions;
 use crate::operations_panel::OperationsPanel;
 use crate::pathbar::PathBar;
@@ -42,7 +42,6 @@ pub struct Handles {
     pub search_entry: gtk::SearchEntry,
     pub context_menu: gtk::PopoverMenu,
     pub window: gtk::Window,
-    pub panel: OperationsPanel,
 }
 
 fn icon_button(
@@ -81,7 +80,7 @@ pub fn build(
     root: &gtk::Window,
     sidebar: &gtk::ScrolledWindow,
     workspace: Rc<WorkspaceView>,
-    panel: OperationsPanel,
+    panel: &OperationsPanel,
     classic_keys: bool,
     sender: &ComponentSender<App>,
 ) -> (AppWidgets, Handles) {
@@ -364,7 +363,6 @@ pub fn build(
             search_entry,
             context_menu,
             window: root.clone(),
-            panel,
         },
     )
 }
@@ -386,7 +384,9 @@ fn command_line(sender: &ComponentSender<App>) -> gtk::Entry {
         move |entry| {
             sender
                 .input_sender()
-                .emit(Msg::CommandSubmitted(entry.text().to_string()))
+                .emit(Msg::CommandLine(CommandLineMsg::Submitted(
+                    entry.text().to_string(),
+                )))
         }
     });
     let keys = gtk::EventControllerKey::new();
@@ -394,14 +394,14 @@ fn command_line(sender: &ComponentSender<App>) -> gtk::Entry {
         let sender = sender.clone();
         move |_, key, _, _| {
             let msg = match key {
-                gtk::gdk::Key::Escape => Msg::CommandCancelled,
-                gtk::gdk::Key::Up => Msg::CommandHistory { older: true },
-                gtk::gdk::Key::Down => Msg::CommandHistory { older: false },
-                gtk::gdk::Key::Tab => Msg::CommandComplete { forward: true },
-                gtk::gdk::Key::ISO_Left_Tab => Msg::CommandComplete { forward: false },
+                gtk::gdk::Key::Escape => CommandLineMsg::Cancelled,
+                gtk::gdk::Key::Up => CommandLineMsg::History { older: true },
+                gtk::gdk::Key::Down => CommandLineMsg::History { older: false },
+                gtk::gdk::Key::Tab => CommandLineMsg::Complete { forward: true },
+                gtk::gdk::Key::ISO_Left_Tab => CommandLineMsg::Complete { forward: false },
                 _ => return gtk::glib::Propagation::Proceed,
             };
-            sender.input_sender().emit(msg);
+            sender.input_sender().emit(Msg::CommandLine(msg));
             gtk::glib::Propagation::Stop
         }
     });

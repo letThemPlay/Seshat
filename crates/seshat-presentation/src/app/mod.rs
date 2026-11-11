@@ -5,11 +5,24 @@
 //! (listing, watching, launching, saving) and renders the result. Panel and
 //! branch state lives in the service, never in widgets.
 
+mod command_line;
 mod commands;
+mod devices;
 mod file_ops;
+mod operations;
 mod shortcuts;
+mod theme;
 mod view;
 mod workspace;
+
+use command_line::CommandLineController;
+pub use command_line::CommandLineMsg;
+use devices::DeviceController;
+pub use devices::DeviceMsg;
+use operations::OperationsController;
+pub use operations::OperationsMsg;
+use theme::ThemeController;
+pub use theme::ThemeMsg;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -20,36 +33,30 @@ use gtk::prelude::*;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
 };
-use seshat_application::interaction::command::CommandHistory;
-use seshat_application::interaction::completion::CompletionCycle;
 use seshat_application::interaction::{Action, Intent, KeyMap, Mode, format_sequence};
 use seshat_application::navigation::{breadcrumbs, parse_address};
-use seshat_application::operations::{OperationEvent, OperationManager, OperationRequest};
+use seshat_application::operations::{OperationManager, OperationRequest};
 use seshat_application::ports::{
-    DeviceError, DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError,
-    ThemeRepository, WatchGuard,
+    DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError, ThemeRepository,
+    WatchGuard,
 };
-use seshat_application::preferences::{
-    Preferences, PreferencesStore, ThemeChoice, WorkspaceLayout,
-};
+use seshat_application::preferences::{Preferences, PreferencesStore, WorkspaceLayout};
 use seshat_application::use_cases::ListDirectory;
 use seshat_application::view::{SortKey, ViewMode};
 use seshat_application::workspace::file_actions::Availability;
 use seshat_application::workspace::{TransferKind, TransferPlan, WorkspaceService, WorkspaceStore};
-use seshat_domain::entities::{Device, DeviceId, FileEntry, Location, StandardLocation};
-use seshat_domain::operation::OperationId;
+use seshat_domain::entities::{FileEntry, Location, StandardLocation};
 use seshat_domain::view::ViewOptions;
 use seshat_domain::workspace::{PanelId, PanelState};
 
 use crate::actions::{self, ActionContext, Actions};
 use crate::clipboard::ClipboardFiles;
-use crate::conflicts::{ConflictRequest, UiConflictResolver};
 use crate::diagnostics;
 use crate::keys::{KeyRouter, SharedKeys};
 use crate::operations_panel::OperationsPanel;
 use crate::pathbar::address_text;
-use crate::sidebar::{Sidebar, SidebarInit, SidebarInput, SidebarOutput};
-use crate::theme::{ThemeRegistry, render_css};
+use crate::sidebar::{Sidebar, SidebarInit, SidebarOutput};
+
 use crate::workspace_view::{WorkspaceEvent, WorkspaceView};
 use view::{AppWidgets, Handles};
 
@@ -69,6 +76,27 @@ const SAVE_DELAY: Duration = Duration::from_secs(1);
 
 /// Opening many files at once from one action is almost always a mistake.
 const MAX_FILES_TO_OPEN: usize = 20;
+
+/// What a feature controller may use from the window while it handles a
+/// message. Borrowed from the window's own fields for the duration of one
+/// call, so controllers never keep a copy of workspace state.
+pub(super) struct Cx<'a> {
+    pub service: &'a mut WorkspaceService,
+    /// The status bar's transient message.
+    pub notice: &'a mut Option<String>,
+    pub sender: &'a ComponentSender<App>,
+}
+
+/// Lends a controller the window's shared state (see [`Cx`]).
+macro_rules! cx {
+    ($app:expr, $sender:expr) => {
+        Cx {
+            service: &mut $app.service,
+            notice: &mut $app.notice,
+            sender: $sender,
+        }
+    };
+}
 
 /// Dependencies supplied by the composition root.
 pub struct AppInit {
@@ -120,11 +148,7 @@ pub enum Msg {
     FocusFiles,
     CloseSearch,
     Search(String),
-    SetTheme(String),
-    ReloadThemes,
-    ThemesChanged,
-    OpenThemesFolder,
-    SystemColorSchemeChanged,
+    Theme(ThemeMsg),
     EditAddress,
     CancelAddress,
     AddressSubmitted(String),
@@ -150,23 +174,7 @@ pub enum Msg {
     CloseBranch,
     /// Keyboard focus moved (e.g. a click or arrow key in a file list).
     FocusMoved,
-    CommandSubmitted(String),
-    CommandCancelled,
-    CommandHistory {
-        older: bool,
-    },
-    /// Tab (`forward`) or Shift+Tab in the command line.
-    CommandComplete {
-        forward: bool,
-    },
-    /// A folder listed for path completion.
-    CompletionListed {
-        request: u64,
-        text: String,
-        keep: String,
-        partial: String,
-        result: ListingResult,
-    },
+    CommandLine(CommandLineMsg),
     ShowHelp,
     ShowBranches,
     /// Copy or move the targets into a folder picked from the open panels.
@@ -175,10 +183,7 @@ pub enum Msg {
     SubmitTransfer(TransferPlan),
     SaveWorkspace,
 
-    DevicesChanged,
-    Mount(DeviceId),
-    Eject(DeviceId),
-    DeviceActionFinished(Result<Option<PathBuf>, DeviceError>),
+    Device(DeviceMsg),
     OpenFailed(String),
     // File operations
     ClipboardStore {
@@ -196,11 +201,7 @@ pub enum Msg {
     EmptyTrash,
     /// Submit a request; select the given item in that panel once listed.
     Submit(OperationRequest, Option<(PanelId, Location)>),
-    Operation(OperationEvent),
-    CancelOperation(OperationId),
-    Conflict(ConflictRequest),
-    ConflictAnswered,
-    WindowHidden,
+    Operations(OperationsMsg),
 }
 
 /// Listing result whose `Debug` output is a summary. Relm4 logs messages at
@@ -227,10 +228,9 @@ pub struct App {
     home: PathBuf,
     list_directory: ListDirectory,
     directory_watcher: Rc<dyn DirectoryWatcher>,
-    device_monitor: Rc<dyn DeviceMonitor>,
+
     launcher: Rc<dyn Launcher>,
     preferences_store: Rc<dyn PreferencesStore>,
-    theme_repository: Rc<dyn ThemeRepository>,
     workspace_store: Rc<dyn WorkspaceStore>,
     sidebar: Controller<Sidebar>,
     actions: Actions,
@@ -238,11 +238,7 @@ pub struct App {
 
     service: WorkspaceService,
     keys: SharedKeys,
-    command_history: CommandHistory,
-    /// Tab cycling through completion matches (decision P1).
-    completion: Option<CompletionCycle>,
-    /// Numbers background listings for completion; late ones are dropped.
-    completion_request: u64,
+    command_line: CommandLineController,
     watches: HashMap<PanelId, WatchGuard>,
     /// Panels with a debounced reload scheduled.
     reload_pending: HashSet<PanelId>,
@@ -254,7 +250,7 @@ pub struct App {
     logged_shape: Option<(PanelId, usize, usize, bool)>,
     /// Search text set by the model, so its echo from the entry is ignored.
     search_echo: Option<String>,
-    devices: Vec<Device>,
+    devices: DeviceController,
     preferences: Preferences,
     staged: Option<Staged>,
     /// Transient message for the status bar (errors, device events).
@@ -262,18 +258,9 @@ pub struct App {
     editing_address: bool,
     save_pending: bool,
 
-    theme_choice: ThemeChoice,
-    themes: ThemeRegistry,
-    themes_watch: Option<WatchGuard>,
-    themes_reload_pending: bool,
-    css_provider: gtk::CssProvider,
+    theme: ThemeController,
 
-    operations: OperationManager,
-    /// Conflicts waiting for the open dialog to close.
-    conflict_queue: std::collections::VecDeque<ConflictRequest>,
-    conflict_dialog: Option<(OperationId, gtk::Window)>,
-    /// Keeps the process alive while the window is hidden with work left.
-    hold: Option<gtk::gio::ApplicationHoldGuard>,
+    operations: OperationsController,
 }
 
 impl std::fmt::Debug for App {
@@ -321,25 +308,24 @@ impl SimpleComponent for App {
         if let Some(settings) = gtk::Settings::default() {
             let sender = sender.clone();
             settings.connect_gtk_interface_color_scheme_notify(move |_| {
-                sender.input_sender().emit(Msg::SystemColorSchemeChanged);
+                sender
+                    .input_sender()
+                    .emit(Msg::Theme(ThemeMsg::SystemColorSchemeChanged));
             });
         }
 
-        let devices = init.device_monitor.devices();
-        init.device_monitor.connect_changed(Box::new({
-            let sender = sender.clone();
-            move || sender.input_sender().emit(Msg::DevicesChanged)
-        }));
+        let devices = DeviceController::new(init.device_monitor);
+        devices.connect(&sender);
 
         let sidebar = Sidebar::builder()
             .launch(SidebarInit {
                 places: init.locations,
-                devices: devices.clone(),
+                devices: devices.devices().to_vec(),
             })
             .forward(sender.input_sender(), |output| match output {
                 SidebarOutput::Navigate(location) => Msg::Navigate(location),
-                SidebarOutput::Mount(id) => Msg::Mount(id),
-                SidebarOutput::Eject(id) => Msg::Eject(id),
+                SidebarOutput::Mount(id) => Msg::Device(DeviceMsg::Mount(id)),
+                SidebarOutput::Eject(id) => Msg::Device(DeviceMsg::Eject(id)),
             });
 
         let actions = Actions::new(&sender);
@@ -360,27 +346,23 @@ impl SimpleComponent for App {
         }));
         let panel = OperationsPanel::new({
             let sender = sender.clone();
-            move |id| sender.input_sender().emit(Msg::CancelOperation(id))
+            move |id| {
+                sender
+                    .input_sender()
+                    .emit(Msg::Operations(OperationsMsg::Cancel(id)))
+            }
         });
         let (widgets, ui) = view::build(
             &root,
             sidebar.widget(),
             workspace_view,
-            panel,
+            &panel,
             prefs.workspace.classic_keys,
             &sender,
         );
-        init.operations
-            .set_conflict_resolver(std::sync::Arc::new(UiConflictResolver::new(
-                sender.input_sender().clone(),
-            )));
-        {
-            // Called on worker threads: only forward.
-            let input = sender.input_sender().clone();
-            init.operations.subscribe(Box::new(move |event| {
-                let _ = input.send(Msg::Operation(event.clone()));
-            }));
-        }
+        let ui_theme_button = ui.theme_button.clone();
+        let operations = OperationsController::new(init.operations.clone(), panel, root.clone());
+        operations.connect(&sender);
         {
             // Keyboard focus decides the cursor: a click or arrow key in a
             // file list moves it there, and activates that panel.
@@ -408,7 +390,9 @@ impl SimpleComponent for App {
             root.connect_close_request(move |window| {
                 if operations.active_count() > 0 {
                     window.set_visible(false);
-                    sender.input_sender().emit(Msg::WindowHidden);
+                    sender
+                        .input_sender()
+                        .emit(Msg::Operations(OperationsMsg::WindowHidden));
                     gtk::glib::Propagation::Stop
                 } else {
                     gtk::glib::Propagation::Proceed
@@ -445,23 +429,24 @@ impl SimpleComponent for App {
             "workspace ready"
         );
 
+        let command_line = CommandLineController::new(
+            ui.command_entry.clone(),
+            init.list_directory.clone(),
+            init.home.clone(),
+        );
         let mut model = App {
             home: init.home,
             list_directory: init.list_directory,
             directory_watcher: init.directory_watcher,
-            device_monitor: init.device_monitor,
             launcher: init.launcher,
             preferences_store: init.preferences,
-            theme_repository: init.themes,
             workspace_store: init.workspace_store,
             sidebar,
             actions,
             ui,
             service,
             keys,
-            command_history: CommandHistory::default(),
-            completion: None,
-            completion_request: 0,
+            command_line,
             watches: HashMap::new(),
             reload_pending: HashSet::new(),
             focused_panel: None,
@@ -469,7 +454,12 @@ impl SimpleComponent for App {
             logged_shape: None,
             search_echo: None,
             devices,
-            theme_choice: prefs.theme.clone(),
+            theme: ThemeController::new(
+                init.themes,
+                prefs.theme.clone(),
+                css_provider,
+                ui_theme_button,
+            ),
             preferences: prefs,
             staged: None,
             notice: key_warnings
@@ -477,18 +467,12 @@ impl SimpleComponent for App {
                 .map(|w| format!("Key bindings: {w} (see the log)")),
             editing_address: false,
             save_pending: false,
-            themes: ThemeRegistry::default(),
-            themes_watch: None,
-            themes_reload_pending: false,
-            css_provider,
-            operations: init.operations,
-            conflict_queue: std::collections::VecDeque::new(),
-            conflict_dialog: None,
-            hold: None,
+            operations,
         };
-        model.load_themes();
-        model.watch_themes(&sender);
-        model.apply_theme();
+        let watcher = model.directory_watcher.clone();
+        model
+            .theme
+            .start(watcher.as_ref(), &mut cx!(model, &sender));
         model.sync(&sender);
 
         ComponentParts { model, widgets }
@@ -583,33 +567,9 @@ impl SimpleComponent for App {
                     self.service.set_query(active, &query);
                 }
             }
-            Msg::SetTheme(id) => {
-                if let Some(choice) = ThemeChoice::from_id(&id) {
-                    self.theme_choice = choice;
-                    self.apply_theme();
+            Msg::Theme(msg) => {
+                if self.theme.update(msg, &mut cx!(self, &sender)) {
                     self.save_preferences();
-                }
-            }
-            Msg::ReloadThemes => {
-                self.themes_reload_pending = false;
-                self.load_themes();
-                self.apply_theme();
-            }
-            Msg::ThemesChanged if !self.themes_reload_pending => {
-                self.themes_reload_pending = true;
-                let sender = sender.clone();
-                gtk::glib::timeout_add_local_once(RELOAD_DEBOUNCE, move || {
-                    sender.input_sender().emit(Msg::ReloadThemes);
-                });
-            }
-            Msg::ThemesChanged => {}
-            Msg::OpenThemesFolder => match self.theme_repository.ensure_directory() {
-                Ok(directory) => self.service.open_location(Location::Path(directory)),
-                Err(err) => self.notice = Some(format!("Cannot open the themes folder: {err}")),
-            },
-            Msg::SystemColorSchemeChanged => {
-                if self.theme_choice == ThemeChoice::System {
-                    self.apply_theme();
                 }
             }
             Msg::EditAddress => self.editing_address = true,
@@ -643,17 +603,10 @@ impl SimpleComponent for App {
             Msg::Intent(intent) => self.intent(intent, &sender),
             Msg::CloseBranch => self.close_branch(None),
             Msg::FocusMoved => self.focus_moved(),
-            Msg::CommandSubmitted(text) => self.command_submitted(&text, &sender),
-            Msg::CommandCancelled => self.close_command_line(),
-            Msg::CommandHistory { older } => self.command_history_step(older),
-            Msg::CommandComplete { forward } => self.complete_command(forward, &sender),
-            Msg::CompletionListed {
-                request,
-                text,
-                keep,
-                partial,
-                result,
-            } => self.completion_listed(request, &text, keep, &partial, result.0),
+            Msg::CommandLine(msg) => {
+                let outcome = self.command_line.update(msg, &mut cx!(self, &sender));
+                self.command_line_outcome(outcome, &sender);
+            }
             Msg::ShowHelp => self.show_help(),
             Msg::ShowBranches => self.show_branches(),
             Msg::TransferTo(kind, destination) => self.plan_transfer(kind, &destination, &sender),
@@ -663,30 +616,19 @@ impl SimpleComponent for App {
                 self.save_workspace();
             }
 
-            Msg::DevicesChanged => self.devices_changed(),
-            Msg::Mount(id) => {
-                let monitor = self.device_monitor.clone();
-                let sender = sender.clone();
-                relm4::spawn_local(async move {
-                    let result = monitor.mount(&id).await.map(Some);
-                    sender
-                        .input_sender()
-                        .emit(Msg::DeviceActionFinished(result));
-                });
-            }
-            Msg::Eject(id) => self.eject(id, &sender),
-            Msg::DeviceActionFinished(result) => match result {
-                Ok(Some(root)) => self.service.open_location(Location::Path(root)),
-                Ok(None) => self.notice = Some("The device can be removed safely.".to_owned()),
-                Err(err) => {
-                    tracing::warn!(error = %err, "device action failed");
-                    self.notice = Some(format!("Device action failed: {err}"));
-                    // Reselect the current location instead of the device row.
-                    self.sidebar.emit(SidebarInput::SetCurrent(Some(
-                        self.service.active_location().clone(),
-                    )));
+            Msg::Device(msg) => {
+                // Stop watching panels on a device before ejecting it, so
+                // Seshat doesn't keep it busy.
+                if let DeviceMsg::Eject(id) = &msg
+                    && let Some(root) = self.devices.root_of(id)
+                {
+                    self.service.detach_device(&root);
+                    self.run_effects(&sender);
                 }
-            },
+                if let Some(input) = self.devices.update(msg, &mut cx!(self, &sender)) {
+                    self.sidebar.emit(input);
+                }
+            }
             Msg::OpenFailed(err) => self.notice = Some(format!("Could not open: {err}")),
             Msg::ClipboardStore { cut } => self.clipboard_store(cut),
             Msg::Paste => self.paste(&sender),
@@ -698,25 +640,12 @@ impl SimpleComponent for App {
             Msg::NewItem { directory } => self.new_item(directory, None, &sender),
             Msg::EmptyTrash => self.empty_trash(&sender),
             Msg::Submit(request, select) => self.submit(request, select),
-            Msg::Operation(event) => self.operation_event(event, &sender),
-            Msg::CancelOperation(id) => {
-                let _ = self.operations.cancel(id);
-            }
-            Msg::Conflict(request) => {
-                self.conflict_queue.push_back(request);
-                self.show_next_conflict(&sender);
-            }
-            Msg::ConflictAnswered => {
-                self.conflict_dialog = None;
-                self.show_next_conflict(&sender);
-            }
-            Msg::WindowHidden => {
-                tracing::info!(
-                    active = self.operations.active_count(),
-                    "window closed; finishing operations in the background"
-                );
-                self.save_workspace();
-                self.hold = Some(relm4::main_application().hold());
+            Msg::Operations(msg) => {
+                let hidden = matches!(msg, OperationsMsg::WindowHidden);
+                self.operations.update(msg, &mut cx!(self, &sender));
+                if hidden {
+                    self.save_workspace();
+                }
             }
         }
         self.sync(&sender);
@@ -731,7 +660,7 @@ impl SimpleComponent for App {
             state.options.show_hidden,
             state.mode,
             state.options.sort,
-            &self.theme_choice,
+            self.theme.choice(),
             ws.focus_mode(),
             ActionContext {
                 files: Availability::of(&self.service),
@@ -928,113 +857,11 @@ impl App {
         popover.popup();
     }
 
-    fn devices_changed(&mut self) {
-        let devices = self.device_monitor.devices();
-        let vanished = seshat_application::ports::vanished_roots(&self.devices, &devices);
-        tracing::debug!(
-            count = devices.len(),
-            vanished = vanished.len(),
-            "devices changed"
-        );
-        self.devices = devices.clone();
-        self.sidebar.emit(SidebarInput::SetDevices(devices));
-        let lost: usize = vanished
-            .iter()
-            .map(|root| self.service.detach_device(root))
-            .sum();
-        if lost > 0 {
-            self.notice = Some(
-                "The device was removed. Its panels are kept until you close them.".to_owned(),
-            );
-        }
-    }
-
-    fn eject(&mut self, id: DeviceId, sender: &ComponentSender<Self>) {
-        // Stop watching panels on the device first, so we don't keep it busy.
-        let root = self
-            .devices
-            .iter()
-            .find(|d| d.id == id)
-            .and_then(|d| d.root().map(PathBuf::from));
-        if let Some(root) = root {
-            self.service.detach_device(&root);
-            self.run_effects(sender);
-        }
-        let monitor = self.device_monitor.clone();
-        let sender = sender.clone();
-        relm4::spawn_local(async move {
-            let result = monitor.eject(&id).await.map(|()| None);
-            sender
-                .input_sender()
-                .emit(Msg::DeviceActionFinished(result));
-        });
-    }
-
-    fn load_themes(&mut self) {
-        self.themes = ThemeRegistry::from_sources(self.theme_repository.load_all());
-        self.ui
-            .theme_button
-            .set_menu_model(Some(&actions::theme_menu(&self.themes)));
-        if let Some(error) = self.themes.errors().first() {
-            self.notice = Some(format!(
-                "Theme “{}” could not be loaded: {}",
-                error.id, error.message
-            ));
-        }
-    }
-
-    /// Reloads themes when files in the themes folder change.
-    fn watch_themes(&mut self, sender: &ComponentSender<Self>) {
-        let directory = match self.theme_repository.ensure_directory() {
-            Ok(directory) => directory,
-            Err(err) => {
-                tracing::debug!(error = %err, "cannot create themes folder; not watching");
-                return;
-            }
-        };
-        let sender = sender.clone();
-        self.themes_watch = self
-            .directory_watcher
-            .watch(
-                &Location::Path(directory),
-                Box::new(move |_| sender.input_sender().emit(Msg::ThemesChanged)),
-            )
-            .ok();
-    }
-
-    fn apply_theme(&mut self) {
-        let system_dark = system_prefers_dark();
-        let theme = match self.themes.resolve(&self.theme_choice, system_dark) {
-            Some(theme) => theme,
-            None => {
-                self.notice = Some(format!(
-                    "Theme “{}” is not available; following the system theme.",
-                    self.theme_choice.id().trim_start_matches("custom:")
-                ));
-                self.themes
-                    .resolve(&ThemeChoice::System, system_dark)
-                    .expect("built-in themes always resolve")
-            }
-        };
-        if let ThemeChoice::Custom(id) = &self.theme_choice
-            && let Some(custom) = self.themes.custom(id)
-            && !custom.warnings.is_empty()
-        {
-            self.notice = Some(format!(
-                "Theme “{}” has {} issue(s); see the log for details.",
-                custom.theme.name,
-                custom.warnings.len()
-            ));
-        }
-        tracing::debug!(theme = %theme.name, choice = ?self.theme_choice, "applying theme");
-        self.css_provider.load_from_string(&render_css(&theme));
-    }
-
     /// Saves the theme and the defaults for new panels (decision D11: the
     /// last changed panel setting becomes the default).
     fn save_preferences(&mut self) {
         let defaults = self.service.defaults();
-        self.preferences.theme = self.theme_choice.clone();
+        self.preferences.theme = self.theme.choice().clone();
         self.preferences.show_hidden = defaults.options.show_hidden;
         self.preferences.view_mode = defaults.mode;
         self.preferences.sort = defaults.options.sort;
@@ -1051,9 +878,4 @@ fn item_count(shown: usize, total: usize) -> String {
     } else {
         format!("{shown} of {total} item{}", plural(total))
     }
-}
-
-fn system_prefers_dark() -> bool {
-    gtk::Settings::default()
-        .is_some_and(|s| s.gtk_interface_color_scheme() == gtk::InterfaceColorScheme::Dark)
 }

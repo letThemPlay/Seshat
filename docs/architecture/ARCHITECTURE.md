@@ -51,3 +51,21 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 - Operations capture absolute source and destination paths when they are planned. Switching or closing branches, or toggling Focus Mode, does not affect a running operation.
 - Branches, cursors and selections never resolve sources through "the active panel at execution time".
 - Pruning (`db`, `dB`) and workspace undo change panels and branches only. They go through `WorkspaceService`, whose only effects are unwatching and saving, and they never reach the operation manager or the filesystem. Pruning removes only panels no other branch uses ([ADR 0007](../decisions/0007-backward-branch-pruning.md)).
+
+## Presentation structure
+
+The window (`seshat-presentation/src/app/`) is a Relm4 component, `App`, that coordinates feature controllers (the Mediator pattern). Each controller is a plain struct that `App` owns:
+
+| Controller | Owns | Messages |
+|---|---|---|
+| `ThemeController` (`app/theme.rs`) | The chosen theme, custom theme registry, themes-folder watch and reload, stylesheet | `Msg::Theme(ThemeMsg)` |
+| `DeviceController` (`app/devices.rs`) | The device list, mounting and ejecting | `Msg::Device(DeviceMsg)` |
+| `OperationsController` (`app/operations.rs`) | The operations panel, conflict dialogs, staying alive while hidden; observes the `OperationManager` | `Msg::Operations(OperationsMsg)` |
+| `CommandLineController` (`app/command_line.rs`) | The command line's field, history and Tab completion | `Msg::CommandLine(CommandLineMsg)` |
+
+Rules:
+
+- A window feature with its own state gets a controller and a nested message enum, not new fields and variants on `App`. Fuzzy Find's overlay will be the next one.
+- Controllers borrow what they share (the `WorkspaceService`, the status notice, the sender) through `Cx`, for one call at a time. They never keep a copy of workspace or operation state.
+- A controller never reaches into `App` or another controller. When something else must happen (saving preferences, updating the sidebar, closing the command line, running a command), it says so in its return value and `App` does it. Ordering that spans controllers stays visible in `App` (for example, releasing watches on a device before ejecting it).
+- Navigation, workspace rendering, keyboard intents, file actions and running commands stay in `App` (`commands.rs`, `file_ops.rs`, `workspace.rs`), because they coordinate every part of the window.

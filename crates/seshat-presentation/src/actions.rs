@@ -14,7 +14,7 @@ use seshat_application::preferences::ThemeChoice;
 use seshat_application::view::{SortKey, SortOrder, ViewMode};
 use seshat_application::workspace::file_actions::{Availability, FileAction};
 
-use crate::app::{App, Msg};
+use crate::app::{App, Msg, ThemeMsg};
 use crate::theme::ThemeRegistry;
 
 pub const GROUP: &str = "seshat";
@@ -35,8 +35,8 @@ const COMMANDS: &[Command] = &[
     ("open", || Msg::OpenSelection),
     ("copy-path", || Msg::CopyPaths),
     ("refresh", || Msg::Refresh),
-    ("reload-themes", || Msg::ReloadThemes),
-    ("open-themes-folder", || Msg::OpenThemesFolder),
+    ("reload-themes", || Msg::Theme(ThemeMsg::Reload)),
+    ("open-themes-folder", || Msg::Theme(ThemeMsg::OpenFolder)),
     ("cut", || Msg::ClipboardStore { cut: true }),
     ("copy", || Msg::ClipboardStore { cut: false }),
     ("paste", || Msg::Paste),
@@ -136,7 +136,9 @@ impl Actions {
         };
         let view_mode = string_action("view-mode", ViewMode::List.id(), Msg::SetViewMode);
         let sort_key = string_action("sort-key", SortKey::Name.id(), Msg::SetSortKey);
-        let theme = string_action("theme", &ThemeChoice::System.id(), Msg::SetTheme);
+        let theme = string_action("theme", &ThemeChoice::System.id(), |id| {
+            Msg::Theme(ThemeMsg::Set(id))
+        });
 
         for action in [
             &show_hidden,

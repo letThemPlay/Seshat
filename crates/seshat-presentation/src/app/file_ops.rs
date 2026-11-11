@@ -12,15 +12,13 @@
 
 use std::path::{Path, PathBuf};
 
-use gtk::prelude::{ApplicationExt, GtkWindowExt};
 use relm4::ComponentSender;
-use seshat_application::operations::{OperationEvent, OperationEventKind, OperationRequest};
+use seshat_application::operations::OperationRequest;
 use seshat_application::workspace::file_actions::{
     self, ActionPlan, ActionRefusal, Confirmation, NameKind,
 };
 use seshat_application::workspace::{TransferKind, TransferPlan};
 use seshat_domain::entities::Location;
-use seshat_domain::operation::OperationKind;
 use seshat_domain::workspace::PanelId;
 
 use super::workspace::capitalise;
@@ -28,7 +26,7 @@ use super::{App, Msg, Staged};
 use crate::clipboard::{self, ClipboardFiles};
 use crate::dialogs;
 
-fn plural(n: usize, one: &str, many: &str) -> String {
+pub(super) fn plural(n: usize, one: &str, many: &str) -> String {
     if n == 1 {
         one.to_owned()
     } else {
@@ -333,84 +331,5 @@ impl App {
             }
             Err(err) => self.notice = Some(capitalise(&err.to_string())),
         }
-    }
-
-    pub(super) fn operation_event(
-        &mut self,
-        event: OperationEvent,
-        sender: &ComponentSender<Self>,
-    ) {
-        self.ui.panel.apply(&event);
-        let op = &event.operation;
-        if !op.is_finished() {
-            return;
-        }
-        // The operation ended while its conflict dialog was still open.
-        if let Some((id, window)) = &self.conflict_dialog
-            && *id == op.id()
-        {
-            window.close();
-        }
-        self.conflict_queue.retain(|r| r.operation.id() != op.id());
-
-        match (event.kind, op.kind()) {
-            (OperationEventKind::Failed, _) if op.kind() != OperationKind::Trash => {
-                self.notice = op.error.clone();
-            }
-            // Items the Trash refused were left alone; offer deletion.
-            (_, OperationKind::Trash) if !op.failures.is_empty() => {
-                let paths: Vec<Location> = op
-                    .failures
-                    .iter()
-                    .map(|f| Location::Path(f.path.clone()))
-                    .collect();
-                let sender = sender.clone();
-                dialogs::confirm(
-                    &self.ui.window,
-                    &format!(
-                        "{} could not be moved to the Trash",
-                        plural(paths.len(), "1 item", "items")
-                    ),
-                    "They were not deleted. The location may not support a Trash (for example some network or removable drives). Delete them permanently instead?",
-                    "Delete Permanently",
-                    move || {
-                        sender.input_sender().emit(Msg::Submit(
-                            OperationRequest::Delete {
-                                items: paths.clone(),
-                            },
-                            None,
-                        ));
-                    },
-                );
-            }
-            _ => {}
-        }
-
-        if self.hold.is_some() && self.operations.active_count() == 0 {
-            tracing::info!("background operations finished; exiting");
-            self.hold = None;
-            relm4::main_application().quit();
-        }
-    }
-
-    pub(super) fn show_next_conflict(&mut self, sender: &ComponentSender<Self>) {
-        if self.conflict_dialog.is_some() {
-            return;
-        }
-        let Some(request) = self.conflict_queue.pop_front() else {
-            return;
-        };
-        // A hidden window with work left must come back to ask.
-        if !gtk::prelude::WidgetExt::is_visible(&self.ui.window) {
-            gtk::prelude::GtkWindowExt::present(&self.ui.window);
-            self.hold = None;
-        }
-        let reply = request.reply;
-        let sender = sender.clone();
-        let window = dialogs::conflict(&self.ui.window, &request.conflict, move |decision| {
-            let _ = reply.send(decision);
-            sender.input_sender().emit(Msg::ConflictAnswered);
-        });
-        self.conflict_dialog = Some((request.operation.id(), window));
     }
 }
