@@ -148,58 +148,43 @@ impl WorkspaceService {
     // ── Navigation ──────────────────────────────────────────────────────
 
     pub fn activate_panel(&mut self, panel: PanelId) -> Result<bool, WorkspaceError> {
-        let changed = self.workspace.activate_panel(panel)?;
-        self.after_navigation();
-        Ok(changed)
+        self.try_navigate(|w| w.activate_panel(panel))
     }
 
     pub fn move_left(&mut self) -> bool {
-        let changed = self.workspace.move_left();
-        self.after_navigation();
-        changed
+        self.navigate(Workspace::move_left)
     }
 
     pub fn move_right(&mut self) -> bool {
-        let changed = self.workspace.move_right();
-        self.after_navigation();
-        changed
+        self.navigate(Workspace::move_right)
     }
 
     /// Backspace / "parent folder": the parent panel, or for a root panel
     /// a new parent panel above it.
     pub fn go_parent(&mut self) -> bool {
-        if self.workspace.move_left() {
-            self.after_navigation();
-            return true;
-        }
-        let root = self.active_panel();
-        let changed = self.workspace.insert_parent(root).is_ok();
-        self.after_navigation();
-        changed
+        self.navigate(|w| {
+            if w.move_left() {
+                return true;
+            }
+            let root = w.active_panel();
+            w.insert_parent(root).is_ok()
+        })
     }
 
     pub fn go_back(&mut self) -> bool {
-        let changed = self.workspace.go_back();
-        self.after_navigation();
-        changed
+        self.navigate(Workspace::go_back)
     }
 
     pub fn go_forward(&mut self) -> bool {
-        let changed = self.workspace.go_forward();
-        self.after_navigation();
-        changed
+        self.navigate(Workspace::go_forward)
     }
 
     pub fn cycle_branch(&mut self, forward: bool) -> bool {
-        let changed = self.workspace.cycle_branch(forward);
-        self.after_navigation();
-        changed
+        self.navigate(|w| w.cycle_branch(forward))
     }
 
     pub fn activate_branch(&mut self, branch: BranchId) -> Result<bool, WorkspaceError> {
-        let changed = self.workspace.activate_branch(branch)?;
-        self.after_navigation();
-        Ok(changed)
+        self.try_navigate(|w| w.activate_branch(branch))
     }
 
     /// Closes a branch; listings of removed panels are dropped. Never
@@ -719,6 +704,25 @@ impl WorkspaceService {
                 self.effects.push(Effect::Unwatch { panel });
             }
         }
+    }
+
+    /// Runs a workspace navigation step, then loads the active panel,
+    /// evicts listings beyond the cache and saves.
+    fn navigate<T>(&mut self, step: impl FnOnce(&mut Workspace) -> T) -> T {
+        let result = step(&mut self.workspace);
+        self.after_navigation();
+        result
+    }
+
+    /// [`Self::navigate`] for a step that can fail: on failure nothing
+    /// else happens.
+    fn try_navigate<T, E>(
+        &mut self,
+        step: impl FnOnce(&mut Workspace) -> Result<T, E>,
+    ) -> Result<T, E> {
+        let result = step(&mut self.workspace)?;
+        self.after_navigation();
+        Ok(result)
     }
 
     fn after_navigation(&mut self) {
