@@ -6,12 +6,15 @@
 //! branch state lives in the service, never in widgets.
 
 mod commands;
+mod devices;
 mod file_ops;
 mod shortcuts;
 mod theme;
 mod view;
 mod workspace;
 
+use devices::DeviceController;
+pub use devices::DeviceMsg;
 use theme::ThemeController;
 pub use theme::ThemeMsg;
 
@@ -30,15 +33,15 @@ use seshat_application::interaction::{Action, Intent, KeyMap, Mode, format_seque
 use seshat_application::navigation::{breadcrumbs, parse_address};
 use seshat_application::operations::{OperationEvent, OperationManager, OperationRequest};
 use seshat_application::ports::{
-    DeviceError, DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError,
-    ThemeRepository, WatchGuard,
+    DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError, ThemeRepository,
+    WatchGuard,
 };
 use seshat_application::preferences::{Preferences, PreferencesStore, WorkspaceLayout};
 use seshat_application::use_cases::ListDirectory;
 use seshat_application::view::{SortKey, ViewMode};
 use seshat_application::workspace::file_actions::Availability;
 use seshat_application::workspace::{TransferKind, TransferPlan, WorkspaceService, WorkspaceStore};
-use seshat_domain::entities::{Device, DeviceId, FileEntry, Location, StandardLocation};
+use seshat_domain::entities::{FileEntry, Location, StandardLocation};
 use seshat_domain::operation::OperationId;
 use seshat_domain::view::ViewOptions;
 use seshat_domain::workspace::{PanelId, PanelState};
@@ -50,7 +53,7 @@ use crate::diagnostics;
 use crate::keys::{KeyRouter, SharedKeys};
 use crate::operations_panel::OperationsPanel;
 use crate::pathbar::address_text;
-use crate::sidebar::{Sidebar, SidebarInit, SidebarInput, SidebarOutput};
+use crate::sidebar::{Sidebar, SidebarInit, SidebarOutput};
 
 use crate::workspace_view::{WorkspaceEvent, WorkspaceView};
 use view::{AppWidgets, Handles};
@@ -194,10 +197,7 @@ pub enum Msg {
     SubmitTransfer(TransferPlan),
     SaveWorkspace,
 
-    DevicesChanged,
-    Mount(DeviceId),
-    Eject(DeviceId),
-    DeviceActionFinished(Result<Option<PathBuf>, DeviceError>),
+    Device(DeviceMsg),
     OpenFailed(String),
     // File operations
     ClipboardStore {
@@ -246,7 +246,7 @@ pub struct App {
     home: PathBuf,
     list_directory: ListDirectory,
     directory_watcher: Rc<dyn DirectoryWatcher>,
-    device_monitor: Rc<dyn DeviceMonitor>,
+
     launcher: Rc<dyn Launcher>,
     preferences_store: Rc<dyn PreferencesStore>,
     workspace_store: Rc<dyn WorkspaceStore>,
@@ -272,7 +272,7 @@ pub struct App {
     logged_shape: Option<(PanelId, usize, usize, bool)>,
     /// Search text set by the model, so its echo from the entry is ignored.
     search_echo: Option<String>,
-    devices: Vec<Device>,
+    devices: DeviceController,
     preferences: Preferences,
     staged: Option<Staged>,
     /// Transient message for the status bar (errors, device events).
@@ -341,21 +341,18 @@ impl SimpleComponent for App {
             });
         }
 
-        let devices = init.device_monitor.devices();
-        init.device_monitor.connect_changed(Box::new({
-            let sender = sender.clone();
-            move || sender.input_sender().emit(Msg::DevicesChanged)
-        }));
+        let devices = DeviceController::new(init.device_monitor);
+        devices.connect(&sender);
 
         let sidebar = Sidebar::builder()
             .launch(SidebarInit {
                 places: init.locations,
-                devices: devices.clone(),
+                devices: devices.devices().to_vec(),
             })
             .forward(sender.input_sender(), |output| match output {
                 SidebarOutput::Navigate(location) => Msg::Navigate(location),
-                SidebarOutput::Mount(id) => Msg::Mount(id),
-                SidebarOutput::Eject(id) => Msg::Eject(id),
+                SidebarOutput::Mount(id) => Msg::Device(DeviceMsg::Mount(id)),
+                SidebarOutput::Eject(id) => Msg::Device(DeviceMsg::Eject(id)),
             });
 
         let actions = Actions::new(&sender);
@@ -466,7 +463,6 @@ impl SimpleComponent for App {
             home: init.home,
             list_directory: init.list_directory,
             directory_watcher: init.directory_watcher,
-            device_monitor: init.device_monitor,
             launcher: init.launcher,
             preferences_store: init.preferences,
             workspace_store: init.workspace_store,
@@ -657,30 +653,19 @@ impl SimpleComponent for App {
                 self.save_workspace();
             }
 
-            Msg::DevicesChanged => self.devices_changed(),
-            Msg::Mount(id) => {
-                let monitor = self.device_monitor.clone();
-                let sender = sender.clone();
-                relm4::spawn_local(async move {
-                    let result = monitor.mount(&id).await.map(Some);
-                    sender
-                        .input_sender()
-                        .emit(Msg::DeviceActionFinished(result));
-                });
-            }
-            Msg::Eject(id) => self.eject(id, &sender),
-            Msg::DeviceActionFinished(result) => match result {
-                Ok(Some(root)) => self.service.open_location(Location::Path(root)),
-                Ok(None) => self.notice = Some("The device can be removed safely.".to_owned()),
-                Err(err) => {
-                    tracing::warn!(error = %err, "device action failed");
-                    self.notice = Some(format!("Device action failed: {err}"));
-                    // Reselect the current location instead of the device row.
-                    self.sidebar.emit(SidebarInput::SetCurrent(Some(
-                        self.service.active_location().clone(),
-                    )));
+            Msg::Device(msg) => {
+                // Stop watching panels on a device before ejecting it, so
+                // Seshat doesn't keep it busy.
+                if let DeviceMsg::Eject(id) = &msg
+                    && let Some(root) = self.devices.root_of(id)
+                {
+                    self.service.detach_device(&root);
+                    self.run_effects(&sender);
                 }
-            },
+                if let Some(input) = self.devices.update(msg, &mut cx!(self, &sender)) {
+                    self.sidebar.emit(input);
+                }
+            }
             Msg::OpenFailed(err) => self.notice = Some(format!("Could not open: {err}")),
             Msg::ClipboardStore { cut } => self.clipboard_store(cut),
             Msg::Paste => self.paste(&sender),
@@ -920,48 +905,6 @@ impl App {
             .map_or((x, y), |p| (f64::from(p.x()), f64::from(p.y())));
         popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
         popover.popup();
-    }
-
-    fn devices_changed(&mut self) {
-        let devices = self.device_monitor.devices();
-        let vanished = seshat_application::ports::vanished_roots(&self.devices, &devices);
-        tracing::debug!(
-            count = devices.len(),
-            vanished = vanished.len(),
-            "devices changed"
-        );
-        self.devices = devices.clone();
-        self.sidebar.emit(SidebarInput::SetDevices(devices));
-        let lost: usize = vanished
-            .iter()
-            .map(|root| self.service.detach_device(root))
-            .sum();
-        if lost > 0 {
-            self.notice = Some(
-                "The device was removed. Its panels are kept until you close them.".to_owned(),
-            );
-        }
-    }
-
-    fn eject(&mut self, id: DeviceId, sender: &ComponentSender<Self>) {
-        // Stop watching panels on the device first, so we don't keep it busy.
-        let root = self
-            .devices
-            .iter()
-            .find(|d| d.id == id)
-            .and_then(|d| d.root().map(PathBuf::from));
-        if let Some(root) = root {
-            self.service.detach_device(&root);
-            self.run_effects(sender);
-        }
-        let monitor = self.device_monitor.clone();
-        let sender = sender.clone();
-        relm4::spawn_local(async move {
-            let result = monitor.eject(&id).await.map(|()| None);
-            sender
-                .input_sender()
-                .emit(Msg::DeviceActionFinished(result));
-        });
     }
 
     /// Saves the theme and the defaults for new panels (decision D11: the
