@@ -5,41 +5,40 @@ use relm4::ComponentSender;
 
 use super::{App, CommandLineMsg, Msg};
 use crate::keys::{self, SharedKeys};
-use seshat_application::interaction::{Action, Intent, Mode};
+use seshat_application::interaction::{Action, AppAction, Intent, Mode};
 use seshat_application::view::ViewMode;
+use seshat_application::workspace::file_actions::ItemKind;
 
-/// A GTK accelerator and the message it sends.
-type Shortcut = (&'static str, fn() -> Msg);
-
-const SHORTCUTS: &[Shortcut] = &[
-    ("<Alt>Left", || Msg::Perform(Action::Back)),
-    ("Back", || Msg::Perform(Action::Back)),
-    ("<Alt>Right", || Msg::Perform(Action::Forward)),
-    ("Forward", || Msg::Perform(Action::Forward)),
-    ("<Alt>Up", || Msg::Perform(Action::Parent)),
-    ("F5", || Msg::Refresh),
-    ("<Control>r", || Msg::Refresh),
-    ("<Control>h", || Msg::ToggleHidden),
-    ("<Control>l", || Msg::EditAddress),
-    ("<Control>f", || Msg::StartSearch),
-    ("<Control>1", || Msg::SetViewMode(ViewMode::List)),
-    ("<Control>2", || Msg::SetViewMode(ViewMode::Grid)),
-    ("<Control><Shift>c", || Msg::CopyPaths),
-    ("<Shift>F10", || Msg::KeyboardContextMenu),
-    ("Menu", || Msg::KeyboardContextMenu),
+/// GTK accelerators and the window actions they carry out, always.
+const SHORTCUTS: &[(&str, AppAction)] = &[
+    ("<Alt>Left", AppAction::Key(Action::Back)),
+    ("Back", AppAction::Key(Action::Back)),
+    ("<Alt>Right", AppAction::Key(Action::Forward)),
+    ("Forward", AppAction::Key(Action::Forward)),
+    ("<Alt>Up", AppAction::Key(Action::Parent)),
+    ("F5", AppAction::Refresh),
+    ("<Control>r", AppAction::Refresh),
+    ("<Control>h", AppAction::ToggleHidden),
+    ("<Control>l", AppAction::EditAddress),
+    ("<Control>f", AppAction::Key(Action::Search)),
+    ("<Control>1", AppAction::SetViewMode(ViewMode::List)),
+    ("<Control>2", AppAction::SetViewMode(ViewMode::Grid)),
+    ("<Control><Shift>c", AppAction::CopyPaths),
+    ("<Shift>F10", AppAction::KeyboardContextMenu),
+    ("Menu", AppAction::KeyboardContextMenu),
 ];
 
-/// Shortcuts that trigger actions, so disabled actions (e.g. Rename with no
-/// selection) are ignored.
-const ACTION_SHORTCUTS: &[(&str, &str)] = &[
-    ("<Control>x", "cut"),
-    ("<Control>c", "copy"),
-    ("<Control>v", "paste"),
-    ("F2", "rename"),
-    ("Delete", "trash"),
-    ("KP_Delete", "trash"),
-    ("<Shift>Delete", "delete"),
-    ("<Control><Shift>n", "new-folder"),
+/// Shortcuts that go through the window's actions, so they are ignored
+/// while their action is disabled (e.g. Rename with no selection).
+const ACTION_SHORTCUTS: &[(&str, AppAction)] = &[
+    ("<Control>x", AppAction::Key(Action::Cut)),
+    ("<Control>c", AppAction::Key(Action::Yank)),
+    ("<Control>v", AppAction::Key(Action::Paste)),
+    ("F2", AppAction::Rename),
+    ("Delete", AppAction::Trash),
+    ("KP_Delete", AppAction::Trash),
+    ("<Shift>Delete", AppAction::Delete),
+    ("<Control><Shift>n", AppAction::NewItem(ItemKind::Folder)),
 ];
 
 pub fn install(
@@ -52,19 +51,18 @@ pub fn install(
     let controller = gtk::ShortcutController::new();
     for (accelerator, action) in ACTION_SHORTCUTS {
         if let Some(trigger) = gtk::ShortcutTrigger::parse_string(accelerator) {
-            let action = gtk::NamedAction::new(&format!("{}.{action}", crate::actions::GROUP));
+            let action = gtk::NamedAction::new(&crate::actions::detailed_name(*action));
             controller.add_shortcut(gtk::Shortcut::new(Some(trigger), Some(action)));
         }
     }
-    for (accelerator, message) in SHORTCUTS {
+    for &(accelerator, action) in SHORTCUTS {
         let Some(trigger) = gtk::ShortcutTrigger::parse_string(accelerator) else {
             tracing::warn!(accelerator, "invalid shortcut trigger");
             continue;
         };
         let sender = sender.clone();
-        let message = *message;
         let action = gtk::CallbackAction::new(move |_, _| {
-            sender.input_sender().emit(message());
+            sender.input_sender().emit(Msg::Perform(action));
             gtk::glib::Propagation::Stop
         });
         controller.add_shortcut(gtk::Shortcut::new(Some(trigger), Some(action)));
@@ -78,8 +76,12 @@ pub fn install(
         .build();
     let sender = sender.clone();
     click.connect_pressed(move |gesture, _, _, _| match gesture.current_button() {
-        8 => sender.input_sender().emit(Msg::Perform(Action::Back)),
-        9 => sender.input_sender().emit(Msg::Perform(Action::Forward)),
+        8 => sender
+            .input_sender()
+            .emit(Msg::Perform(Action::Back.into())),
+        9 => sender
+            .input_sender()
+            .emit(Msg::Perform(Action::Forward.into())),
         _ => {}
     });
     window.add_controller(click);

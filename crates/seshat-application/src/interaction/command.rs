@@ -1,7 +1,7 @@
 use seshat_domain::view::{SortKey, ViewMode};
 use thiserror::Error;
 
-use super::Action;
+use super::{Action, AppAction};
 
 /// Where `:copy` and `:move` put things (decision D10).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,17 +52,30 @@ pub enum Command {
 }
 
 impl Command {
-    /// The key-bindable action this command is equivalent to, if any.
-    /// Such commands are carried out by the same dispatcher as keys, menus
-    /// and the toolbar, so they can never behave differently. Commands that
-    /// take arguments, or have no bindable action, return `None`.
-    pub fn as_action(&self) -> Option<Action> {
-        match self {
-            Self::Branch(BranchCommand::Next) => Some(Action::BranchNext),
-            Self::Branch(BranchCommand::Previous) => Some(Action::BranchPrevious),
-            Self::Focus => Some(Action::FocusMode),
-            _ => None,
-        }
+    /// The window action this command is equivalent to, if any. Such
+    /// commands are carried out by the same dispatcher as keys, menus and
+    /// the toolbar, so they can never behave differently. Commands with an
+    /// argument the window actions don't take (a path, a name, a query, a
+    /// branch number, a sort direction) return `None`.
+    pub fn as_action(&self) -> Option<AppAction> {
+        Some(match self {
+            Self::Branch(BranchCommand::Next) => Action::BranchNext.into(),
+            Self::Branch(BranchCommand::Previous) => Action::BranchPrevious.into(),
+            Self::Branch(BranchCommand::Overview) => AppAction::ShowBranches,
+            Self::Branch(BranchCommand::Close) => AppAction::CloseBranch,
+            Self::Focus => Action::FocusMode.into(),
+            Self::Delete { permanently: false } => AppAction::Trash,
+            Self::Delete { permanently: true } => AppAction::Delete,
+            Self::Rename(None) => AppAction::Rename,
+            Self::Sort {
+                key,
+                descending: None,
+            } => AppAction::SetSortKey(*key),
+            Self::View(mode) => AppAction::SetViewMode(*mode),
+            Self::Hidden => AppAction::ToggleHidden,
+            Self::Help => AppAction::Help,
+            _ => return None,
+        })
     }
 }
 
@@ -245,19 +258,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn commands_with_a_bindable_equivalent_map_to_that_action() {
+    fn commands_with_a_window_action_map_to_that_action() {
         let action = |input: &str| parse(input).expect("parses").as_action();
-        assert_eq!(action("branch next"), Some(Action::BranchNext));
-        assert_eq!(action("branch prev"), Some(Action::BranchPrevious));
-        assert_eq!(action("focus"), Some(Action::FocusMode));
+        assert_eq!(action("branch next"), Some(Action::BranchNext.into()));
+        assert_eq!(action("branch prev"), Some(Action::BranchPrevious.into()));
+        assert_eq!(action("branch"), Some(AppAction::ShowBranches));
+        assert_eq!(action("branch close"), Some(AppAction::CloseBranch));
+        assert_eq!(action("focus"), Some(Action::FocusMode.into()));
+        assert_eq!(action("delete"), Some(AppAction::Trash));
+        assert_eq!(action("delete!"), Some(AppAction::Delete));
+        assert_eq!(action("rename"), Some(AppAction::Rename));
+        assert_eq!(
+            action("sort size"),
+            Some(AppAction::SetSortKey(SortKey::Size))
+        );
+        assert_eq!(
+            action("view grid"),
+            Some(AppAction::SetViewMode(ViewMode::Grid))
+        );
+        assert_eq!(action("hidden"), Some(AppAction::ToggleHidden));
+        assert_eq!(action("help"), Some(AppAction::Help));
+        // Arguments the window actions don't take.
         for input in [
-            "branch",
             "branch 2",
-            "branch close",
             "copy",
+            "move ~",
             "rename x",
-            "hidden",
-            "help",
+            "mkdir x",
+            "touch x",
+            "search x",
+            "sort size desc",
             "open ~",
         ] {
             assert_eq!(action(input), None, "{input}");

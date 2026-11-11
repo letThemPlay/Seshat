@@ -33,7 +33,7 @@ use gtk::prelude::*;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
 };
-use seshat_application::interaction::{Action, Intent, KeyMap, Mode, format_sequence};
+use seshat_application::interaction::{AppAction, Intent, KeyMap, Mode, format_sequence};
 use seshat_application::navigation::{AddressError, breadcrumbs, parse_address};
 use seshat_application::operations::{OperationManager, OperationRequest};
 use seshat_application::ports::{
@@ -42,8 +42,7 @@ use seshat_application::ports::{
 };
 use seshat_application::preferences::{Preferences, PreferencesStore};
 use seshat_application::use_cases::ListDirectory;
-use seshat_application::view::{SortKey, ViewMode};
-use seshat_application::workspace::file_actions::{Availability, ItemKind};
+use seshat_application::workspace::file_actions::Availability;
 use seshat_application::workspace::{TransferKind, TransferPlan, WorkspaceService, WorkspaceStore};
 use seshat_domain::entities::{FileEntry, Location, StandardLocation};
 use seshat_domain::workspace::PanelId;
@@ -125,31 +124,21 @@ pub enum Msg {
     Navigate(Location),
     /// A breadcrumb of the active panel.
     Crumb(Location),
-    /// An action shared by keys, menus, the toolbar and the command line,
-    /// carried out by the single dispatcher (`App::perform`).
-    Perform(Action),
-    Refresh,
-    OpenSelection,
-    CopyPaths,
-    /// Context menu from the keyboard (Menu key, Shift+F10).
-    KeyboardContextMenu,
+    /// Anything keys, menus, the toolbar, shortcuts, mouse buttons and the
+    /// command line can ask for, carried out by the single dispatcher
+    /// (`App::perform`).
+    Perform(AppAction),
     ContextMenu {
         panel: PanelId,
         on_item: bool,
         x: f64,
         y: f64,
     },
-    ToggleHidden,
-    SetViewMode(ViewMode),
-    SetSortKey(SortKey),
-    ToggleSortDescending,
-    StartSearch,
     FocusResults,
     FocusFiles,
     CloseSearch,
     Search(String),
     Theme(ThemeMsg),
-    EditAddress,
     CancelAddress,
     AddressSubmitted(String),
 
@@ -171,12 +160,9 @@ pub enum Msg {
     },
     /// A key press, resolved by the modal key handling.
     Intent(Intent),
-    CloseBranch,
     /// Keyboard focus moved (e.g. a click or arrow key in a file list).
     FocusMoved,
     CommandLine(CommandLineMsg),
-    ShowHelp,
-    ShowBranches,
     /// Copy or move the targets into a folder picked from the open panels.
     TransferTo(TransferKind, Location),
     /// A confirmed copy or move across panels.
@@ -186,16 +172,8 @@ pub enum Msg {
     Device(DeviceMsg),
     OpenFailed(String),
     // File operations
-    /// Copy (`Copy`) or cut (`Move`) the targets to the clipboard.
-    ClipboardStore(TransferKind),
-    Paste,
+    /// The clipboard was read for a paste.
     PasteFiles(Option<ClipboardFiles>),
-    RenameSelection,
-    TrashSelection,
-    DeleteSelection,
-    RestoreSelection,
-    NewItem(ItemKind),
-    EmptyTrash,
     /// Submit a request; select the given item in that panel once listed.
     Submit(OperationRequest, Option<(PanelId, Location)>),
     Operations(OperationsMsg),
@@ -472,55 +450,12 @@ impl SimpleComponent for App {
             }
             Msg::Crumb(location) => self.service.open_ancestor(location),
             Msg::Perform(action) => self.perform(action, &sender),
-            Msg::Refresh => {
-                let active = self.service.active_panel();
-                self.service.reload(active);
-            }
-            Msg::OpenSelection => self.open_targets(),
-            Msg::CopyPaths => self.copy_paths(),
-            Msg::KeyboardContextMenu => {
-                let panel = self.service.active_panel();
-                let on_item = !self.service.targets().is_empty();
-                let size = self
-                    .ui
-                    .workspace
-                    .with_panel(panel, |v| (v.files.root.width(), v.files.root.height()));
-                if let Some((w, h)) = size {
-                    sender.input_sender().emit(Msg::ContextMenu {
-                        panel,
-                        on_item,
-                        x: f64::from(w) / 2.0,
-                        y: f64::from(h) / 3.0,
-                    });
-                }
-            }
             Msg::ContextMenu {
                 panel,
                 on_item,
                 x,
                 y,
             } => self.context_menu(panel, on_item, x, y),
-            Msg::ToggleHidden => {
-                let active = self.service.active_panel();
-                self.service.toggle_hidden(active);
-                self.save_preferences();
-            }
-            Msg::SetViewMode(mode) => {
-                let active = self.service.active_panel();
-                self.service.set_view_mode(active, mode);
-                self.save_preferences();
-                self.focused_panel = None; // the visible view changed
-            }
-            Msg::SetSortKey(key) => {
-                let active = self.service.active_panel();
-                self.service.set_sort_key(active, key);
-                self.save_preferences();
-            }
-            Msg::ToggleSortDescending => {
-                let active = self.service.active_panel();
-                self.service.toggle_sort_descending(active);
-                self.save_preferences();
-            }
             Msg::FocusResults => {
                 let active = self.service.active_panel();
                 if self
@@ -542,19 +477,13 @@ impl SimpleComponent for App {
                     self.ui.search_bar.set_search_mode(false);
                 }
             }
-            Msg::StartSearch => self.start_search(),
             Msg::Search(query) => {
                 if self.search_echo.take().as_deref() != Some(query.as_str()) {
                     let active = self.service.active_panel();
                     self.service.set_query(active, &query);
                 }
             }
-            Msg::Theme(msg) => {
-                if self.theme.update(msg, &mut cx!(self, &sender)) {
-                    self.save_preferences();
-                }
-            }
-            Msg::EditAddress => self.editing_address = true,
+            Msg::Theme(msg) => self.theme_message(msg, &sender),
             Msg::CancelAddress => self.editing_address = false,
             Msg::AddressSubmitted(text) => match self.resolve_address(&text) {
                 Ok(location) => {
@@ -580,14 +509,11 @@ impl SimpleComponent for App {
                 self.service.reload_if_current(panel, generation);
             }
             Msg::Intent(intent) => self.intent(intent, &sender),
-            Msg::CloseBranch => self.close_branch(None),
             Msg::FocusMoved => self.focus_moved(),
             Msg::CommandLine(msg) => {
                 let outcome = self.command_line.update(msg, &mut cx!(self, &sender));
                 self.command_line_outcome(outcome, &sender);
             }
-            Msg::ShowHelp => self.show_help(),
-            Msg::ShowBranches => self.show_branches(),
             Msg::TransferTo(kind, destination) => self.plan_transfer(kind, &destination, &sender),
             Msg::SubmitTransfer(plan) => self.submit_transfer(plan),
             Msg::SaveWorkspace => {
@@ -611,15 +537,7 @@ impl SimpleComponent for App {
             Msg::OpenFailed(err) => {
                 self.notice = Some(notice::open_failed(&err));
             }
-            Msg::ClipboardStore(kind) => self.clipboard_store(kind),
-            Msg::Paste => self.paste(&sender),
             Msg::PasteFiles(files) => self.paste_files(files, &sender),
-            Msg::RenameSelection => self.rename_selection(None, &sender),
-            Msg::TrashSelection => self.trash_selection(&sender),
-            Msg::DeleteSelection => self.delete_selection(&sender),
-            Msg::RestoreSelection => self.restore_selection(&sender),
-            Msg::NewItem(item) => self.new_item(item, None, &sender),
-            Msg::EmptyTrash => self.empty_trash(&sender),
             Msg::Submit(request, select) => self.submit(request, select),
             Msg::Operations(msg) => {
                 let hidden = matches!(msg, OperationsMsg::WindowHidden);
@@ -750,6 +668,33 @@ impl App {
     /// against Home and the active panel's folder.
     fn resolve_address(&self, text: &str) -> Result<Location, AddressError> {
         parse_address(text, &self.home, Some(self.service.active_location()))
+    }
+
+    /// A message for the theme controller; saves preferences if the
+    /// chosen theme changed.
+    fn theme_message(&mut self, msg: ThemeMsg, sender: &ComponentSender<Self>) {
+        if self.theme.update(msg, &mut cx!(self, sender)) {
+            self.save_preferences();
+        }
+    }
+
+    /// The context menu from the keyboard (Menu key, Shift+F10), at a
+    /// fixed point of the active panel.
+    fn keyboard_context_menu(&mut self, sender: &ComponentSender<Self>) {
+        let panel = self.service.active_panel();
+        let on_item = !self.service.targets().is_empty();
+        let size = self
+            .ui
+            .workspace
+            .with_panel(panel, |v| (v.files.root.width(), v.files.root.height()));
+        if let Some((w, h)) = size {
+            sender.input_sender().emit(Msg::ContextMenu {
+                panel,
+                on_item,
+                x: f64::from(w) / 2.0,
+                y: f64::from(h) / 3.0,
+            });
+        }
     }
 
     fn typing(&self) -> bool {

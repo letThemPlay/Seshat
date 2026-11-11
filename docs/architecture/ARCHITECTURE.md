@@ -23,7 +23,7 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
                 ▼
  application    WorkspaceService ── listings (LRU 16) ── selection / targets ── undo (prunes, session only)
                 │   TransferPlan ──► OperationRequest ──► OperationManager (unchanged) ──► D-Bus (unchanged)
-                │   interaction: KeyMap, Interaction (Normal/Visual/Command), command parser
+                │   interaction: AppAction, KeyMap, Interaction (Normal/Visual/Command), command parser
                 ▼
  domain         Workspace: forest of Panels (PanelState) + Branches (tip, cursor) + jump list + Focus Mode flag
  infrastructure TomlWorkspaceStore ($XDG_STATE_HOME/seshat/workspace.toml), settings sections, GIO ports
@@ -47,7 +47,7 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 
 - Navigation state never lives in widgets: views are rebuilt from the service.
 - Enums whose variants have stable text ids (settings files, window actions) are declared with `seshat_domain::stable_ids!`, which keeps `ALL`, `id()` and `from_id()` in step with the variants.
-- One dispatcher: an action that a key, menu, toolbar button, mouse button or command can trigger is an `Action` and runs through `App::perform` (`Msg::Perform`). A command maps to its action with `Command::as_action`. Never add a second handler for the same action.
+- One dispatcher: anything a key, menu, toolbar button, shortcut, mouse button or command can trigger is an `AppAction` (`seshat_application::interaction`) and runs through `App::perform` (`Msg::Perform`). `AppAction::Key` wraps the key-bindable `Action`s, the only ones users can rebind in the settings file; the other variants (file actions, view settings, Refresh, help and so on) are reached through menus, shortcuts and commands. Window action names come from `AppAction::id`, and menus, shortcuts and toolbar buttons refer to `AppAction` values, never to name strings. A command maps to its action with `Command::as_action`; only commands with an argument the actions don't take (a path, a name, a query, a branch number) have their own handling. Never add a second handler for the same action.
 - Focus Mode changes presentation only, and never creates, destroys or duplicates panels.
 - File action rules live in the application layer (`workspace::file_actions`): what rename, Trash, delete, restore, new item, empty Trash and the clipboard act on, and when they are refused. The window shows the confirmation or name prompt an `ActionPlan` asks for and submits its captured request; it never decides targets itself.
 - Operations capture absolute source and destination paths when they are planned. Switching or closing branches, or toggling Focus Mode, does not affect a running operation.
