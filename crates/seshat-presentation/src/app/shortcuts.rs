@@ -3,7 +3,7 @@
 use gtk::prelude::*;
 use relm4::ComponentSender;
 
-use super::{App, Msg};
+use super::{App, CommandLineMsg, Msg};
 use crate::keys::{self, SharedKeys};
 use seshat_application::interaction::{Action, Intent, Mode};
 
@@ -129,7 +129,9 @@ fn install_modal_keys(
         if router.borrow().mode() == Mode::Command {
             router.borrow_mut().interaction.leave_command_line();
             entry.set_visible(false);
-            sender.input_sender().emit(Msg::CommandCancelled);
+            sender
+                .input_sender()
+                .emit(Msg::CommandLine(CommandLineMsg::Cancelled));
         }
         let intent = router.borrow_mut().press(press);
         if intent == Intent::OpenCommandLine {

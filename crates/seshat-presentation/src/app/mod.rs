@@ -5,6 +5,7 @@
 //! (listing, watching, launching, saving) and renders the result. Panel and
 //! branch state lives in the service, never in widgets.
 
+mod command_line;
 mod commands;
 mod devices;
 mod file_ops;
@@ -14,6 +15,8 @@ mod theme;
 mod view;
 mod workspace;
 
+use command_line::CommandLineController;
+pub use command_line::CommandLineMsg;
 use devices::DeviceController;
 pub use devices::DeviceMsg;
 use operations::OperationsController;
@@ -30,8 +33,6 @@ use gtk::prelude::*;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
 };
-use seshat_application::interaction::command::CommandHistory;
-use seshat_application::interaction::completion::CompletionCycle;
 use seshat_application::interaction::{Action, Intent, KeyMap, Mode, format_sequence};
 use seshat_application::navigation::{breadcrumbs, parse_address};
 use seshat_application::operations::{OperationManager, OperationRequest};
@@ -173,23 +174,7 @@ pub enum Msg {
     CloseBranch,
     /// Keyboard focus moved (e.g. a click or arrow key in a file list).
     FocusMoved,
-    CommandSubmitted(String),
-    CommandCancelled,
-    CommandHistory {
-        older: bool,
-    },
-    /// Tab (`forward`) or Shift+Tab in the command line.
-    CommandComplete {
-        forward: bool,
-    },
-    /// A folder listed for path completion.
-    CompletionListed {
-        request: u64,
-        text: String,
-        keep: String,
-        partial: String,
-        result: ListingResult,
-    },
+    CommandLine(CommandLineMsg),
     ShowHelp,
     ShowBranches,
     /// Copy or move the targets into a folder picked from the open panels.
@@ -253,11 +238,7 @@ pub struct App {
 
     service: WorkspaceService,
     keys: SharedKeys,
-    command_history: CommandHistory,
-    /// Tab cycling through completion matches (decision P1).
-    completion: Option<CompletionCycle>,
-    /// Numbers background listings for completion; late ones are dropped.
-    completion_request: u64,
+    command_line: CommandLineController,
     watches: HashMap<PanelId, WatchGuard>,
     /// Panels with a debounced reload scheduled.
     reload_pending: HashSet<PanelId>,
@@ -448,6 +429,11 @@ impl SimpleComponent for App {
             "workspace ready"
         );
 
+        let command_line = CommandLineController::new(
+            ui.command_entry.clone(),
+            init.list_directory.clone(),
+            init.home.clone(),
+        );
         let mut model = App {
             home: init.home,
             list_directory: init.list_directory,
@@ -460,9 +446,7 @@ impl SimpleComponent for App {
             ui,
             service,
             keys,
-            command_history: CommandHistory::default(),
-            completion: None,
-            completion_request: 0,
+            command_line,
             watches: HashMap::new(),
             reload_pending: HashSet::new(),
             focused_panel: None,
@@ -619,17 +603,10 @@ impl SimpleComponent for App {
             Msg::Intent(intent) => self.intent(intent, &sender),
             Msg::CloseBranch => self.close_branch(None),
             Msg::FocusMoved => self.focus_moved(),
-            Msg::CommandSubmitted(text) => self.command_submitted(&text, &sender),
-            Msg::CommandCancelled => self.close_command_line(),
-            Msg::CommandHistory { older } => self.command_history_step(older),
-            Msg::CommandComplete { forward } => self.complete_command(forward, &sender),
-            Msg::CompletionListed {
-                request,
-                text,
-                keep,
-                partial,
-                result,
-            } => self.completion_listed(request, &text, keep, &partial, result.0),
+            Msg::CommandLine(msg) => {
+                let outcome = self.command_line.update(msg, &mut cx!(self, &sender));
+                self.command_line_outcome(outcome, &sender);
+            }
             Msg::ShowHelp => self.show_help(),
             Msg::ShowBranches => self.show_branches(),
             Msg::TransferTo(kind, destination) => self.plan_transfer(kind, &destination, &sender),
