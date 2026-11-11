@@ -725,6 +725,16 @@ impl SimpleComponent for App {
                 widgets.status_bar.remove_css_class(class);
             }
         }
+        // Errors are spoken by screen readers once, when they appear
+        // (decision N2).
+        if let Some(notice) = self.notice.as_ref().filter(|n| n.announce())
+            && widgets.announced != Some(notice.id())
+        {
+            widgets.announced = Some(notice.id());
+            widgets
+                .status_bar
+                .announce(notice.text(), gtk::AccessibleAnnouncementPriority::High);
+        }
     }
 
     fn shutdown(&mut self, _widgets: &mut AppWidgets, _output: relm4::Sender<()>) {

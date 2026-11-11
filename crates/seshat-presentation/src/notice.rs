@@ -4,6 +4,7 @@
 //! helper.
 
 use std::fmt::Display;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use seshat_application::interaction::Action;
 use seshat_application::workspace::PruneOutcome;
@@ -18,28 +19,44 @@ pub enum Severity {
     Error,
 }
 
-/// A message for the status bar.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Numbers notices as they are made, so the same message raised twice is
+/// still two messages (and both are announced).
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+/// A message for the status bar. Two notices are equal when they say the
+/// same thing with the same severity, whatever their [`Notice::id`].
+#[derive(Debug, Clone)]
 pub struct Notice {
+    id: u64,
     severity: Severity,
     text: String,
 }
 
+impl PartialEq for Notice {
+    fn eq(&self, other: &Self) -> bool {
+        self.severity == other.severity && self.text == other.text
+    }
+}
+
+impl Eq for Notice {}
+
 impl Notice {
+    fn new(severity: Severity, text: String) -> Self {
+        Self {
+            id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+            severity,
+            text,
+        }
+    }
+
     /// Information or a confirmation, as a sentence.
     pub fn info(text: impl Into<String>) -> Self {
-        Self {
-            severity: Severity::Info,
-            text: sentence(&text.into()),
-        }
+        Self::new(Severity::Info, sentence(&text.into()))
     }
 
     /// Something was refused or failed, as a sentence.
     pub fn error(text: impl Into<String>) -> Self {
-        Self {
-            severity: Severity::Error,
-            text: sentence(&text.into()),
-        }
+        Self::new(Severity::Error, sentence(&text.into()))
     }
 
     /// A typed error from any layer, worded by its `Display`.
@@ -50,10 +67,19 @@ impl Notice {
     /// Text shown exactly as given, such as a list of completion matches,
     /// which is not a sentence.
     pub fn verbatim(text: impl Into<String>) -> Self {
-        Self {
-            severity: Severity::Info,
-            text: text.into(),
-        }
+        Self::new(Severity::Info, text.into())
+    }
+
+    /// Unique per notice made, even when the text repeats.
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+
+    /// Whether screen readers should announce it when it appears
+    /// (decision N2): errors only, so routine confirmations don't
+    /// interrupt.
+    pub fn announce(&self) -> bool {
+        self.severity == Severity::Error
     }
 
     pub fn text(&self) -> &str {
@@ -249,6 +275,17 @@ mod tests {
         );
         assert_eq!(copied_paths(1).text(), "Copied path to the clipboard.");
         assert_eq!(copied_paths(3).text(), "Copied 3 paths to the clipboard.");
+    }
+
+    #[test]
+    fn only_errors_are_announced_and_each_notice_is_distinct() {
+        let first = Notice::error("nothing pruned");
+        let again = Notice::error("nothing pruned");
+        assert_eq!(first, again, "equal by what they say");
+        assert_ne!(first.id(), again.id(), "but two separate messages");
+        assert!(first.announce());
+        assert!(!Notice::info("copied").announce());
+        assert!(!Notice::verbatim("a/  b/").announce());
     }
 
     #[test]
