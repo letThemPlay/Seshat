@@ -4,7 +4,19 @@
 H="$HOME_DIR"
 mkdir -p "$H/Notes" "$H/Projects"
 for f in file1.txt file2.txt report.pdf; do echo "content of $f" > "$H/$f"; done
-mkdir "$H/many"; (cd "$H/many" && head -c 60M /dev/urandom | split -b 2k -a 5 - part-)   # ~30k files: cannot be reflinked in one go
+mkdir "$H/many"; (cd "$H/many" && head -c 120M /dev/urandom | split -b 2k -a 5 - part-)   # ~60k files: cannot be reflinked in one go, and the copy outlasts the close below
+
+log_text() { sed 's/\x1b\[[0-9;]*m//g' "$SESSION/seshat.log"; }
+# Operations queued but not yet finished, from the operation manager's
+# info logs ("operation queued" / "operation finished").
+operations_running() {
+    local queued finished
+    queued=$(log_text | grep -c "operation queued" || true)
+    finished=$(log_text | grep -c "operation finished" || true)
+    ((queued > finished))
+}
+# Polls up to $1 seconds for a condition.
+wait_until() { local t=$1; shift; for _ in $(seq $((t * 20))); do "$@" && return 0; sleep 0.05; done; return 1; }
 
 # Search → results → copy → paste
 launch
@@ -57,9 +69,13 @@ chord ctrl l; type_text "$H"; press Return 1
 type_text /; type_text many; press Return
 chord ctrl c
 chord ctrl l; type_text "$H/Projects"; press Return 1
-chord ctrl v; sleep 0.5
 shot progress
-swaycmd '[title="^Seshat$"] kill'
+# Close as soon as the copy is running: a fixed sleep let fast runners
+# finish the copy before the close, so nothing was deferred.
+chord ctrl v
+wait_until 10 operations_running && running_at_close=yes || running_at_close=no
+in_session swaymsg '[title="^Seshat$"] kill' >/dev/null   # no sleep or screenshot in between
+check "the copy was still running when the window closed" test "$running_at_close" = yes
 check "process exits when the copy finishes"  wait_exit 120
 check "close was deferred while copying"     grep -q "finishing operations in the background" "$SESSION/seshat.log"
 check "app quit after the background copy"   grep -q "background operations finished; exiting" "$SESSION/seshat.log"

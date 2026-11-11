@@ -4,7 +4,7 @@ Status as of 2026-11-11, branch `refactor-small-dry-fixes`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 395 Rust tests (up from 341 before the Fuzzy Find engine, 165 originally), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (63 checks, including backward pruning).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 395 Rust tests (up from 341 before the Fuzzy Find engine, 165 originally), native Wayland verification, and both sandboxed UI tests: file operations (21 checks) and the spatial workspace (63 checks, including backward pruning).
 
 ## Spatial file manager specification
 
