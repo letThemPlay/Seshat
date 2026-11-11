@@ -1,10 +1,10 @@
 # Implementation status
 
-Status as of 2026-11-09, branch `worktree-spatial-workspace`.
+Status as of 2026-11-11, branch `worktree-backward-branch-pruning`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 295 Rust tests (up from 165), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (47 checks).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 328 Rust tests (up from 295 before backward pruning, 165 originally), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (63 checks, including backward pruning).
 
 ## Spatial file manager specification
 
@@ -57,6 +57,26 @@ Status as of 2026-11-09, branch `worktree-spatial-workspace`.
 | 11 | Mouse uses the same logic | ✅ Verified | Double-click goes through `WorkspaceService::open_entry`, the single entry point |
 | 12 | Persistence | ✅ Verified | Format 2 with identities; version 1 files restore unchanged (`version_1_files_restore_with_identities_unknown`) |
 | 13 | Edge cases | ✅ Verified | Repeated opens never duplicate (`nav_16_2_5_*`); rename followed and replacement reset (C3); empty folder: `l` moves to the next panel (C2); links keep their own identity. A folder moved into a different parent is found by path only |
+
+## Backward branch pruning specification
+
+[3-BACKWARD-BRANCH-PRUNING.md](../specifications/3-BACKWARD-BRANCH-PRUNING.md), [ADR 0007](../decisions/0007-backward-branch-pruning.md), decisions B1–B9.
+
+| § | Requirement | Status | Evidence / notes |
+|---|---|---|---|
+| 3, 13 | `d` operator: waits for a motion, `Esc` cancels, invalid motions are safe, pending keys shown | ✅ Verified | `prune_fires_only_after_the_complete_sequence`, `prune_incomplete_or_invalid_sequences_do_nothing` (`d<Esc>`, `dd`, `dj`, `d<Del>`), `prune_a_cancelled_operator_cannot_be_completed_later`; pending keys appear in the existing status bar indicator; UI test |
+| 3 | Configurable bindings | ✅ Verified | `prune-back`, `prune-back-segment`, `undo-workspace` in `[keybindings]`; user bindings win over these new defaults (B8): `prune_user_bindings_win_over_the_new_defaults` |
+| 4 | `db`: one navigation segment, destination kept with its state and made active | ✅ Verified | `prune_db_removes_one_navigation_step`, `prune_keeps_the_destination_state`; UI test. Segment = one panel (B1), so the spec's illustrative example (two panels removed) does not apply |
+| 5 | `dB`: a larger segment, not a fixed count | ✅ Verified | Back to the nearest shared ancestor or the root (B1): `prune_db_b_*`; UI test. On a path without forks this differs from the spec's illustration |
+| 6 | Deterministic segments from navigation relationships | ✅ Verified | Derived from the panel tree only; no model change was needed |
+| 7, 9 | Shared ancestors and other branches untouched; stable identity; no dangling relationships | ✅ Verified | `prune_spec_7_*`, randomised invariant run with prune and undo (`invariants_hold_across_random_sequences_with_pruning_and_undo`); only the active branch's tip can be pruned (B2) |
+| 8 | Active panel, selection, scroll, sort, view and filter kept; safe no-op with feedback | ✅ Verified | `prune_keeps_the_destination_state`, `prune_refuses_*`, `prune_refusals_change_nothing`; refusals are explained in the status bar. Expanded metadata doesn't exist (D12) |
+| 10 | Workspace undo | ✅ Verified | `u`, re-attaching the removed panels (B5): `prune_undo_*` (domain and application); UI test. Session only, 20 changes. Focus Mode isn't part of what undo changes, because pruning never changes it (B4) |
+| 11 | Pruning in Focus Mode | ⛔ Changed by decision | B9 (2026-11-11): `db`, `dB` and `u` are turned off in Focus Mode and say so; Focus Mode and the workspace are left as they were. `prune_and_undo_are_refused_in_focus_mode`; UI test |
+| 12 | Command Mode untouched; Visual Mode not disturbed; never file deletion | ✅ Verified | `prune_keys_go_to_the_command_line_in_command_mode`, `prune_is_not_available_in_visual_mode_and_never_reaches_the_toolkit` (B6) |
+| 14 | Clean Architecture | ✅ Verified | Domain `workspace/prune.rs`, application `prune_back`/`undo_workspace`, presentation only reports; architecture rules pass |
+| 15, 16.7 | Files never modified | ✅ Verified | `prune_db_only_unwatches_removed_panels_and_saves` (effects are `Unwatch` and `Persist` only), `prune_never_changes_files_or_running_operations`; the UI test compares a fingerprint of the home folder before and after |
+| 15 | Regressions: `l`, `Enter`, `h`, `[`/`]`, Visual, Command, persistence, Focus Mode | ✅ Verified | `prune_keeps_l_h_and_branch_switching_working`, `prune_results_persist_and_restore`; every earlier test and UI check passes unchanged |
 
 ## Known gaps and follow-ups
 

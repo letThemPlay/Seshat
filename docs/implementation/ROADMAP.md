@@ -21,6 +21,7 @@ The phases follow the approved plan, which refines [the spatial specification](.
 | 8. Command-line completion | Folder paths for `:copy`, `:move` and `:open`, branch targets, smartcase, Tab and Shift+Tab cycling (decisions P1–P4) | ✅ Done |
 | 9. Performance run | Instrumentation, benchmarks at 50/200/1,000 branches, end-to-end UI run, saving off the UI thread ([review](../review/performance.md), decisions R1–R4) | ✅ Done; two follow-ups open |
 | 10. Context-aware navigation | `l` and `Enter` open folders by continuing, reactivating or creating a branch; folder identity (device and inode) with rename and replacement handling; root reuse; workspace format 2 ([ADR 0006](../decisions/0006-context-aware-navigation.md), decisions C1–C7) | ✅ Done |
+| 11. Backward branch pruning | `db` and `dB` prune the active branch back by one panel or to the nearest shared ancestor, never touching files; workspace undo with `u`; off in Focus Mode and Visual Mode ([ADR 0007](../decisions/0007-backward-branch-pruning.md), decisions B1–B9) | ✅ Done |
 
 ### Open refinements
 

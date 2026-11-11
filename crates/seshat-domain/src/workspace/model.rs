@@ -73,15 +73,15 @@ pub enum Resolution {
 /// Mode) never changes panels or branches.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Workspace {
-    panels: BTreeMap<PanelId, Panel>,
+    pub(super) panels: BTreeMap<PanelId, Panel>,
     roots: Vec<PanelId>,
-    branches: BTreeMap<BranchId, Branch>,
-    active: BranchId,
+    pub(super) branches: BTreeMap<BranchId, Branch>,
+    pub(super) active: BranchId,
     focus_mode: bool,
     /// Workspace preference: keep Focus Mode when switching branches.
     retain_focus_on_branch_switch: bool,
-    back: Vec<PanelId>,
-    forward: Vec<PanelId>,
+    pub(super) back: Vec<PanelId>,
+    pub(super) forward: Vec<PanelId>,
     next_id: u64,
     clock: u64,
 }
@@ -927,7 +927,7 @@ impl Workspace {
     }
 
     /// `panel`, its parent, and so on up to the root.
-    fn ancestors_or_self(&self, panel: PanelId) -> Vec<PanelId> {
+    pub(super) fn ancestors_or_self(&self, panel: PanelId) -> Vec<PanelId> {
         let mut out = Vec::new();
         let mut current = Some(panel);
         while let Some(id) = current {
@@ -968,12 +968,24 @@ impl Workspace {
     /// Makes `branch` active with its cursor on `panel`. Records the
     /// previous active panel in the jump list when `record` is set.
     fn set_active(&mut self, branch: BranchId, panel: PanelId, record: bool) -> bool {
-        // The previous active branch may just have been closed.
-        let before = self.branches.get(&self.active).map(|b| (b.id, b.cursor));
-        let now = self.tick();
         if branch != self.active && !self.retain_focus_on_branch_switch {
             self.focus_mode = false;
         }
+        self.set_active_keeping_presentation(branch, panel, record)
+    }
+
+    /// [`Self::set_active`] without the Focus Mode preference for branch
+    /// switches, for structural changes (pruning, undo) that the user did
+    /// not ask for as a branch switch (decision B4).
+    pub(super) fn set_active_keeping_presentation(
+        &mut self,
+        branch: BranchId,
+        panel: PanelId,
+        record: bool,
+    ) -> bool {
+        // The previous active branch may just have been closed.
+        let before = self.branches.get(&self.active).map(|b| (b.id, b.cursor));
+        let now = self.tick();
         self.active = branch;
         let b = self.branches.get_mut(&branch).expect("branch exists");
         b.cursor = panel;

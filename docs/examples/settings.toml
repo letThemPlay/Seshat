@@ -44,7 +44,9 @@ classic_keys = false
 # A binding that clashes with another (the same keys, or one sequence the
 # start of another, such as "g" and "gg") is ignored: the action keeps its
 # default, and the status bar and log say why. :help lists the bindings in
-# effect.
+# effect. One exception: the defaults of prune-back, prune-back-segment and
+# undo-workspace give way to your own bindings, so binding "d" or "u" to
+# something else still works (those defaults are then dropped).
 #
 # These keys are not configurable: Ctrl+C / Ctrl+X / Ctrl+V (copy, cut,
 # paste), Ctrl+Shift+C (copy paths), Ctrl+H (hidden files), Ctrl+L (type a
@@ -65,6 +67,13 @@ branch-previous = ["["]
 branch-next = ["]"]
 back = ["<C-o>"]                # previously active panel
 forward = ["<C-i>"]
+
+# Pruning the workspace: removes panels, never files. Not in Focus Mode or
+# Visual Mode. Works from the end of the active branch.
+prune-back = ["db"]             # remove the active panel; its parent becomes active
+prune-back-segment = ["dB"]     # remove back to where the branch meets another one
+                                # (or to its first panel)
+undo-workspace = ["u"]          # undo the last prune (not file operations)
 
 # Moving in a panel
 cursor-down = ["j"]

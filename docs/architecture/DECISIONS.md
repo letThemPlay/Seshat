@@ -10,6 +10,7 @@ Full ADRs live in [`docs/decisions/`](../decisions):
 | [0004](../decisions/0004-spatial-workspace.md) | Spatial workspace: panel tree, branches, effects-based workspace service |
 | [0005](../decisions/0005-branch-layout.md) | Branches side by side with connectors |
 | [0006](../decisions/0006-context-aware-navigation.md) | Context-aware navigation: continue, reactivate or create |
+| [0007](../decisions/0007-backward-branch-pruning.md) | Backward branch pruning (`db`, `dB`) and workspace undo |
 
 ## Spatial file manager: product decisions (approved 2026-11-09)
 
@@ -97,3 +98,19 @@ Results in [review/performance.md](../review/performance.md).
 | C5 | Sidebar and address bar | Reuse an existing root panel for the same location (its branch comes back where it was left) before creating a new root. Refines D3. |
 | C6 | Visual Mode | `l` and `Enter` navigate into folders, but never launch files; a hint says to press Esc first. |
 | C7 | Branch history | A branch's history is its path, its remembered panel and each panel's state; the global Back/Forward (D2) is unchanged. |
+
+## Backward branch pruning decisions (approved 2026-11-11)
+
+[ADR 0007](../decisions/0007-backward-branch-pruning.md) and the [specification](../specifications/3-BACKWARD-BRANCH-PRUNING.md).
+
+| # | Topic | Decision |
+|---|---|---|
+| B1 | Navigation segments | `db` goes back one step: the active panel's parent. `dB` goes back one branch segment: the nearest ancestor shared with another branch, or the branch's root. Both are derived from the tree, never from names, positions or counts. On a path without forks the spec's §4/§5 examples therefore don't apply as written; the spec calls them illustrations. |
+| B2 | Where pruning starts | Only from the active branch's tip. With panels beyond the active panel, or other branches through it, nothing is pruned and the status bar says why. Removed panels are exactly those from the destination (kept) to the active panel, so shared ancestors are never removed. |
+| B3 | Pruning to a shared ancestor | The active branch ends. The most recently active branch through the destination takes over there; every other branch keeps its panels, ids and state. |
+| B4 | Focus Mode flag | Pruning and undo never change it, whatever the "keep Focus Mode when switching branches" preference says: a branch ending is not a branch switch. |
+| B5 | Workspace undo | `u` puts the removed panels back with their ids and state, at their old place, and makes the pruned branch active again. Refused, changing nothing, if the workspace changed there since (destination gone, folder reopened, branch grown or closed); such a change is dropped from the history. 20 changes, this session only, not saved. Undo leaves Focus Mode and the jump list alone and never undoes file operations; not bound to Ctrl+Z. |
+| B6 | Selections and Visual Mode | Selections in removed panels go with them; the status bar gives the count and undo restores them. In Visual Mode `db`/`dB` do nothing and say so; `d` never deletes files. |
+| B7 | Keys | `prune-back` = `db`, `prune-back-segment` = `dB`, `undo-workspace` = `u`, configurable. Incomplete or invalid sequences are cancelled and swallow their second key. A pending `d` is dropped on pointer actions in the workspace, focus moving to another panel, and the window losing focus. |
+| B8 | Override precedence | The defaults of the three new actions give way to an overlapping user binding (dropped with a warning) instead of rejecting it, so existing `d` or `u` bindings keep working. Other conflicts are handled as before. |
+| B9 | Focus Mode | `db`, `dB` and `u` are not available in Focus Mode: nothing changes and the status bar says so. This departs from spec §11, which asked for pruning to work in Focus Mode (product decision, 2026-11-11). |

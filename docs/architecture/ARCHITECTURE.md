@@ -20,7 +20,7 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
                 │   renders WorkspaceView ─ PanelView (stateless) ─ FileView
                 │   carries out Effects: Load / Watch / Unwatch / Launch / Persist
                 ▼
- application    WorkspaceService ── listings (LRU 16) ── selection / targets
+ application    WorkspaceService ── listings (LRU 16) ── selection / targets ── undo (prunes, session only)
                 │   TransferPlan ──► OperationRequest ──► OperationManager (unchanged) ──► D-Bus (unchanged)
                 │   interaction: KeyMap, Interaction (Normal/Visual/Command), command parser
                 ▼
@@ -36,6 +36,7 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 | Per-panel cursor, scroll anchor, sort, view mode, hidden files, search, selection | `PanelState`, inside the workspace |
 | Directory listings and their load and watch generations | `WorkspaceService` (cached per panel; never in widgets) |
 | Interaction mode, pending keys | `Interaction` (shared with the key controller) |
+| Workspace undo history (pruned panels with their state) | `WorkspaceService`, for the session; never saved ([ADR 0007](../decisions/0007-backward-branch-pruning.md)) |
 | File operations and their lifecycle | `OperationManager`, the single source of truth, also published on D-Bus |
 | Rendered widgets | `WorkspaceView` (a grid laid out by the pure `workspace_layout`: depth across, branches down, connectors), `PanelView` and `BranchCard`; disposable at any time |
 
@@ -45,3 +46,4 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 - Focus Mode changes presentation only, and never creates, destroys or duplicates panels.
 - Operations capture absolute source and destination paths when they are planned. Switching or closing branches, or toggling Focus Mode, does not affect a running operation.
 - Branches, cursors and selections never resolve sources through "the active panel at execution time".
+- Pruning (`db`, `dB`) and workspace undo change panels and branches only. They go through `WorkspaceService`, whose only effects are unwatching and saving, and they never reach the operation manager or the filesystem. Pruning removes only panels no other branch uses ([ADR 0007](../decisions/0007-backward-branch-pruning.md)).

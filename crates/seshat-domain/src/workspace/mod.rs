@@ -8,6 +8,7 @@
 mod ids;
 mod model;
 mod panel;
+mod prune;
 #[cfg(test)]
 mod tests;
 
@@ -16,3 +17,4 @@ pub use model::{
     BranchParts, Opened, PanelParts, Resolution, Workspace, WorkspaceError, WorkspaceParts,
 };
 pub use panel::{Branch, Panel, PanelState, ScrollAnchor, Selection, Unavailability};
+pub use prune::{PruneMotion, PrunePlan, PruneRefusal, PrunedSegment, RestoreRefusal};
