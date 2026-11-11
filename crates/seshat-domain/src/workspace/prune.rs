@@ -187,10 +187,7 @@ impl Workspace {
             .map(|id| self.panels.remove(id).expect("removed panel exists"))
             .collect();
         let gone: HashSet<PanelId> = plan.removed.iter().copied().collect();
-        self.back.retain(|p| !gone.contains(p));
-        self.forward.retain(|p| !gone.contains(p));
-        self.back.dedup();
-        self.forward.dedup();
+        self.jumps.forget(&gone);
 
         let pruned_branch = self.branches[&branch].clone();
         let adopter = if plan.ends_branch {

@@ -6,6 +6,7 @@
 //! is up to the presentation layer, which reads this model.
 
 mod ids;
+mod jump;
 mod model;
 mod panel;
 mod prune;
@@ -13,6 +14,7 @@ mod prune;
 mod tests;
 
 pub use ids::{BranchId, PanelId};
+pub use jump::JumpList;
 pub use model::{
     BranchParts, Opened, PanelParts, Resolution, Workspace, WorkspaceError, WorkspaceParts,
 };
