@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use seshat_application::interaction::Action;
 use seshat_application::view::ViewMode;
+use seshat_domain::Direction;
 
 use super::{App, CommandLineMsg, Msg};
 use crate::actions;
@@ -401,8 +402,8 @@ fn command_line(sender: &ComponentSender<App>) -> gtk::Entry {
                 gtk::gdk::Key::Escape => CommandLineMsg::Cancelled,
                 gtk::gdk::Key::Up => CommandLineMsg::History { older: true },
                 gtk::gdk::Key::Down => CommandLineMsg::History { older: false },
-                gtk::gdk::Key::Tab => CommandLineMsg::Complete { forward: true },
-                gtk::gdk::Key::ISO_Left_Tab => CommandLineMsg::Complete { forward: false },
+                gtk::gdk::Key::Tab => CommandLineMsg::Complete(Direction::Next),
+                gtk::gdk::Key::ISO_Left_Tab => CommandLineMsg::Complete(Direction::Previous),
                 _ => return gtk::glib::Propagation::Proceed,
             };
             sender.input_sender().emit(Msg::CommandLine(msg));

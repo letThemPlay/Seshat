@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
+use seshat_domain::Direction;
 use seshat_domain::entities::{EntryKind, FileEntry, Location};
 use seshat_domain::operation::OperationStatus;
 use seshat_domain::view::{SortKey, ViewMode};
@@ -185,7 +186,7 @@ fn spec_19_branches_coexist_and_navigate_independently() {
     assert_eq!(ws.panel(projects).unwrap().parent(), Some(documents));
 
     // Switch to the Projects branch and keep navigating it.
-    s.service.cycle_branch(false);
+    s.service.cycle_branch(Direction::Previous);
     s.run();
     s.service.move_right();
     s.service.move_right();
@@ -335,7 +336,7 @@ fn spec_16_4_focus_mode_never_reloads() {
     s.loads_since();
     s.service.toggle_focus_mode();
     s.service.move_left();
-    s.service.cycle_branch(true);
+    s.service.cycle_branch(Direction::Next);
     s.service.toggle_focus_mode();
     s.run();
     assert_eq!(s.loads_since(), 0);
@@ -346,7 +347,7 @@ fn spec_16_8_branch_switching_does_not_reload() {
     let (mut s, _) = scenario();
     s.loads_since();
     for _ in 0..6 {
-        s.service.cycle_branch(true);
+        s.service.cycle_branch(Direction::Next);
         s.service.move_left();
         s.service.move_right();
         s.run();
@@ -713,7 +714,7 @@ fn spec_16_6_workspace_changes_do_not_alter_a_running_operation() {
     // Switch branch, toggle Focus Mode, close the source branch.
     s.service.activate_panel(home).unwrap();
     s.service.toggle_focus_mode();
-    s.service.cycle_branch(true);
+    s.service.cycle_branch(Direction::Next);
     let source_branch = s.service.workspace().branches_through(projects)[0];
     s.service.close_branch(source_branch).unwrap();
     s.run();
@@ -806,7 +807,7 @@ fn nav_open_entry_reports_how_a_folder_was_resolved() {
 fn nav_6_reactivation_reads_and_watches_nothing_new() {
     let (mut s, [home, documents, projects, _]) = scenario();
     s.service.activate_panel(projects).unwrap();
-    s.service.cycle_branch(true);
+    s.service.cycle_branch(Direction::Next);
     s.service.move_left();
     s.run();
     s.loads_since();
@@ -831,7 +832,7 @@ fn nav_16_3_reactivation_restores_panel_state() {
     s.service.move_cursor(projects, 1);
     s.service.set_sort_key(documents, SortKey::Size);
     s.service.set_query(documents, "a");
-    s.service.cycle_branch(true);
+    s.service.cycle_branch(Direction::Next);
     s.service.move_left();
     s.service
         .open_entry(home, &entry("/h/Documents", true))
@@ -1119,10 +1120,10 @@ fn prune_keeps_l_h_and_branch_switching_working() {
     // `h` and `[`/`]` behave as before.
     assert!(s.service.move_left());
     assert_eq!(s.active(), documents);
-    s.service.cycle_branch(true);
+    s.service.cycle_branch(Direction::Next);
     s.run();
     assert_eq!(s.active(), downloads);
-    s.service.cycle_branch(true);
+    s.service.cycle_branch(Direction::Next);
     assert_eq!(s.service.workspace().active_path()[0], home);
     assert_eq!(s.service.workspace().branch_count(), 2);
 }

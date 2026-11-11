@@ -173,6 +173,7 @@ fn place(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use seshat_domain::Direction;
     use seshat_domain::entities::Location;
     use seshat_domain::workspace::PanelState;
 
@@ -250,7 +251,7 @@ mod tests {
     fn switching_branch_moves_no_panel() {
         let (mut ws, _) = scenario();
         let before = compute(&ws, ALL, None);
-        ws.cycle_branch(true);
+        ws.cycle_branch(Direction::Next);
         let after = compute(&ws, ALL, Some(before.first_row));
         let place = |l: &Layout| -> Vec<(PanelId, usize, usize, usize)> {
             l.cells
@@ -327,7 +328,7 @@ mod tests {
         );
 
         // Moving within the window keeps it still; leaving it moves it.
-        ws.cycle_branch(false);
+        ws.cycle_branch(Direction::Previous);
         let same = compute(
             &ws,
             LayoutOptions {
@@ -338,7 +339,7 @@ mod tests {
         );
         assert_eq!(same.first_row, layout.first_row);
         for _ in 0..4 {
-            ws.cycle_branch(false);
+            ws.cycle_branch(Direction::Previous);
         }
         let moved = compute(
             &ws,

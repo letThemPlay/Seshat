@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use seshat_application::ports::ListingError;
 use seshat_application::workspace::{Effect, WorkspaceService};
+use seshat_domain::Direction;
 use seshat_domain::entities::{EntryKind, FileEntry, Location};
 use seshat_domain::workspace::{PanelId, PanelState, Workspace};
 
@@ -110,7 +111,9 @@ fn report(scale: &str, branches: usize, fan: usize, tail: usize) {
 
     let mut w = ws.clone();
     time("Workspace::branches", 200, || w.branches().len());
-    time("Workspace::cycle_branch", 1000, || w.cycle_branch(true));
+    time("Workspace::cycle_branch", 1000, || {
+        w.cycle_branch(Direction::Next)
+    });
     time("Workspace::move_left + move_right", 1000, || {
         w.move_left();
         w.move_right()
@@ -139,7 +142,7 @@ fn report(scale: &str, branches: usize, fan: usize, tail: usize) {
     settle(&mut service, 1000);
     let mut loads = 0;
     let switching = time("WorkspaceService::cycle_branch (+ effects)", 500, || {
-        service.cycle_branch(true);
+        service.cycle_branch(Direction::Next);
         loads += settle(&mut service, 1000);
     });
     println!(

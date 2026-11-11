@@ -258,34 +258,54 @@ pub fn rename(ws: &WorkspaceService, name: Option<String>) -> Result<ActionPlan,
     })
 }
 
-/// Creates a folder (`directory`) or an empty file in the active panel:
+/// What [`new_item`] creates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ItemKind {
+    Folder,
+    File,
+}
+
+impl ItemKind {
+    fn name_kind(self) -> NameKind {
+        match self {
+            Self::Folder => NameKind::NewFolder,
+            Self::File => NameKind::NewFile,
+        }
+    }
+
+    /// The name suggested before a number is added to make it free.
+    fn default_name(self) -> &'static str {
+        match self {
+            Self::Folder => "New Folder",
+            Self::File => "New File",
+        }
+    }
+}
+
+/// Creates a folder or an empty file in the active panel:
 /// named `name` when given (command line), otherwise after asking, with a
 /// free name suggested from what the panel lists.
 pub fn new_item(
     ws: &WorkspaceService,
-    directory: bool,
+    item: ItemKind,
     name: Option<String>,
 ) -> Result<ActionPlan, ActionRefusal> {
     let Location::Path(parent) = ws.active_location() else {
         return Err(ActionRefusal::NotAFolder);
     };
     let panel = ws.active_panel();
-    let kind = if directory {
-        NameKind::NewFolder
-    } else {
-        NameKind::NewFile
-    };
+    let kind = item.name_kind();
     if let Some(name) = name {
         return Ok(submit(create(kind, panel, parent.clone(), name)));
     }
-    let base = if directory { "New Folder" } else { "New File" };
+    let base = item.default_name();
     let listing = ws.listing(panel);
     let taken = |p: &std::path::Path| {
         listing.is_some_and(|l| l.entries().iter().any(|e| e.local_path() == Some(p)))
     };
     let first = parent.join(base);
     let free = if taken(&first) {
-        unique_path(&first, directory, taken)
+        unique_path(&first, item == ItemKind::Folder, taken)
     } else {
         first
     };
@@ -701,7 +721,7 @@ mod tests {
     fn new_items_suggest_a_free_name_and_select_the_result() {
         let ws = home();
         let home = ws.active_panel();
-        let Ok(ActionPlan::AskName(folder)) = new_item(&ws, true, None) else {
+        let Ok(ActionPlan::AskName(folder)) = new_item(&ws, ItemKind::Folder, None) else {
             panic!("expected a name prompt");
         };
         assert_eq!(folder.kind, NameKind::NewFolder);
@@ -718,12 +738,12 @@ mod tests {
             )
         );
 
-        let Ok(ActionPlan::AskName(file)) = new_item(&ws, false, None) else {
+        let Ok(ActionPlan::AskName(file)) = new_item(&ws, ItemKind::File, None) else {
             panic!("expected a name prompt");
         };
         assert_eq!(file.suggestion, "New File");
         assert_eq!(
-            new_item(&ws, false, Some("x.md".into())),
+            new_item(&ws, ItemKind::File, Some("x.md".into())),
             Ok(ActionPlan::Submit {
                 request: OperationRequest::CreateFile {
                     parent: "/h".into(),
@@ -735,7 +755,10 @@ mod tests {
 
         let mut ws = super::tests::home();
         open(&mut ws, Location::trash_root());
-        assert_eq!(new_item(&ws, true, None), Err(ActionRefusal::NotAFolder));
+        assert_eq!(
+            new_item(&ws, ItemKind::Folder, None),
+            Err(ActionRefusal::NotAFolder)
+        );
     }
 
     #[test]

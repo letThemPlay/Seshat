@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use relm4::ComponentSender;
 use seshat_application::operations::OperationRequest;
 use seshat_application::workspace::file_actions::{
-    self, ActionPlan, ActionRefusal, Confirmation, NameKind,
+    self, ActionPlan, ActionRefusal, Confirmation, ItemKind, NameKind,
 };
 use seshat_application::workspace::{TransferKind, TransferPlan};
 use seshat_domain::entities::Location;
@@ -176,7 +176,7 @@ impl App {
 
     /// Copy or cut: the targets go to the system clipboard, interoperable
     /// with other file managers (decision D9). The selection is consumed.
-    pub(super) fn clipboard_store(&mut self, cut: bool) {
+    pub(super) fn clipboard_store(&mut self, kind: TransferKind) {
         let sources = match file_actions::clipboard_sources(&self.service) {
             Ok(sources) => sources,
             Err(refusal) => return self.refuse(&refusal),
@@ -185,9 +185,9 @@ impl App {
             return;
         };
         let paths = sources.value;
-        clipboard::set_files(&display, &paths, cut);
+        clipboard::set_files(&display, &paths, kind);
         self.staged = Some(Staged {
-            cut,
+            kind,
             count: paths.len(),
         });
         self.notice = notice::left_out(sources.left_out);
@@ -222,17 +222,12 @@ impl App {
             self.notice = Some(notice::cannot_paste_here());
             return;
         };
-        let kind = if files.cut {
-            TransferKind::Move
-        } else {
-            TransferKind::Copy
-        };
-        let plan = TransferPlan::from_paths(kind, &files.paths, &Location::Path(destination));
+        let plan = TransferPlan::from_paths(files.kind, &files.paths, &Location::Path(destination));
         match plan {
             Ok(plan) if plan.is_noop() => {}
             Ok(plan) => {
                 // A cut is consumed by pasting it once.
-                if files.cut
+                if files.kind == TransferKind::Move
                     && let Some(display) = gtk::gdk::Display::default()
                 {
                     clipboard::clear(&display);
@@ -280,11 +275,11 @@ impl App {
     /// command line) it is created directly; otherwise a name is asked for.
     pub(super) fn new_item(
         &mut self,
-        directory: bool,
+        item: ItemKind,
         name: Option<String>,
         sender: &ComponentSender<Self>,
     ) {
-        let plan = file_actions::new_item(&self.service, directory, name);
+        let plan = file_actions::new_item(&self.service, item, name);
         self.carry_out(plan, sender);
     }
 

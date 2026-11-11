@@ -10,6 +10,7 @@ use seshat_application::interaction::command::{self, Command, CommandError, Comm
 use seshat_application::interaction::completion::{self, CompletionCycle, Plan};
 use seshat_application::ports::ListingError;
 use seshat_application::use_cases::ListDirectory;
+use seshat_domain::Direction;
 use seshat_domain::entities::FileEntry;
 
 use super::{Cx, ListingResult, Msg};
@@ -27,10 +28,8 @@ pub enum CommandLineMsg {
     History {
         older: bool,
     },
-    /// Tab (`forward`) or Shift+Tab.
-    Complete {
-        forward: bool,
-    },
+    /// Tab (`Next`) or Shift+Tab (`Previous`).
+    Complete(Direction),
     /// A folder listed for path completion.
     Listed {
         request: u64,
@@ -99,7 +98,7 @@ impl CommandLineController {
             }
             CommandLineMsg::Cancelled => return CommandLineOutcome::Close,
             CommandLineMsg::History { older } => self.history_step(older),
-            CommandLineMsg::Complete { forward } => self.complete(forward, cx),
+            CommandLineMsg::Complete(direction) => self.complete(direction, cx),
             CommandLineMsg::Listed {
                 request,
                 text,
@@ -120,14 +119,14 @@ impl CommandLineController {
         self.set_text(&text.unwrap_or_default());
     }
 
-    /// Tab (`forward`) or Shift+Tab: completes command names, folder paths
+    /// Tab or Shift+Tab: completes command names, folder paths
     /// and branch targets. Repeated presses cycle through the matches.
-    fn complete(&mut self, forward: bool, cx: &mut Cx<'_>) {
+    fn complete(&mut self, direction: Direction, cx: &mut Cx<'_>) {
         let text = self.entry.text().to_string();
         if let Some(cycle) = &mut self.completion
             && cycle.is_current(&text)
         {
-            let next = cycle.step(forward);
+            let next = cycle.step(direction);
             let (candidates, index) = (cycle.candidates().to_vec(), cycle.index());
             self.set_text(&next);
             *cx.notice = Some(Notice::verbatim(match_list(&candidates, index)));

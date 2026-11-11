@@ -40,10 +40,10 @@ use seshat_application::ports::{
     DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError, ThemeRepository,
     WatchGuard,
 };
-use seshat_application::preferences::{Preferences, PreferencesStore, WorkspaceLayout};
+use seshat_application::preferences::{Preferences, PreferencesStore};
 use seshat_application::use_cases::ListDirectory;
 use seshat_application::view::{SortKey, ViewMode};
-use seshat_application::workspace::file_actions::Availability;
+use seshat_application::workspace::file_actions::{Availability, ItemKind};
 use seshat_application::workspace::{TransferKind, TransferPlan, WorkspaceService, WorkspaceStore};
 use seshat_domain::entities::{FileEntry, Location, StandardLocation};
 use seshat_domain::view::ViewOptions;
@@ -187,18 +187,15 @@ pub enum Msg {
     Device(DeviceMsg),
     OpenFailed(String),
     // File operations
-    ClipboardStore {
-        cut: bool,
-    },
+    /// Copy (`Copy`) or cut (`Move`) the targets to the clipboard.
+    ClipboardStore(TransferKind),
     Paste,
     PasteFiles(Option<ClipboardFiles>),
     RenameSelection,
     TrashSelection,
     DeleteSelection,
     RestoreSelection,
-    NewItem {
-        directory: bool,
-    },
+    NewItem(ItemKind),
     EmptyTrash,
     /// Submit a request; select the given item in that panel once listed.
     Submit(OperationRequest, Option<(PanelId, Location)>),
@@ -221,7 +218,7 @@ impl std::fmt::Debug for ListingResult {
 /// Files waiting on the clipboard to be pasted (decision D9).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Staged {
-    cut: bool,
+    kind: TransferKind,
     count: usize,
 }
 
@@ -340,8 +337,7 @@ impl SimpleComponent for App {
         }
         let keys = KeyRouter::new(keymap);
 
-        let strip = prefs.workspace.layout == WorkspaceLayout::Strip;
-        let workspace_view = Rc::new(WorkspaceView::new(strip, {
+        let workspace_view = Rc::new(WorkspaceView::new(prefs.workspace.layout, {
             let sender = sender.clone();
             move |event| sender.input_sender().emit(Msg::Workspace(event))
         }));
@@ -631,14 +627,14 @@ impl SimpleComponent for App {
             Msg::OpenFailed(err) => {
                 self.notice = Some(notice::open_failed(&err));
             }
-            Msg::ClipboardStore { cut } => self.clipboard_store(cut),
+            Msg::ClipboardStore(kind) => self.clipboard_store(kind),
             Msg::Paste => self.paste(&sender),
             Msg::PasteFiles(files) => self.paste_files(files, &sender),
             Msg::RenameSelection => self.rename_selection(None, &sender),
             Msg::TrashSelection => self.trash_selection(&sender),
             Msg::DeleteSelection => self.delete_selection(&sender),
             Msg::RestoreSelection => self.restore_selection(&sender),
-            Msg::NewItem { directory } => self.new_item(directory, None, &sender),
+            Msg::NewItem(item) => self.new_item(item, None, &sender),
             Msg::EmptyTrash => self.empty_trash(&sender),
             Msg::Submit(request, select) => self.submit(request, select),
             Msg::Operations(msg) => {
@@ -757,7 +753,7 @@ impl App {
             };
         }
         if let Some(staged) = self.staged {
-            return notice::staged(staged.count, staged.cut);
+            return notice::staged(staged.count, staged.kind);
         }
         let active = self.service.active_panel();
         match self.service.listing(active) {
