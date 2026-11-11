@@ -1131,3 +1131,18 @@ fn invariants_hold_across_random_sequences_with_pruning_and_undo() {
         }
     }
 }
+
+#[test]
+fn branches_are_numbered_from_one_in_spatial_order() {
+    let mut ws = home();
+    let root = ws.active_panel();
+    ws.open_child(root, loc("/home/u/a"), None).unwrap();
+    ws.open_child(root, loc("/home/u/b"), None).unwrap();
+    let order: Vec<BranchId> = ws.branches().iter().map(|b| b.id()).collect();
+    assert_eq!(order.len(), 2);
+    assert_eq!(ws.branch_number(1), Some(order[0]));
+    assert_eq!(ws.branch_number(2), Some(order[1]));
+    assert_eq!(ws.branch_number(0), None, "numbers start at 1");
+    assert_eq!(ws.branch_number(3), None);
+    ok(&ws);
+}

@@ -251,6 +251,12 @@ impl Workspace {
             .collect()
     }
 
+    /// Branch number `n`, counting from 1 in the order of [`Self::branches`]:
+    /// the numbers the branch bar shows and `:branch N` uses.
+    pub fn branch_number(&self, n: usize) -> Option<BranchId> {
+        self.branches().get(n.checked_sub(1)?).map(|b| b.id)
+    }
+
     /// The panels of `branch`, from its root to its tip.
     pub fn path(&self, branch: BranchId) -> Vec<PanelId> {
         self.branches
