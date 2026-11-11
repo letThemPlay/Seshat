@@ -93,4 +93,19 @@ impl PanelListing {
     pub fn entry(&self, location: &Location) -> Option<&FileEntry> {
         self.shown.iter().find(|e| e.location == *location)
     }
+
+    /// Shows `error` instead of entries; renderers see a new revision.
+    pub(super) fn fail(&mut self, error: ListingError) {
+        self.entries.clear();
+        self.shown.clear();
+        self.content = Content::Failed(error);
+        self.revision += 1;
+    }
+
+    /// Ends the current watch and supersedes any pending load: results
+    /// still on their way no longer match either generation.
+    pub(super) fn stop_watching(&mut self) {
+        self.watch_generation = 0;
+        self.load_generation = 0;
+    }
 }
