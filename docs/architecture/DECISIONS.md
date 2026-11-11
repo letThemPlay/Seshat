@@ -134,3 +134,13 @@ From the design review (R1): the rules for file actions moved from the window to
 | F2 | "Current Branch" scope | The active branch's root folder, searched recursively. Every panel of a branch lies inside it. Bounded by `max_entries`, `same_device` and cancellation. Approved 2026-11-11. |
 | F3 | Ignore rules | Exact names (`.git` and `node_modules` by default) until configuration (Spec 4 Phase 4), so no glob dependency is added yet. |
 | F4 | Query syntax and case | Queries are plain text: fzf's operators (`^`, `$`, `'`, `!`) are not interpreted, so a name with those characters is found as typed. Matching ignores case by default (Spec 4 §4.3); `Smart` and `Sensitive` are ready for the setting in §15. |
+
+## Status messages (approved 2026-11-11)
+
+From the design review (R5). Status-bar messages are typed `Notice` values formatted in one place, `seshat-presentation/src/notice.rs`.
+
+| # | Topic | Decision |
+|---|---|---|
+| N1 | Severity | Two kinds. **Error** (refusals and failures, including a theme that can't be applied) is drawn in the theme's error colour. **Info** (confirmations and information) uses the normal status text colour. Before, every message used the warning colour. Both come from existing theme tokens, so custom themes need no change. |
+| N2 | Screen readers | Error messages are announced through GTK's accessible announcements, at high priority, once each time they are raised. Information is not announced, so routine work stays quiet. |
+| N3 | Wording | Every message is a sentence: capital first letter, closing full stop unless it already ends in `.`, `!`, `?` or `…`. Lists of completion matches are shown as they are. Counts use one helper ("1 item", "3 items"), so "has 1 issue(s)" now reads "has 1 issue". The Visual Mode refusal names the action instead of always saying "Pruning". |
