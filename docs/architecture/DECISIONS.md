@@ -114,3 +114,12 @@ Results in [review/performance.md](../review/performance.md).
 | B7 | Keys | `prune-back` = `db`, `prune-back-segment` = `dB`, `undo-workspace` = `u`, configurable. Incomplete or invalid sequences are cancelled and swallow their second key. A pending `d` is dropped on pointer actions in the workspace, focus moving to another panel, and the window losing focus. |
 | B8 | Override precedence | The defaults of the three new actions give way to an overlapping user binding (dropped with a warning) instead of rejecting it, so existing `d` or `u` bindings keep working. Other conflicts are handled as before. |
 | B9 | Focus Mode | `db`, `dB` and `u` are not available in Focus Mode: nothing changes and the status bar says so. This departs from spec §11, which asked for pruning to work in Focus Mode (product decision, 2026-11-11). |
+
+## File action rules (2026-11-11)
+
+From the design review (R1): the rules for file actions moved from the window to `seshat_application::workspace::file_actions`. Behaviour is unchanged except for these deliberate changes. A1 and the copy and cut part of A2 were approved with the plan (2026-11-11); the Move to Trash part of A2 applies the same rule and is awaiting review in the pull request.
+
+| # | Topic | Decision |
+|---|---|---|
+| A1 | Renaming an item in the Trash | The Rename dialog and `:rename <name>` now give the same answer: "Items in the Trash can't be renamed." Before, the dialog did nothing silently. Two selected items in one panel now also say "Select exactly one item to rename." instead of doing nothing. |
+| A2 | Trash items in copy, cut and Move to Trash | Items in the Trash can't take part, so they are left out, but no longer silently: the status bar says "N items in the Trash were left out." A selection made only of Trash items is refused with a reason ("Items in the Trash can only be restored or deleted.", or for Move to Trash "These items are already in the Trash."). Restore is unchanged. |

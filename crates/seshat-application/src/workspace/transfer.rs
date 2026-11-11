@@ -44,9 +44,46 @@ pub struct TransferPlan {
 }
 
 impl TransferPlan {
+    /// Plans a transfer of the workspace selection (grouped by panel).
     pub fn new(
         kind: TransferKind,
         groups: &[SelectionGroup],
+        destination: &Location,
+    ) -> Result<Self, TransferError> {
+        Self::from_groups(
+            kind,
+            groups.iter().map(|g| (&g.folder, g.items.as_slice())),
+            destination,
+        )
+    }
+
+    /// Plans a transfer of loose paths from outside the workspace (the
+    /// clipboard, drag and drop), grouped by their folder so the plan can
+    /// say where the items come from.
+    pub fn from_paths(
+        kind: TransferKind,
+        paths: &[PathBuf],
+        destination: &Location,
+    ) -> Result<Self, TransferError> {
+        let mut groups: Vec<(Location, Vec<Location>)> = Vec::new();
+        for path in paths {
+            let folder = Location::Path(path.parent().map(PathBuf::from).unwrap_or_default());
+            let item = Location::Path(path.clone());
+            match groups.iter_mut().find(|(f, _)| *f == folder) {
+                Some((_, items)) => items.push(item),
+                None => groups.push((folder, vec![item])),
+            }
+        }
+        Self::from_groups(
+            kind,
+            groups.iter().map(|(f, items)| (f, items.as_slice())),
+            destination,
+        )
+    }
+
+    fn from_groups<'a>(
+        kind: TransferKind,
+        groups: impl Iterator<Item = (&'a Location, &'a [Location])>,
         destination: &Location,
     ) -> Result<Self, TransferError> {
         let Location::Path(destination) = destination else {
@@ -54,15 +91,15 @@ impl TransferPlan {
         };
         let mut sources = Vec::new();
         let mut origins = Vec::new();
-        for group in groups {
-            for item in &group.items {
+        for (folder, items) in groups {
+            for item in items {
                 match item {
                     Location::Path(path) => sources.push(path.clone()),
                     Location::Trash(_) => return Err(TransferError::SourceInTrash),
                 }
             }
-            if !group.items.is_empty() {
-                origins.push((group.folder.clone(), group.items.len()));
+            if !items.is_empty() {
+                origins.push((folder.clone(), items.len()));
             }
         }
         if sources.is_empty() {
