@@ -34,7 +34,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
 };
 use seshat_application::interaction::{Action, Intent, KeyMap, Mode, format_sequence};
-use seshat_application::navigation::{breadcrumbs, parse_address};
+use seshat_application::navigation::{AddressError, breadcrumbs, parse_address};
 use seshat_application::operations::{OperationManager, OperationRequest};
 use seshat_application::ports::{
     DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError, ThemeRepository,
@@ -46,8 +46,7 @@ use seshat_application::view::{SortKey, ViewMode};
 use seshat_application::workspace::file_actions::{Availability, ItemKind};
 use seshat_application::workspace::{TransferKind, TransferPlan, WorkspaceService, WorkspaceStore};
 use seshat_domain::entities::{FileEntry, Location, StandardLocation};
-use seshat_domain::view::ViewOptions;
-use seshat_domain::workspace::{PanelId, PanelState};
+use seshat_domain::workspace::PanelId;
 
 use crate::actions::{self, ActionContext, Actions};
 use crate::clipboard::ClipboardFiles;
@@ -141,8 +140,8 @@ pub enum Msg {
         y: f64,
     },
     ToggleHidden,
-    SetViewMode(String),
-    SetSortKey(String),
+    SetViewMode(ViewMode),
+    SetSortKey(SortKey),
     ToggleSortDescending,
     StartSearch,
     FocusResults,
@@ -398,15 +397,7 @@ impl SimpleComponent for App {
         }
         shortcuts::install(&root, &keys, &ui.command_entry, &sender);
 
-        let defaults = PanelState {
-            options: ViewOptions {
-                show_hidden: prefs.show_hidden,
-                sort: prefs.sort,
-                query: String::new(),
-            },
-            mode: prefs.view_mode,
-            ..PanelState::default()
-        };
+        let defaults = prefs.panel_defaults();
         let restored = if prefs.workspace.restore {
             init.workspace_store.load()
         } else {
@@ -514,20 +505,16 @@ impl SimpleComponent for App {
                 self.service.toggle_hidden(active);
                 self.save_preferences();
             }
-            Msg::SetViewMode(id) => {
-                if let Some(mode) = ViewMode::from_id(&id) {
-                    let active = self.service.active_panel();
-                    self.service.set_view_mode(active, mode);
-                    self.save_preferences();
-                    self.focused_panel = None; // the visible view changed
-                }
+            Msg::SetViewMode(mode) => {
+                let active = self.service.active_panel();
+                self.service.set_view_mode(active, mode);
+                self.save_preferences();
+                self.focused_panel = None; // the visible view changed
             }
-            Msg::SetSortKey(id) => {
-                if let Some(key) = SortKey::from_id(&id) {
-                    let active = self.service.active_panel();
-                    self.service.set_sort_key(active, key);
-                    self.save_preferences();
-                }
+            Msg::SetSortKey(key) => {
+                let active = self.service.active_panel();
+                self.service.set_sort_key(active, key);
+                self.save_preferences();
             }
             Msg::ToggleSortDescending => {
                 let active = self.service.active_panel();
@@ -569,16 +556,13 @@ impl SimpleComponent for App {
             }
             Msg::EditAddress => self.editing_address = true,
             Msg::CancelAddress => self.editing_address = false,
-            Msg::AddressSubmitted(text) => {
-                let current = self.service.active_location().clone();
-                match parse_address(&text, &self.home, Some(&current)) {
-                    Ok(location) => {
-                        self.editing_address = false;
-                        self.service.open_location(location);
-                    }
-                    Err(err) => self.notice = Some(Notice::from_error(&err)),
+            Msg::AddressSubmitted(text) => match self.resolve_address(&text) {
+                Ok(location) => {
+                    self.editing_address = false;
+                    self.service.open_location(location);
                 }
-            }
+                Err(err) => self.notice = Some(Notice::from_error(&err)),
+            },
 
             Msg::Workspace(event) => self.workspace_event(event, &sender),
             Msg::PanelLoaded {
@@ -762,6 +746,12 @@ impl App {
         }
     }
 
+    /// Text from the address bar, `:open`, `:copy` or `:move`, resolved
+    /// against Home and the active panel's folder.
+    fn resolve_address(&self, text: &str) -> Result<Location, AddressError> {
+        parse_address(text, &self.home, Some(self.service.active_location()))
+    }
+
     fn typing(&self) -> bool {
         crate::keys::typing_elsewhere(gtk::prelude::GtkWindowExt::focus(&self.ui.window).as_ref())
     }
@@ -862,11 +852,9 @@ impl App {
     /// Saves the theme and the defaults for new panels (decision D11: the
     /// last changed panel setting becomes the default).
     fn save_preferences(&mut self) {
-        let defaults = self.service.defaults();
         self.preferences.theme = self.theme.choice().clone();
-        self.preferences.show_hidden = defaults.options.show_hidden;
-        self.preferences.view_mode = defaults.mode;
-        self.preferences.sort = defaults.options.sort;
+        self.preferences
+            .adopt_panel_defaults(self.service.defaults());
         if let Err(err) = self.preferences_store.save(&self.preferences) {
             tracing::warn!(error = %err, "preferences not saved");
         }

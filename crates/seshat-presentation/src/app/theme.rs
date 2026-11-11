@@ -15,8 +15,8 @@ use crate::theme::{Theme, ThemeRegistry, render_css};
 
 #[derive(Debug)]
 pub enum ThemeMsg {
-    /// A theme was picked (by its id, see [`ThemeChoice::id`]).
-    Set(String),
+    /// A theme was picked (its action id is parsed where it arrives).
+    Set(ThemeChoice),
     /// Read the themes folder again.
     Reload,
     /// Files in the themes folder changed; reloads after a short delay.
@@ -68,10 +68,7 @@ impl ThemeController {
     /// Handles `msg`. Returns whether the preferences must be saved.
     pub(super) fn update(&mut self, msg: ThemeMsg, cx: &mut Cx<'_>) -> bool {
         match msg {
-            ThemeMsg::Set(id) => {
-                let Some(choice) = ThemeChoice::from_id(&id) else {
-                    return false;
-                };
+            ThemeMsg::Set(choice) => {
                 self.choice = choice;
                 self.apply(cx);
                 return true;

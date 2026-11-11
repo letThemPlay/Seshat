@@ -1,5 +1,8 @@
 //! User preferences persisted between sessions.
 
+use seshat_domain::view::ViewOptions;
+use seshat_domain::workspace::PanelState;
+
 use crate::view::{SortOrder, ViewMode};
 
 /// Which theme to use: follow the system, a built-in theme, or a custom
@@ -45,6 +48,29 @@ pub struct Preferences {
     pub view_mode: ViewMode,
     pub sort: SortOrder,
     pub workspace: WorkspacePreferences,
+}
+
+impl Preferences {
+    /// The settings a new root panel starts with (decision D11).
+    pub fn panel_defaults(&self) -> PanelState {
+        PanelState {
+            options: ViewOptions {
+                show_hidden: self.show_hidden,
+                sort: self.sort,
+                query: String::new(),
+            },
+            mode: self.view_mode,
+            ..PanelState::default()
+        }
+    }
+
+    /// Remembers `defaults` as the settings for new panels, after a panel
+    /// setting changed (decision D11). A panel's search is never saved.
+    pub fn adopt_panel_defaults(&mut self, defaults: &PanelState) {
+        self.show_hidden = defaults.options.show_hidden;
+        self.view_mode = defaults.mode;
+        self.sort = defaults.options.sort;
+    }
 }
 
 /// Preferences of the spatial workspace and its keyboard interaction.
@@ -117,5 +143,23 @@ mod tests {
         }
         assert_eq!(ThemeChoice::from_id("custom:"), None);
         assert_eq!(ThemeChoice::from_id("neon"), None);
+    }
+
+    #[test]
+    fn panel_defaults_round_trip_without_the_search() {
+        let mut prefs = Preferences::default();
+        let mut state = prefs.panel_defaults();
+        state.options.show_hidden = true;
+        state.options.sort.descending = true;
+        state.options.query = "draft".into();
+        state.mode = ViewMode::Grid;
+        prefs.adopt_panel_defaults(&state);
+        assert!(prefs.show_hidden);
+        assert!(prefs.sort.descending);
+        assert_eq!(prefs.view_mode, ViewMode::Grid);
+        let back = prefs.panel_defaults();
+        assert_eq!(back.options.query, "", "a search is not a default");
+        assert_eq!(back.mode, ViewMode::Grid);
+        assert_eq!(back.options.sort, state.options.sort);
     }
 }
