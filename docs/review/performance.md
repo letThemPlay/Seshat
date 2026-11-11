@@ -90,3 +90,15 @@ On 2026-11-09 it was decided to document both and revisit them only if they beco
 
 1. **Repeated folder reads when cycling through many branches.** Each branch shows about 4 full panels, so 50 branches touch about 200 panels, but only 16 listings are cached (D13). Every switch re-reads the panels it shows, in the background: the UI stays fast, and nothing reloads while you stay within ~4 branches. A larger cache or a byte budget would change D13, so it is left for a product decision.
 2. **Responsiveness during live reloads of a 100,000-entry folder.** Each reload replaces the whole GTK model (250–270 ms) and the UI pauses for up to 365 ms. Under R3 this is exempt and documented. Incremental model updates (applying only the changed rows) would remove it.
+
+## Fuzzy Find engine (2026-11-11)
+
+`cargo test --release -p seshat-infrastructure --test search -- --ignored --nocapture`, a tree of 100 folders × 1,000 files (100,100 entries), on the development machine:
+
+| Step | Time | Target (Spec 4 §11) |
+|---|---|---|
+| First results while walking | 2.5 ms | about 100 ms for small folders ✅ |
+| Walk and rank all entries | 85 ms | — |
+| A new query on the cached entries | 32 ms | — |
+
+These are engine timings without a UI; the overlay will run the engine on a worker thread.

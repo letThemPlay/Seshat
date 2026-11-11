@@ -8,6 +8,7 @@ pub mod navigation;
 pub mod operations;
 pub mod ports;
 pub mod preferences;
+pub mod search;
 pub mod use_cases;
 pub mod view;
 pub mod workspace;

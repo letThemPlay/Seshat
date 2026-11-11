@@ -123,3 +123,14 @@ From the design review (R1): the rules for file actions moved from the window to
 |---|---|---|
 | A1 | Renaming an item in the Trash | The Rename dialog and `:rename <name>` now give the same answer: "Items in the Trash can't be renamed." Before, the dialog did nothing silently. Two selected items in one panel now also say "Select exactly one item to rename." instead of doing nothing. |
 | A2 | Trash items in copy, cut and Move to Trash | Items in the Trash can't take part, so they are left out, but no longer silently: the status bar says "N items in the Trash were left out." A selection made only of Trash items is refused with a reason ("Items in the Trash can only be restored or deleted.", or for Move to Trash "These items are already in the Trash."). Restore is unchanged. |
+
+## Fuzzy Find search engine (2026-11-11)
+
+[Specification](../specifications/4-FUZZY-FIND.md) and [search.md](search.md). The engine is built without its UI (Phase 1 and the non-UI part of Phase 2).
+
+| # | Topic | Decision |
+|---|---|---|
+| F1 | Matching library | `nucleo-matcher` (the matching core of nucleo, Spec 4 §5), behind the `FuzzyMatcher` port in infrastructure only. Its licence, MPL-2.0, was added to `deny.toml`. It is file-level copyleft and compatible with GPL-3.0-or-later. Approved with the plan, 2026-11-11. The high-level `nucleo` crate was not used: it brings its own thread pool, while the engine runs on a worker thread the shell controls, stopped by a `CancelToken` like file operations. |
+| F2 | "Current Branch" scope | The active branch's root folder, searched recursively. Every panel of a branch lies inside it. Bounded by `max_entries`, `same_device` and cancellation. Approved 2026-11-11. |
+| F3 | Ignore rules | Exact names (`.git` and `node_modules` by default) until configuration (Spec 4 Phase 4), so no glob dependency is added yet. |
+| F4 | Query syntax and case | Queries are plain text: fzf's operators (`^`, `$`, `'`, `!`) are not interpreted, so a name with those characters is found as typed. Matching ignores case by default (Spec 4 §4.3); `Smart` and `Sensitive` are ready for the setting in §15. |

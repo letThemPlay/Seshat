@@ -8,6 +8,7 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 - **D-Bus protocol:** [../ipc/protocol.md](../ipc/protocol.md)
 - **Decisions:** [DECISIONS.md](DECISIONS.md)
 - **Linux and Wayland:** [LINUX-WAYLAND.md](LINUX-WAYLAND.md)
+- **Fuzzy Find search engine:** [search.md](search.md)
 
 ## The spatial workspace
 
@@ -36,6 +37,7 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 | Per-panel cursor, scroll anchor, sort, view mode, hidden files, search, selection | `PanelState`, inside the workspace |
 | Directory listings and their load and watch generations | `WorkspaceService` (cached per panel; never in widgets) |
 | Interaction mode, pending keys | `Interaction` (shared with the key controller) |
+| Fuzzy Find sessions, their search generations and cached candidates | `SearchSessions` and `SearchEngine` (application), for one session; never saved ([search.md](search.md)) |
 | Workspace undo history (pruned panels with their state) | `WorkspaceService`, for the session; never saved ([ADR 0007](../decisions/0007-backward-branch-pruning.md)) |
 | File operations and their lifecycle | `OperationManager`, the single source of truth, also published on D-Bus |
 | Rendered widgets | `WorkspaceView` (a grid laid out by the pure `workspace_layout`: depth across, branches down, connectors), `PanelView` and `BranchCard`; disposable at any time |

@@ -1,10 +1,10 @@
 # Implementation status
 
-Status as of 2026-11-11, branch `refactor-file-actions`.
+Status as of 2026-11-11, branch `feature-fuzzy-find-engine`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 341 Rust tests (up from 295 before backward pruning, 165 originally), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (63 checks, including backward pruning).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 372 Rust tests (up from 341 before the Fuzzy Find engine, 165 originally), native Wayland verification, and both sandboxed UI tests: file operations (20 checks) and the spatial workspace (63 checks, including backward pruning).
 
 ## Spatial file manager specification
 
@@ -77,6 +77,27 @@ Status as of 2026-11-11, branch `refactor-file-actions`.
 | 14 | Clean Architecture | ✅ Verified | Domain `workspace/prune.rs`, application `prune_back`/`undo_workspace`, presentation only reports; architecture rules pass |
 | 15, 16.7 | Files never modified | ✅ Verified | `prune_db_only_unwatches_removed_panels_and_saves` (effects are `Unwatch` and `Persist` only), `prune_never_changes_files_or_running_operations`; the UI test compares a fingerprint of the home folder before and after |
 | 15 | Regressions: `l`, `Enter`, `h`, `[`/`]`, Visual, Command, persistence, Focus Mode | ✅ Verified | `prune_keeps_l_h_and_branch_switching_working`, `prune_results_persist_and_restore`; every earlier test and UI check passes unchanged |
+
+## Fuzzy Find specification
+
+[4-FUZZY-FIND.md](../specifications/4-FUZZY-FIND.md), [search.md](../architecture/search.md), decisions F1–F4. **The search engine is built; the UI is not.** Nothing is reachable from the app yet.
+
+| § | Requirement | Status | Evidence / notes |
+|---|---|---|---|
+| 4.1, 4.2, 7, 8, 16 | Overlay, shortcut, result list, keyboard and mouse, theming | ⏳ Not started | Phase 2 UI |
+| 4.1 | Visual Mode: selection suspended or shortcut unavailable | ⏳ Open decision | To decide with the UI |
+| 4.3 | Incremental search; empty query shows nothing; Unicode; case-insensitive; non-contiguous | ✅ Verified (engine) | `an_empty_query_shows_nothing_but_prepares_the_candidates`, `matches_subsequences_case_insensitively`, `finds_the_specs_example_with_the_real_matcher` (`dcm`) |
+| 5, 5.1 | Established library; bonuses; deterministic ranking, documented | ✅ Verified | `nucleo-matcher` (F1); `rewards_consecutive_and_boundary_matches`, `exact_names_come_first_then_name_matches_then_path_matches`, `ties_break_deterministically`; rules in search.md |
+| 5.2 | Highlighting on whole characters | ✅ Verified (data) | `highlights_whole_characters_in_unicode_names`, including combining accents; drawing them is UI work |
+| 6.1–6.4 | Scopes; shared ancestors searched once; result origins | ✅ Verified (engine) | `current_directory_and_branch_scopes_follow_the_active_panel`, `the_workspace_scope_searches_each_folder_once`, `results_carry_the_branch_and_panel_they_were_found_under`; Current Branch per F2 |
+| 7 | Stable result identity | ✅ Verified | Results are identified by their full native path, not their name (`non_utf8_and_unicode_names_keep_their_bytes`) |
+| 9 | Opening and revealing results through the workspace | ⏳ Not started | Phase 3; will go through `WorkspaceService` |
+| 10 | Operations on results | ⏳ Not started | Phase 4 |
+| 11 | Off the UI thread; superseded searches cancelled; streaming; bounded memory; no index | ✅ Verified (engine) | `results_stream_while_walking_large_trees`, `results_are_bounded_to_the_best`, `a_cancelled_search_publishes_nothing_and_caches_nothing`; the worker thread comes with the UI. 100,100 entries: first results 2.5 ms, full walk 85 ms, a new query 32 ms (release) |
+| 12 | No link following, no loops, permissions, vanishing files, non-UTF-8, mount boundaries, never modifies files | ✅ Verified | `symbolic_links_are_listed_but_never_followed`, `unreadable_folders_are_skipped_and_counted`, `folders_removed_during_a_walk_are_skipped`, `non_utf8_and_unicode_names_keep_their_bytes`; `same_device` on by default |
+| 13 | Clean Architecture; matcher behind an adapter | ✅ Verified | Ports `FuzzyMatcher`, `TreeWalker`; `scripts/check-architecture.sh` forbids matcher crates outside infrastructure |
+| 14 | Session ids; late results never shown; statuses | ✅ Verified | `a_new_query_supersedes_the_previous_search`, `cancelling_and_closing_stop_the_running_search` |
+| 15 | Configuration | ⏳ Not started | Phase 4; `CaseMode`, `WalkOptions` and the result limit are ready for it |
 
 ## Known gaps and follow-ups
 

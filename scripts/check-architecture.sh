@@ -26,15 +26,17 @@ forbid() {
 
 UI="gtk4|gdk4|gdk4-wayland|gdk4-x11|relm4|glib|gio"
 RUNTIMES="tokio|async-std|smol|zbus|async-channel"
+# Fuzzy matching sits behind the FuzzyMatcher port (Spec 4 §13).
+MATCHERS="nucleo|nucleo-matcher|fuzzy-matcher|skim"
 
 # Domain: entities and rules only.
-forbid seshat-domain "$UI" "$RUNTIMES" "seshat-.*" "serde|toml|rustix"
+forbid seshat-domain "$UI" "$RUNTIMES" "$MATCHERS" "seshat-.*" "serde|toml|rustix"
 # Application: use cases and ports; no toolkit, IPC or concrete I/O.
-forbid seshat-application "$UI" "$RUNTIMES" "seshat-infrastructure|seshat-presentation" "serde|toml|rustix"
+forbid seshat-application "$UI" "$RUNTIMES" "$MATCHERS" "seshat-infrastructure|seshat-presentation" "serde|toml|rustix"
 # Infrastructure implements ports; it never knows the UI.
 forbid seshat-infrastructure "gtk4|gdk4|relm4" "seshat-presentation"
 # Presentation consumes application functionality, not infrastructure.
-forbid seshat-presentation "seshat-infrastructure" "$RUNTIMES" "rustix"
+forbid seshat-presentation "seshat-infrastructure" "$RUNTIMES" "$MATCHERS" "rustix"
 # The example client speaks only the protocol.
 forbid seshat-progress "seshat-.*"
 
