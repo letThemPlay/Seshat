@@ -2,11 +2,8 @@ use std::collections::{BTreeMap, HashSet};
 
 use thiserror::Error;
 
-use super::{Branch, BranchId, Panel, PanelId, PanelState, Unavailability};
+use super::{Branch, BranchId, JumpList, Panel, PanelId, PanelState, Unavailability};
 use crate::entities::{DirectoryIdentity, Location};
-
-/// Back/forward history keeps at most this many panel activations.
-const JUMP_LIMIT: usize = 100;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum WorkspaceError {
@@ -80,8 +77,8 @@ pub struct Workspace {
     focus_mode: bool,
     /// Workspace preference: keep Focus Mode when switching branches.
     retain_focus_on_branch_switch: bool,
-    pub(super) back: Vec<PanelId>,
-    pub(super) forward: Vec<PanelId>,
+    /// Back/forward through panel activations (decision D2).
+    pub(super) jumps: JumpList,
     next_id: u64,
     clock: u64,
 }
@@ -130,8 +127,7 @@ impl Workspace {
             active: BranchId::from_raw(0),
             focus_mode: false,
             retain_focus_on_branch_switch: true,
-            back: Vec::new(),
-            forward: Vec::new(),
+            jumps: JumpList::default(),
             next_id: 1,
             clock: 0,
         };
@@ -191,11 +187,11 @@ impl Workspace {
     }
 
     pub fn can_go_back(&self) -> bool {
-        !self.back.is_empty()
+        self.jumps.can_go_back()
     }
 
     pub fn can_go_forward(&self) -> bool {
-        !self.forward.is_empty()
+        self.jumps.can_go_forward()
     }
 
     /// Branches in spatial order: depth-first, left to right, which is the
@@ -585,10 +581,7 @@ impl Workspace {
         }
         self.branches.remove(&branch);
         let gone: HashSet<PanelId> = removed.iter().copied().collect();
-        self.back.retain(|p| !gone.contains(p));
-        self.forward.retain(|p| !gone.contains(p));
-        self.back.dedup();
-        self.forward.dedup();
+        self.jumps.forget(&gone);
         if self.active == branch {
             let next = self
                 .branches
@@ -670,8 +663,8 @@ impl Workspace {
             active: self.active,
             focus_mode: self.focus_mode,
             retain_focus_on_branch_switch: self.retain_focus_on_branch_switch,
-            back: self.back.clone(),
-            forward: self.forward.clone(),
+            back: self.jumps.back(),
+            forward: self.jumps.forward(),
         }
     }
 
@@ -733,8 +726,7 @@ impl Workspace {
             active: parts.active,
             focus_mode: parts.focus_mode,
             retain_focus_on_branch_switch: parts.retain_focus_on_branch_switch,
-            back: parts.back,
-            forward: parts.forward,
+            jumps: JumpList::from_parts(parts.back, parts.forward),
             next_id: max_id + 1,
             clock,
         };
@@ -801,12 +793,7 @@ impl Workspace {
         if self.panels.keys().any(|id| id.raw() >= self.next_id) {
             return Err("a panel is above the id counter".into());
         }
-        if self
-            .back
-            .iter()
-            .chain(&self.forward)
-            .any(|p| !self.panels.contains_key(p))
-        {
+        if self.jumps.panels().any(|p| !self.panels.contains_key(&p)) {
             return Err("the jump list refers to a missing panel".into());
         }
         Ok(())
@@ -994,38 +981,20 @@ impl Workspace {
             && record
             && previous != panel
         {
-            self.back.push(previous);
-            if self.back.len() > JUMP_LIMIT {
-                self.back.remove(0);
-            }
-            self.forward.clear();
+            self.jumps.record(previous);
         }
         before != Some((branch, panel))
     }
 
     fn jump(&mut self, back: bool) -> bool {
-        loop {
-            let target = if back {
-                self.back.pop()
-            } else {
-                self.forward.pop()
-            };
-            let Some(target) = target else {
-                return false;
-            };
-            if !self.panels.contains_key(&target) || target == self.active_panel() {
-                continue;
-            }
-            let current = self.active_panel();
-            if back {
-                self.forward.push(current);
-            } else {
-                self.back.push(current);
-            }
-            self.activate_panel_inner(target, false)
-                .expect("jump target exists");
-            return true;
-        }
+        let current = self.active_panel();
+        let panels = &self.panels;
+        let Some(target) = self.jumps.step(back, current, |p| panels.contains_key(&p)) else {
+            return false;
+        };
+        self.activate_panel_inner(target, false)
+            .expect("jump target exists");
+        true
     }
 }
 

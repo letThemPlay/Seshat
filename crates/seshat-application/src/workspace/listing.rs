@@ -1,6 +1,17 @@
 use seshat_domain::entities::{FileEntry, Location};
+use seshat_domain::workspace::Unavailability;
 
 use crate::ports::ListingError;
+
+/// What an unavailable panel shows instead of its folder (decision D14).
+impl From<Unavailability> for ListingError {
+    fn from(reason: Unavailability) -> Self {
+        match reason {
+            Unavailability::Missing => Self::NotFound,
+            Unavailability::DeviceRemoved => Self::Unavailable("The device was removed.".into()),
+        }
+    }
+}
 
 /// What a panel's content area shows.
 #[derive(Debug, Clone, PartialEq, Eq)]

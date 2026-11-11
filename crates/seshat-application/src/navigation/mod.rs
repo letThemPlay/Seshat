@@ -2,8 +2,6 @@
 
 mod address;
 mod breadcrumbs;
-mod history;
 
 pub use address::{AddressError, parse_address};
 pub use breadcrumbs::{Breadcrumb, breadcrumbs};
-pub use history::NavigationHistory;

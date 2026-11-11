@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::Path;
 
 use seshat_domain::entities::{FileEntry, Location};
@@ -8,6 +8,7 @@ use seshat_domain::workspace::{
     WorkspaceError,
 };
 
+use super::cache::ListingCache;
 use super::listing::{Content, PanelListing};
 use super::undo::{
     PruneError, PruneOutcome, UndoError, UndoOutcome, WorkspaceChange, WorkspaceUndo,
@@ -60,15 +61,11 @@ pub struct SelectionGroup {
 #[derive(Debug)]
 pub struct WorkspaceService {
     workspace: Workspace,
-    listings: HashMap<PanelId, PanelListing>,
+    /// The panels' listings in memory, least recently used evicted first.
+    listings: ListingCache,
     /// Settings a new root panel starts with (global preferences).
     defaults: PanelState,
-    capacity: usize,
-    /// Panels the presentation is currently rendering; never evicted.
-    visible: HashSet<PanelId>,
     effects: Vec<Effect>,
-    generation: u64,
-    clock: u64,
     /// Whether the cursor wraps around at the ends of a list.
     wrap_cursor: bool,
     /// Reversible workspace changes of this session (decision B5).
@@ -79,13 +76,9 @@ impl WorkspaceService {
     pub fn new(workspace: Workspace, defaults: PanelState) -> Self {
         let mut service = Self {
             workspace,
-            listings: HashMap::new(),
+            listings: ListingCache::new(DEFAULT_LISTING_CAPACITY),
             defaults: defaults.inherit(),
-            capacity: DEFAULT_LISTING_CAPACITY,
-            visible: HashSet::new(),
             effects: Vec::new(),
-            generation: 0,
-            clock: 0,
             wrap_cursor: false,
             undo: WorkspaceUndo::default(),
         };
@@ -100,7 +93,7 @@ impl WorkspaceService {
     }
 
     pub fn set_capacity(&mut self, capacity: usize) {
-        self.capacity = capacity.max(1);
+        self.listings.set_capacity(capacity);
         self.evict();
     }
 
@@ -314,12 +307,7 @@ impl WorkspaceService {
         }
         // Renamed or replaced folders: their listings and watches belong to
         // the old folder and are read again.
-        for &refreshed in &opened.refreshed {
-            self.visible.remove(&refreshed);
-            if self.listings.remove(&refreshed).is_some() {
-                self.effects.push(Effect::Unwatch { panel: refreshed });
-            }
-        }
+        self.forget_panels(&opened.refreshed);
         tracing::debug!(
             resolution = ?opened.resolution,
             branch = %opened.branch,
@@ -384,7 +372,7 @@ impl WorkspaceService {
     /// The panels the presentation renders. They are loaded if needed and
     /// never evicted while shown.
     pub fn set_visible(&mut self, panels: &[PanelId]) {
-        self.visible = panels.iter().copied().collect();
+        self.listings.set_visible(panels);
         for &panel in panels {
             self.ensure_listing(panel);
         }
@@ -720,16 +708,15 @@ impl WorkspaceService {
     // ── Internals ───────────────────────────────────────────────────────
 
     fn next_generation(&mut self) -> u64 {
-        self.generation += 1;
-        self.generation
+        self.listings.next_generation()
     }
 
-    /// Drops the listings and watches of panels removed from the workspace.
+    /// Drops the listings and watches of panels removed from the workspace,
+    /// or whose folder was renamed or replaced (their listing is stale).
     fn forget_panels(&mut self, removed: &[PanelId]) {
-        for panel in removed {
-            self.visible.remove(panel);
-            if self.listings.remove(panel).is_some() {
-                self.effects.push(Effect::Unwatch { panel: *panel });
+        for &panel in removed {
+            if self.listings.remove(panel) {
+                self.effects.push(Effect::Unwatch { panel });
             }
         }
     }
@@ -742,10 +729,7 @@ impl WorkspaceService {
     }
 
     fn ensure_listing(&mut self, panel: PanelId) {
-        self.clock += 1;
-        let now = self.clock;
-        if let Some(listing) = self.listings.get_mut(&panel) {
-            listing.last_used = now;
+        if self.listings.touch(panel) {
             return;
         }
         let Some(p) = self.workspace.panel(panel) else {
@@ -753,21 +737,11 @@ impl WorkspaceService {
         };
         if let Some(reason) = p.unavailable() {
             // Nothing to read until the user retries (Refresh).
-            let mut listing = PanelListing::new(0, now);
-            listing.content = Content::Failed(match reason {
-                Unavailability::DeviceRemoved => {
-                    ListingError::Unavailable("The device was removed.".into())
-                }
-                Unavailability::Missing => ListingError::NotFound,
-            });
-            self.listings.insert(panel, listing);
+            self.listings.insert_failed(panel, reason.into());
             return;
         }
         let location = p.location().clone();
-        let generation = self.next_generation();
-        let mut listing = PanelListing::new(generation, now);
-        listing.load_generation = generation;
-        self.listings.insert(panel, listing);
+        let generation = self.listings.start_loading(panel);
         // Watch before listing so changes in between are not missed.
         self.effects.push(Effect::Watch {
             panel,
@@ -785,18 +759,8 @@ impl WorkspaceService {
     /// shown panels and the active one. Their logical state is kept.
     fn evict(&mut self) {
         let active = self.active_panel();
-        while self.listings.len() > self.capacity {
-            let victim = self
-                .listings
-                .iter()
-                .filter(|(id, _)| **id != active && !self.visible.contains(id))
-                .min_by_key(|(_, l)| l.last_used)
-                .map(|(id, _)| *id);
-            let Some(victim) = victim else {
-                break;
-            };
-            self.listings.remove(&victim);
-            self.effects.push(Effect::Unwatch { panel: victim });
+        for panel in self.listings.evict(active) {
+            self.effects.push(Effect::Unwatch { panel });
         }
     }
 
@@ -805,12 +769,7 @@ impl WorkspaceService {
         for &panel in panels {
             affected.extend(self.workspace.mark_unavailable(panel, reason));
         }
-        let message = match reason {
-            Unavailability::Missing => ListingError::NotFound,
-            Unavailability::DeviceRemoved => {
-                ListingError::Unavailable("The device was removed.".into())
-            }
-        };
+        let message = ListingError::from(reason);
         affected.sort();
         affected.dedup();
         for panel in affected {
