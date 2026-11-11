@@ -5,17 +5,17 @@ use relm4::ComponentSender;
 
 use super::{App, Msg};
 use crate::keys::{self, SharedKeys};
-use seshat_application::interaction::{Intent, Mode};
+use seshat_application::interaction::{Action, Intent, Mode};
 
 /// A GTK accelerator and the message it sends.
 type Shortcut = (&'static str, fn() -> Msg);
 
 const SHORTCUTS: &[Shortcut] = &[
-    ("<Alt>Left", || Msg::Back),
-    ("Back", || Msg::Back),
-    ("<Alt>Right", || Msg::Forward),
-    ("Forward", || Msg::Forward),
-    ("<Alt>Up", || Msg::GoUp),
+    ("<Alt>Left", || Msg::Perform(Action::Back)),
+    ("Back", || Msg::Perform(Action::Back)),
+    ("<Alt>Right", || Msg::Perform(Action::Forward)),
+    ("Forward", || Msg::Perform(Action::Forward)),
+    ("<Alt>Up", || Msg::Perform(Action::Parent)),
     ("F5", || Msg::Refresh),
     ("<Control>r", || Msg::Refresh),
     ("<Control>h", || Msg::ToggleHidden),
@@ -77,8 +77,8 @@ pub fn install(
         .build();
     let sender = sender.clone();
     click.connect_pressed(move |gesture, _, _, _| match gesture.current_button() {
-        8 => sender.input_sender().emit(Msg::Back),
-        9 => sender.input_sender().emit(Msg::Forward),
+        8 => sender.input_sender().emit(Msg::Perform(Action::Back)),
+        9 => sender.input_sender().emit(Msg::Perform(Action::Forward)),
         _ => {}
     });
     window.add_controller(click);

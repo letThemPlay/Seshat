@@ -22,7 +22,7 @@ use relm4::{
 };
 use seshat_application::interaction::command::CommandHistory;
 use seshat_application::interaction::completion::CompletionCycle;
-use seshat_application::interaction::{Intent, KeyMap, Mode, format_sequence};
+use seshat_application::interaction::{Action, Intent, KeyMap, Mode, format_sequence};
 use seshat_application::navigation::{breadcrumbs, parse_address};
 use seshat_application::operations::{OperationEvent, OperationManager, OperationRequest};
 use seshat_application::ports::{
@@ -96,9 +96,9 @@ pub enum Msg {
     Navigate(Location),
     /// A breadcrumb of the active panel.
     Crumb(Location),
-    Back,
-    Forward,
-    GoUp,
+    /// An action shared by keys, menus, the toolbar and the command line,
+    /// carried out by the single dispatcher (`App::perform`).
+    Perform(Action),
     Refresh,
     OpenSelection,
     CopyPaths,
@@ -146,9 +146,7 @@ pub enum Msg {
     },
     /// A key press, resolved by the modal key handling.
     Intent(Intent),
-    CycleBranch(bool),
     CloseBranch,
-    ToggleFocusMode,
     /// Keyboard focus moved (e.g. a click or arrow key in a file list).
     FocusMoved,
     CommandSubmitted(String),
@@ -504,15 +502,7 @@ impl SimpleComponent for App {
                 self.service.open_location(location);
             }
             Msg::Crumb(location) => self.service.open_ancestor(location),
-            Msg::Back => {
-                self.service.go_back();
-            }
-            Msg::Forward => {
-                self.service.go_forward();
-            }
-            Msg::GoUp => {
-                self.service.go_parent();
-            }
+            Msg::Perform(action) => self.perform(action, &sender),
             Msg::Refresh => {
                 let active = self.service.active_panel();
                 self.service.reload(active);
@@ -652,13 +642,7 @@ impl SimpleComponent for App {
                 self.service.reload_if_current(panel, generation);
             }
             Msg::Intent(intent) => self.intent(intent, &sender),
-            Msg::CycleBranch(forward) => {
-                self.service.cycle_branch(forward);
-            }
             Msg::CloseBranch => self.close_branch(None),
-            Msg::ToggleFocusMode => {
-                self.service.toggle_focus_mode();
-            }
             Msg::FocusMoved => self.focus_moved(),
             Msg::CommandSubmitted(text) => self.command_submitted(&text, &sender),
             Msg::CommandCancelled => self.close_command_line(),

@@ -1,6 +1,8 @@
 use seshat_domain::view::{SortKey, ViewMode};
 use thiserror::Error;
 
+use super::Action;
+
 /// Where `:copy` and `:move` put things (decision D10).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Destination {
@@ -47,6 +49,21 @@ pub enum Command {
     Focus,
     Open(String),
     Help,
+}
+
+impl Command {
+    /// The key-bindable action this command is equivalent to, if any.
+    /// Such commands are carried out by the same dispatcher as keys, menus
+    /// and the toolbar, so they can never behave differently. Commands that
+    /// take arguments, or have no bindable action, return `None`.
+    pub fn as_action(&self) -> Option<Action> {
+        match self {
+            Self::Branch(BranchCommand::Next) => Some(Action::BranchNext),
+            Self::Branch(BranchCommand::Previous) => Some(Action::BranchPrevious),
+            Self::Focus => Some(Action::FocusMode),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -226,6 +243,26 @@ impl CommandHistory {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn commands_with_a_bindable_equivalent_map_to_that_action() {
+        let action = |input: &str| parse(input).expect("parses").as_action();
+        assert_eq!(action("branch next"), Some(Action::BranchNext));
+        assert_eq!(action("branch prev"), Some(Action::BranchPrevious));
+        assert_eq!(action("focus"), Some(Action::FocusMode));
+        for input in [
+            "branch",
+            "branch 2",
+            "branch close",
+            "copy",
+            "rename x",
+            "hidden",
+            "help",
+            "open ~",
+        ] {
+            assert_eq!(action(input), None, "{input}");
+        }
+    }
 
     #[test]
     fn parses_the_spec_commands() {
