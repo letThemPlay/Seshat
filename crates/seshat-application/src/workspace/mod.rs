@@ -4,6 +4,7 @@
 //! workspace undo for backward pruning ([`WorkspaceChange`]), and the rules
 //! of file actions on the workspace's targets ([`file_actions`]).
 
+mod cache;
 pub mod file_actions;
 mod listing;
 mod service;
