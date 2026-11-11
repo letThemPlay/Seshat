@@ -7,7 +7,8 @@ use std::fmt::Display;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use seshat_application::interaction::Action;
-use seshat_application::workspace::PruneOutcome;
+use seshat_application::ports::ListingError;
+use seshat_application::workspace::{PruneError, PruneOutcome};
 
 /// How a message is shown (decision N1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,13 +50,15 @@ impl Notice {
         }
     }
 
-    /// Information or a confirmation, as a sentence.
-    pub fn info(text: impl Into<String>) -> Self {
+    /// Information or a confirmation, as a sentence. Private: other modules
+    /// call a named constructor below, so all wording stays in this file.
+    fn info(text: impl Into<String>) -> Self {
         Self::new(Severity::Info, sentence(&text.into()))
     }
 
-    /// Something was refused or failed, as a sentence.
-    pub fn error(text: impl Into<String>) -> Self {
+    /// Something was refused or failed, as a sentence. Private, like
+    /// [`Notice::info`].
+    fn error(text: impl Into<String>) -> Self {
         Self::new(Severity::Error, sentence(&text.into()))
     }
 
@@ -164,6 +167,124 @@ pub fn not_in_mode(action: Action) -> Notice {
     };
     Notice::error(format!(
         "{what} isn't available in Visual Mode; press Esc first"
+    ))
+}
+
+/// `db` or `dB` changed nothing.
+pub fn not_pruned(err: &PruneError) -> Notice {
+    match err {
+        PruneError::FocusMode => Notice::from_error(err),
+        PruneError::Refused(refusal) => Notice::error(format!("Nothing pruned: {refusal}")),
+    }
+}
+
+/// `l` or `Enter` on a file in Visual Mode (decision C6).
+pub fn files_not_in_visual() -> Notice {
+    Notice::error("Files don't open in Visual Mode; press Esc first")
+}
+
+/// A branch number (`:branch N`, `:copy bN`) that doesn't exist.
+pub fn no_branch(n: usize) -> Notice {
+    Notice::error(format!("There is no branch {n}"))
+}
+
+/// `:copy` or `:move` with nothing selected.
+pub fn select_first() -> Notice {
+    Notice::error("Select files first (v to select, V for a range)")
+}
+
+/// A copy or move whose destination is the items' own folder.
+pub fn already_in_folder() -> Notice {
+    Notice::info("The items are already in that folder")
+}
+
+/// The active panel's folder disappeared.
+pub fn folder_removed() -> Notice {
+    Notice::error("The folder was deleted or moved")
+}
+
+/// Opening more files at once than `max`.
+pub fn too_many_files(max: usize) -> Notice {
+    Notice::error(format!("Select at most {max} files to open at once"))
+}
+
+/// A file could not be opened in its application.
+pub fn open_failed(err: &impl Display) -> Notice {
+    Notice::error(format!("Could not open: {err}"))
+}
+
+/// The first problem with the configured key bindings.
+pub fn key_bindings(warning: &impl Display) -> Notice {
+    Notice::error(format!("Key bindings: {warning} (see the log)"))
+}
+
+/// Paste with no files on the clipboard.
+pub fn nothing_to_paste() -> Notice {
+    Notice::error("The clipboard has no files to paste")
+}
+
+/// Paste into a panel that isn't a regular folder.
+pub fn cannot_paste_here() -> Notice {
+    Notice::error("Files can't be pasted here")
+}
+
+/// A drop onto something that isn't a regular folder.
+pub fn cannot_drop_here() -> Notice {
+    Notice::error("Files can't be dropped here")
+}
+
+/// Command-line completion found nothing.
+pub fn no_matches() -> Notice {
+    Notice::info("No matches")
+}
+
+/// Command-line completion could not read the folder.
+pub fn completion_failed(err: &ListingError) -> Notice {
+    Notice::error(crate::panel_view::error_message(err, None))
+}
+
+/// A file operation failed, with the manager's reason.
+pub fn operation_failed(message: &str) -> Notice {
+    Notice::error(message)
+}
+
+/// Ejecting or unmounting finished.
+pub fn device_safe_to_remove() -> Notice {
+    Notice::info("The device can be removed safely")
+}
+
+/// Mounting, unmounting or ejecting failed.
+pub fn device_action_failed(err: &impl Display) -> Notice {
+    Notice::error(format!("Device action failed: {err}"))
+}
+
+/// A device with open panels went away (decision D14).
+pub fn device_removed() -> Notice {
+    Notice::info("The device was removed. Its panels are kept until you close them")
+}
+
+/// The themes folder could not be created or opened.
+pub fn themes_folder_failed(err: &impl Display) -> Notice {
+    Notice::error(format!("Cannot open the themes folder: {err}"))
+}
+
+/// A theme file could not be loaded.
+pub fn theme_not_loaded(id: &str, message: &str) -> Notice {
+    Notice::error(format!("Theme “{id}” could not be loaded: {message}"))
+}
+
+/// The chosen custom theme is gone.
+pub fn theme_unavailable(id: &str) -> Notice {
+    Notice::error(format!(
+        "Theme “{id}” is not available; following the system theme"
+    ))
+}
+
+/// The chosen custom theme loaded with problems.
+pub fn theme_has_issues(name: &str, issues: usize) -> Notice {
+    Notice::error(format!(
+        "Theme “{name}” has {}; see the log for details",
+        count(issues, "issue", "issues")
     ))
 }
 
@@ -286,6 +407,96 @@ mod tests {
         assert!(first.announce());
         assert!(!Notice::info("copied").announce());
         assert!(!Notice::verbatim("a/  b/").announce());
+    }
+
+    /// The named constructors keep the wording and severity the call sites
+    /// had before they moved here.
+    #[test]
+    fn named_messages_keep_their_wording_and_severity() {
+        use Severity::{Error, Info};
+        let cases = [
+            (
+                not_pruned(&PruneError::FocusMode),
+                "Pruning isn't available in Focus Mode.",
+                Error,
+            ),
+            (
+                files_not_in_visual(),
+                "Files don't open in Visual Mode; press Esc first.",
+                Error,
+            ),
+            (no_branch(4), "There is no branch 4.", Error),
+            (
+                select_first(),
+                "Select files first (v to select, V for a range).",
+                Error,
+            ),
+            (
+                already_in_folder(),
+                "The items are already in that folder.",
+                Info,
+            ),
+            (folder_removed(), "The folder was deleted or moved.", Error),
+            (
+                too_many_files(20),
+                "Select at most 20 files to open at once.",
+                Error,
+            ),
+            (open_failed(&"no app"), "Could not open: no app.", Error),
+            (
+                key_bindings(&"bad key"),
+                "Key bindings: bad key (see the log).",
+                Error,
+            ),
+            (
+                nothing_to_paste(),
+                "The clipboard has no files to paste.",
+                Error,
+            ),
+            (cannot_paste_here(), "Files can't be pasted here.", Error),
+            (cannot_drop_here(), "Files can't be dropped here.", Error),
+            (no_matches(), "No matches.", Info),
+            (operation_failed("disk full"), "Disk full.", Error),
+            (
+                device_safe_to_remove(),
+                "The device can be removed safely.",
+                Info,
+            ),
+            (
+                device_action_failed(&"busy"),
+                "Device action failed: busy.",
+                Error,
+            ),
+            (
+                device_removed(),
+                "The device was removed. Its panels are kept until you close them.",
+                Info,
+            ),
+            (
+                themes_folder_failed(&"read-only"),
+                "Cannot open the themes folder: read-only.",
+                Error,
+            ),
+            (
+                theme_not_loaded("dusk", "bad colour"),
+                "Theme “dusk” could not be loaded: bad colour.",
+                Error,
+            ),
+            (
+                theme_unavailable("dusk"),
+                "Theme “dusk” is not available; following the system theme.",
+                Error,
+            ),
+            (
+                theme_has_issues("Dusk", 1),
+                "Theme “Dusk” has 1 issue; see the log for details.",
+                Error,
+            ),
+        ];
+        for (notice, text, severity) in cases {
+            assert_eq!(notice.text(), text);
+            assert_eq!(notice.severity(), severity, "{text}");
+        }
     }
 
     #[test]

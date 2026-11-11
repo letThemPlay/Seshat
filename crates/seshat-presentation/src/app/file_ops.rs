@@ -215,11 +215,11 @@ impl App {
         sender: &ComponentSender<Self>,
     ) {
         let Some(files) = files else {
-            self.notice = Some(Notice::error("The clipboard has no files to paste"));
+            self.notice = Some(notice::nothing_to_paste());
             return;
         };
         let Some(destination) = self.active_folder() else {
-            self.notice = Some(Notice::error("Files can't be pasted here"));
+            self.notice = Some(notice::cannot_paste_here());
             return;
         };
         let kind = if files.cut {
@@ -316,7 +316,7 @@ impl App {
             _ => None,
         };
         let Some(destination) = row.or(folder) else {
-            self.notice = Some(Notice::error("Files can't be dropped here"));
+            self.notice = Some(notice::cannot_drop_here());
             return;
         };
         let kind = if copy {

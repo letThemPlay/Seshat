@@ -13,7 +13,7 @@ use seshat_application::use_cases::ListDirectory;
 use seshat_domain::entities::FileEntry;
 
 use super::{Cx, ListingResult, Msg};
-use crate::notice::Notice;
+use crate::notice::{self, Notice};
 use crate::workspace_view::folder_title;
 
 /// Completion matches shown in the status bar: at most this many.
@@ -216,7 +216,7 @@ impl CommandLineController {
                 let names = completion::path_candidates(&entries, partial);
                 self.finish(keep, partial, names.clone(), names, notice);
             }
-            Err(err) => *notice = Some(Notice::error(crate::panel_view::error_message(&err, None))),
+            Err(err) => *notice = Some(notice::completion_failed(&err)),
         }
     }
 
@@ -231,7 +231,7 @@ impl CommandLineController {
         notice: &mut Option<Notice>,
     ) {
         match candidates.as_slice() {
-            [] => *notice = Some(Notice::info("No matches")),
+            [] => *notice = Some(notice::no_matches()),
             [single] => {
                 self.set_text(&format!("{keep}{single}"));
                 *notice = None;

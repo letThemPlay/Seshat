@@ -5,7 +5,7 @@ use relm4::ComponentSender;
 use seshat_application::interaction::command::{BranchCommand, COMMANDS, Command, Destination};
 use seshat_application::interaction::{Action, Intent};
 use seshat_application::navigation::parse_address;
-use seshat_application::workspace::{PruneError, TransferKind, TransferPlan};
+use seshat_application::workspace::{TransferKind, TransferPlan};
 use seshat_domain::entities::Location;
 use seshat_domain::workspace::PruneMotion;
 
@@ -149,10 +149,7 @@ impl App {
                     .cloned();
                 notice::pruned(&outcome, undo.as_deref())
             }
-            Err(PruneError::FocusMode) => Notice::error("Pruning isn't available in Focus Mode"),
-            Err(PruneError::Refused(refusal)) => {
-                Notice::error(format!("Nothing pruned: {refusal}"))
-            }
+            Err(err) => notice::not_pruned(&err),
         });
     }
 
@@ -198,9 +195,7 @@ impl App {
             return;
         };
         if !entry.is_browsable() && !launch_files {
-            self.notice = Some(Notice::error(
-                "Files don't open in Visual Mode; press Esc first",
-            ));
+            self.notice = Some(notice::files_not_in_visual());
             return;
         }
         let selected = self
@@ -301,7 +296,7 @@ impl App {
                     Some(branch) => {
                         let _ = self.service.activate_branch(branch);
                     }
-                    None => self.notice = Some(Notice::error(format!("There is no branch {n}"))),
+                    None => self.notice = Some(notice::no_branch(n)),
                 }
             }
             Command::Open(text) => {
@@ -327,9 +322,7 @@ impl App {
     ) {
         let targets = self.service.targets();
         if targets.is_empty() {
-            self.notice = Some(Notice::error(
-                "Select files first (v to select, V for a range)",
-            ));
+            self.notice = Some(notice::select_first());
             return;
         }
         let destination = match destination {
@@ -344,7 +337,7 @@ impl App {
                     self.service.location(panel).cloned()
                 }
                 None => {
-                    self.notice = Some(Notice::error(format!("There is no branch {n}")));
+                    self.notice = Some(notice::no_branch(n));
                     return;
                 }
             },
@@ -376,7 +369,7 @@ impl App {
     ) {
         match TransferPlan::new(kind, &self.service.targets(), destination) {
             Ok(plan) if plan.is_noop() => {
-                self.notice = Some(Notice::info("The items are already in that folder"));
+                self.notice = Some(notice::already_in_folder());
             }
             Ok(plan) => self.confirm_transfer(plan, sender),
             Err(err) => self.notice = Some(Notice::from_error(&err)),

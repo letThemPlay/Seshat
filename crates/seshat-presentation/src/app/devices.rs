@@ -11,7 +11,7 @@ use seshat_application::workspace::WorkspaceService;
 use seshat_domain::entities::{Device, DeviceId, Location};
 
 use super::{App, Cx, Msg};
-use crate::notice::Notice;
+use crate::notice::{self, Notice};
 use crate::sidebar::SidebarInput;
 
 #[derive(Debug)]
@@ -90,12 +90,12 @@ impl DeviceController {
                     None
                 }
                 Ok(None) => {
-                    *cx.notice = Some(Notice::info("The device can be removed safely"));
+                    *cx.notice = Some(notice::device_safe_to_remove());
                     None
                 }
                 Err(err) => {
                     tracing::warn!(error = %err, "device action failed");
-                    *cx.notice = Some(Notice::error(format!("Device action failed: {err}")));
+                    *cx.notice = Some(notice::device_action_failed(&err));
                     // Reselect the current location instead of the device row.
                     Some(SidebarInput::SetCurrent(Some(
                         cx.service.active_location().clone(),
@@ -125,9 +125,7 @@ impl DeviceController {
             .map(|root| service.detach_device(root))
             .sum();
         if lost > 0 {
-            *notice = Some(Notice::info(
-                "The device was removed. Its panels are kept until you close them",
-            ));
+            *notice = Some(notice::device_removed());
         }
         Some(SidebarInput::SetDevices(devices))
     }
