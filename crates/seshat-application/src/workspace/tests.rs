@@ -899,3 +899,230 @@ fn nav_unavailable_panels_wait_for_retry() {
     s.run();
     assert_eq!(s.loads_since(), 1);
 }
+
+// ── Backward branch pruning (3-BACKWARD-BRANCH-PRUNING.md) ──────────────
+
+use seshat_domain::workspace::{PruneMotion, PruneRefusal, RestoreRefusal};
+
+fn prune(s: &mut Shell, motion: PruneMotion) -> Result<PruneOutcome, PruneError> {
+    let ws = s.service.workspace();
+    let (branch, panel) = (ws.active_branch().id(), ws.active_panel());
+    let outcome = s.service.prune_back(branch, panel, motion);
+    s.service.workspace().check_invariants().unwrap();
+    outcome
+}
+
+#[test]
+fn prune_db_only_unwatches_removed_panels_and_saves() {
+    let (mut s, [_, documents, projects, _]) = scenario();
+    s.service.activate_panel(projects).unwrap();
+    s.run();
+    s.loads_since();
+    let outcome = prune(&mut s, PruneMotion::Step).unwrap();
+    assert_eq!(outcome.destination, documents);
+    assert_eq!(outcome.removed, 1);
+    assert!(!outcome.ended_branch);
+    let effects = s.service.take_effects();
+    assert!(
+        effects.iter().all(
+            |e| matches!(e, Effect::Unwatch { panel } if *panel == projects)
+                || *e == Effect::Persist
+        ),
+        "workspace structure only, never files: {effects:?}"
+    );
+    assert!(
+        effects.contains(&Effect::Unwatch { panel: projects }),
+        "the pruned panel is no longer watched, and nothing is reloaded"
+    );
+    assert_eq!(s.active(), documents);
+}
+
+#[test]
+fn prune_never_changes_files_or_running_operations() {
+    let (mut s, [_, _, projects, downloads]) = scenario();
+    let (fs, manager, rx) = manager();
+    fs.set_gate(false);
+    s.service
+        .set_selection(projects, vec![loc("/h/Documents/Projects/x.rs")]);
+    let plan = TransferPlan::new(
+        TransferKind::Copy,
+        &s.service.selection(),
+        s.service.location(downloads).unwrap(),
+    )
+    .unwrap();
+    let id = manager.submit(plan.request()).unwrap();
+    let submitted = manager.get(id).unwrap();
+
+    // Prune the source branch away entirely, then undo it.
+    s.service.activate_panel(projects).unwrap();
+    let outcome = prune(&mut s, PruneMotion::Segment).unwrap();
+    assert!(outcome.ended_branch);
+    assert_eq!(outcome.deselected, 1);
+    assert!(
+        s.service.selection().is_empty(),
+        "the selection left with its panel"
+    );
+    s.run();
+    assert_eq!(manager.get(id).unwrap().sources, submitted.sources);
+    assert_eq!(
+        fs.content("/h/Documents/Projects/x.rs").as_deref(),
+        Some("x")
+    );
+
+    s.service.undo_workspace().unwrap();
+    s.run();
+    assert_eq!(
+        s.service.selection().len(),
+        1,
+        "undo restores the selection"
+    );
+    fs.set_gate(true);
+    assert_eq!(wait_finished(&rx).status(), OperationStatus::Completed);
+    assert_eq!(
+        fs.content("/h/Documents/Projects/x.rs").as_deref(),
+        Some("x")
+    );
+}
+
+#[test]
+fn prune_and_undo_are_refused_in_focus_mode() {
+    let (mut s, [_, _, projects, _]) = scenario();
+    s.service.activate_panel(projects).unwrap();
+    s.service.toggle_focus_mode();
+    s.run();
+    let before = s.service.workspace().clone();
+    assert_eq!(prune(&mut s, PruneMotion::Step), Err(PruneError::FocusMode));
+    assert_eq!(
+        prune(&mut s, PruneMotion::Segment),
+        Err(PruneError::FocusMode)
+    );
+    assert_eq!(s.service.workspace(), &before);
+    assert_eq!(s.service.take_effects(), []);
+
+    // Undo too, even with a change to undo; it stays available.
+    s.service.toggle_focus_mode();
+    prune(&mut s, PruneMotion::Step).unwrap();
+    s.service.toggle_focus_mode();
+    let before = s.service.workspace().clone();
+    assert_eq!(s.service.undo_workspace(), Err(UndoError::FocusMode));
+    assert_eq!(s.service.workspace(), &before);
+    assert_eq!(s.service.undo_depth(), 1);
+    s.service.toggle_focus_mode();
+    assert!(s.service.undo_workspace().is_ok());
+}
+
+#[test]
+fn prune_refusals_change_nothing() {
+    let (mut s, [home, documents, _, _]) = scenario();
+    s.service.activate_panel(documents).unwrap();
+    s.run();
+    let before = s.service.workspace().clone();
+    assert_eq!(
+        prune(&mut s, PruneMotion::Step),
+        Err(PruneError::Refused(PruneRefusal::PanelsBeyond))
+    );
+    s.service.activate_panel(home).unwrap();
+    let before_home = s.service.workspace().clone();
+    assert_eq!(
+        prune(&mut s, PruneMotion::Segment),
+        Err(PruneError::Refused(PruneRefusal::Shared { branches: 2 }))
+    );
+    assert_eq!(s.service.workspace(), &before_home);
+    assert_ne!(&before, &before_home, "only activation differed");
+    assert_eq!(s.service.undo_depth(), 0);
+}
+
+#[test]
+fn prune_undo_restores_panel_state_and_reloads_only_the_active_panel() {
+    let (mut s, [_, documents, projects, _]) = scenario();
+    s.service.activate_panel(projects).unwrap();
+    s.run();
+    s.service.move_cursor(projects, 1);
+    s.service.set_sort_key(projects, SortKey::Size);
+    s.service.set_query(projects, ".rs");
+    let state = s.service.state(projects).unwrap().clone();
+    let docs_state = s.service.state(documents).unwrap().clone();
+
+    prune(&mut s, PruneMotion::Step).unwrap();
+    s.run();
+    assert_eq!(s.service.state(documents), Some(&docs_state));
+    s.loads_since();
+
+    let outcome = s.service.undo_workspace().unwrap();
+    s.run();
+    assert_eq!(outcome.restored, 1);
+    assert_eq!(s.active(), projects, "same panel id, active again");
+    assert_eq!(s.service.state(projects), Some(&state));
+    assert_eq!(s.loads_since(), 1, "only the restored active panel is read");
+    assert_eq!(s.service.undo_workspace(), Err(UndoError::NothingToUndo));
+}
+
+#[test]
+fn prune_undo_that_no_longer_fits_is_dropped_and_older_changes_still_undo() {
+    let (mut s, [home, documents, projects, downloads]) = scenario();
+    // Prune Projects, then prune Downloads away (its branch ends).
+    s.service.activate_panel(projects).unwrap();
+    prune(&mut s, PruneMotion::Step).unwrap();
+    s.service.activate_panel(downloads).unwrap();
+    let outcome = prune(&mut s, PruneMotion::Step).unwrap();
+    assert!(outcome.ended_branch);
+    assert_eq!(s.active(), home);
+    s.run();
+    // Reopening Downloads makes its undo impossible.
+    let reopened = s.open("Downloads");
+    assert_ne!(reopened, downloads, "a fresh panel, not the pruned one");
+    assert_eq!(
+        s.service.undo_workspace(),
+        Err(UndoError::Refused(RestoreRefusal::Changed))
+    );
+    assert_eq!(
+        s.service.undo_depth(),
+        1,
+        "the impossible change was dropped"
+    );
+    s.service.undo_workspace().unwrap();
+    s.run();
+    assert_eq!(s.active(), projects);
+    assert_eq!(
+        s.service.workspace().panel(projects).unwrap().parent(),
+        Some(documents)
+    );
+}
+
+#[test]
+fn prune_undo_history_is_bounded() {
+    let mut s = Shell::new();
+    for _ in 0..UNDO_LIMIT + 5 {
+        s.open("Documents");
+        prune(&mut s, PruneMotion::Step).unwrap();
+    }
+    assert_eq!(s.service.undo_depth(), UNDO_LIMIT);
+}
+
+#[test]
+fn prune_keeps_l_h_and_branch_switching_working() {
+    let (mut s, [home, documents, projects, downloads]) = scenario();
+    s.service.activate_panel(projects).unwrap();
+    s.service.move_cursor(projects, 1);
+    prune(&mut s, PruneMotion::Step).unwrap();
+    s.run();
+
+    // `l` on the pruned folder continues the branch with a fresh panel.
+    let e = entry("/h/Documents/Projects", true);
+    let opened = s.service.open_entry(documents, &e).unwrap().unwrap();
+    s.run();
+    assert_eq!(opened.resolution, Resolution::ContinueActiveBranch);
+    assert!(opened.created);
+    assert_ne!(opened.panel, projects);
+    assert_eq!(s.service.state(opened.panel).unwrap().cursor, None);
+
+    // `h` and `[`/`]` behave as before.
+    assert!(s.service.move_left());
+    assert_eq!(s.active(), documents);
+    s.service.cycle_branch(true);
+    s.run();
+    assert_eq!(s.active(), downloads);
+    s.service.cycle_branch(true);
+    assert_eq!(s.service.workspace().active_path()[0], home);
+    assert_eq!(s.service.workspace().branch_count(), 2);
+}

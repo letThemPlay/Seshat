@@ -184,6 +184,17 @@ impl App {
         event: WorkspaceEvent,
         sender: &ComponentSender<Self>,
     ) {
+        // A pointer action changes the context a pending key sequence (such
+        // as the `d` of `db`) was typed in: drop it. Resizes and selection
+        // updates are not user actions on the workspace.
+        let pointer = !matches!(
+            event,
+            WorkspaceEvent::Resized
+                | WorkspaceEvent::Panel(_, PanelEvent::Files(FileViewEvent::SelectionChanged))
+        );
+        if pointer {
+            self.keys.borrow_mut().interaction.cancel_pending();
+        }
         match event {
             WorkspaceEvent::Panel(panel, event) => self.panel_event(panel, event, sender),
             WorkspaceEvent::ActivateBranch(branch) => {
@@ -290,6 +301,9 @@ impl App {
             return;
         };
         if self.service.active_panel() != panel {
+            // Focus moved to another panel: a pending sequence must not
+            // complete there.
+            self.keys.borrow_mut().interaction.cancel_pending();
             let _ = self.service.activate_panel(panel);
         }
         self.focused_panel = Some(panel);

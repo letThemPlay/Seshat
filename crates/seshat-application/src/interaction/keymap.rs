@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fmt;
 
 use super::keys::{KeyPress, format_sequence, parse_sequence};
 
@@ -33,10 +34,17 @@ pub enum Action {
     Yank,
     Cut,
     Paste,
+    /// `db`: prune the active branch back one panel. Workspace only; files
+    /// are never touched (3-BACKWARD-BRANCH-PRUNING.md).
+    PruneBack,
+    /// `dB`: prune the active branch back to where it meets another branch.
+    PruneBackSegment,
+    /// `u`: undo the last workspace change (a prune), not a file operation.
+    UndoWorkspace,
 }
 
 impl Action {
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 26] = [
         Self::PanelLeft,
         Self::PanelRight,
         Self::CursorDown,
@@ -60,6 +68,9 @@ impl Action {
         Self::Yank,
         Self::Cut,
         Self::Paste,
+        Self::PruneBack,
+        Self::PruneBackSegment,
+        Self::UndoWorkspace,
     ];
 
     /// Stable identifier used in the settings file.
@@ -88,6 +99,9 @@ impl Action {
             Self::Yank => "yank",
             Self::Cut => "cut",
             Self::Paste => "paste",
+            Self::PruneBack => "prune-back",
+            Self::PruneBackSegment => "prune-back-segment",
+            Self::UndoWorkspace => "undo-workspace",
         }
     }
 
@@ -120,6 +134,11 @@ impl Action {
             Self::Yank => "Copy selection",
             Self::Cut => "Cut selection",
             Self::Paste => "Paste into this panel",
+            Self::PruneBack => "Prune the branch back one panel (files are not touched)",
+            Self::PruneBackSegment => {
+                "Prune the branch back to where it meets another branch (files are not touched)"
+            }
+            Self::UndoWorkspace => "Undo the last prune (not file operations)",
         }
     }
 
@@ -150,7 +169,22 @@ impl Action {
             Self::Yank => &["y"],
             Self::Cut => &["x"],
             Self::Paste => &["p"],
+            // Backward pruning (decision B7): `d` is an operator prefix.
+            Self::PruneBack => &["db"],
+            Self::PruneBackSegment => &["dB"],
+            Self::UndoWorkspace => &["u"],
         }
+    }
+
+    /// Actions whose default bindings were added after users could already
+    /// have bound the same keys. When a user binding overlaps one of their
+    /// defaults, the default is dropped instead of the user's binding
+    /// (decision B8).
+    fn defaults_yield_to_overrides(self) -> bool {
+        matches!(
+            self,
+            Self::PruneBack | Self::PruneBackSegment | Self::UndoWorkspace
+        )
     }
 
     /// Bindings made of one unmodified printable key. "Classic keys"
@@ -201,6 +235,7 @@ impl KeyMap {
             })
             .collect();
 
+        let mut overridden: HashSet<Action> = HashSet::new();
         for (id, sequences) in overrides {
             let Some(action) = Action::from_id(id) else {
                 warnings.push(format!("unknown action “{id}” in key bindings"));
@@ -210,9 +245,37 @@ impl KeyMap {
             match parsed {
                 Ok(keys) => {
                     let previous = table.insert(action, keys);
-                    if let Some(conflict) = find_conflict(&table) {
+                    // Newer defaults overlapping this binding give way (B8).
+                    let mut yielded: Vec<(Action, Vec<KeyPress>)> = Vec::new();
+                    let rejected = loop {
+                        let Some(conflict) = find_conflict(&table) else {
+                            break None;
+                        };
+                        match conflict.yielding_default(action, &overridden) {
+                            Some((other, keys)) => {
+                                if let Some(sequences) = table.get_mut(&other) {
+                                    sequences.retain(|s| *s != keys);
+                                }
+                                yielded.push((other, keys));
+                            }
+                            None => break Some(conflict),
+                        }
+                    };
+                    if let Some(conflict) = rejected {
                         warnings.push(format!("binding for “{id}” ignored: {conflict}"));
                         table.insert(action, previous.unwrap_or_default());
+                        for (other, keys) in yielded {
+                            table.entry(other).or_default().push(keys);
+                        }
+                    } else {
+                        overridden.insert(action);
+                        for (other, keys) in yielded {
+                            warnings.push(format!(
+                                "default “{}” for “{}” dropped: it overlaps your binding for “{id}”",
+                                format_sequence(&keys),
+                                other.id()
+                            ));
+                        }
                     }
                 }
                 Err(err) => warnings.push(format!("binding for “{id}” ignored: {err}")),
@@ -259,29 +322,70 @@ impl KeyMap {
     }
 }
 
+/// Two bindings that cannot both be reachable.
+#[derive(Debug, PartialEq, Eq)]
+struct Conflict {
+    a: (Vec<KeyPress>, Action),
+    b: (Vec<KeyPress>, Action),
+}
+
+impl Conflict {
+    /// The binding to drop when `overriding` was just bound by the user:
+    /// the other side, if it is a default that yields to overrides and has
+    /// not itself been set by the user (decision B8).
+    fn yielding_default(
+        &self,
+        overriding: Action,
+        overridden: &HashSet<Action>,
+    ) -> Option<(Action, Vec<KeyPress>)> {
+        let other = match (self.a.1 == overriding, self.b.1 == overriding) {
+            (true, false) => &self.b,
+            (false, true) => &self.a,
+            _ => return None,
+        };
+        (other.1.defaults_yield_to_overrides() && !overridden.contains(&other.1))
+            .then(|| (other.1, other.0.clone()))
+    }
+}
+
+impl fmt::Display for Conflict {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ((a, action_a), (b, action_b)) = (&self.a, &self.b);
+        if a == b {
+            write!(
+                f,
+                "“{}” would be bound to both “{}” and “{}”",
+                format_sequence(a),
+                action_a.id(),
+                action_b.id()
+            )
+        } else {
+            write!(
+                f,
+                "“{}” and “{}” overlap",
+                format_sequence(a),
+                format_sequence(b)
+            )
+        }
+    }
+}
+
 /// Two actions on one sequence, or one sequence a prefix of another, would
 /// make a binding unreachable.
-fn find_conflict(table: &HashMap<Action, Vec<Vec<KeyPress>>>) -> Option<String> {
+fn find_conflict(table: &HashMap<Action, Vec<Vec<KeyPress>>>) -> Option<Conflict> {
     let all: Vec<(&Vec<KeyPress>, Action)> = table
         .iter()
         .flat_map(|(a, seqs)| seqs.iter().map(move |s| (s, *a)))
         .collect();
     for (i, (a, action_a)) in all.iter().enumerate() {
         for (b, action_b) in &all[i + 1..] {
-            if a == b && action_a != action_b {
-                return Some(format!(
-                    "“{}” would be bound to both “{}” and “{}”",
-                    format_sequence(a),
-                    action_a.id(),
-                    action_b.id()
-                ));
-            }
-            if a.len() != b.len() && (a.starts_with(b) || b.starts_with(a)) {
-                return Some(format!(
-                    "“{}” and “{}” overlap",
-                    format_sequence(a),
-                    format_sequence(b)
-                ));
+            let same = a == b && action_a != action_b;
+            let overlap = a.len() != b.len() && (a.starts_with(b) || b.starts_with(a));
+            if same || overlap {
+                return Some(Conflict {
+                    a: ((*a).clone(), *action_a),
+                    b: ((*b).clone(), *action_b),
+                });
             }
         }
     }
@@ -373,6 +477,65 @@ mod tests {
             map.lookup(&[KeyPress::plain(Key::Enter)]),
             Lookup::Bound(Action::Open)
         );
+    }
+
+    #[test]
+    fn prune_d_is_an_operator_prefix_and_u_undoes() {
+        let map = KeyMap::default();
+        assert_eq!(map.lookup(&keys("d")), Lookup::Prefix);
+        assert_eq!(map.lookup(&keys("db")), Lookup::Bound(Action::PruneBack));
+        assert_eq!(
+            map.lookup(&keys("dB")),
+            Lookup::Bound(Action::PruneBackSegment)
+        );
+        assert_eq!(map.lookup(&keys("u")), Lookup::Bound(Action::UndoWorkspace));
+        assert_eq!(map.lookup(&keys("dd")), Lookup::Unbound);
+        assert_eq!(
+            map.lookup(&keys("<Del>")),
+            Lookup::Unbound,
+            "Delete stays with the Trash shortcut"
+        );
+    }
+
+    #[test]
+    fn prune_user_bindings_win_over_the_new_defaults() {
+        let (map, warnings) = KeyMap::new(
+            &[
+                ("cut".into(), vec!["d".into()]),
+                ("paste".into(), vec!["u".into()]),
+            ],
+            false,
+        );
+        assert_eq!(map.lookup(&keys("d")), Lookup::Bound(Action::Cut));
+        assert_eq!(map.lookup(&keys("u")), Lookup::Bound(Action::Paste));
+        assert!(map.keys_for(Action::PruneBack).is_empty());
+        assert!(map.keys_for(Action::PruneBackSegment).is_empty());
+        assert!(map.keys_for(Action::UndoWorkspace).is_empty());
+        assert_eq!(
+            warnings.len(),
+            3,
+            "each dropped default is reported: {warnings:?}"
+        );
+
+        // Rebinding pruning itself still frees `d` for the user binding.
+        let (map, warnings) = KeyMap::new(
+            &[
+                ("prune-back".into(), vec!["<C-b>".into()]),
+                ("cut".into(), vec!["d".into()]),
+            ],
+            false,
+        );
+        assert_eq!(map.lookup(&keys("<C-b>")), Lookup::Bound(Action::PruneBack));
+        assert_eq!(map.lookup(&keys("d")), Lookup::Bound(Action::Cut));
+        assert_eq!(warnings.len(), 1, "only dB was dropped: {warnings:?}");
+    }
+
+    #[test]
+    fn prune_bindings_cannot_take_keys_from_established_actions() {
+        let (map, warnings) = KeyMap::new(&[("prune-back".into(), vec!["y".into()])], false);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert_eq!(map.lookup(&keys("y")), Lookup::Bound(Action::Yank));
+        assert_eq!(map.lookup(&keys("db")), Lookup::Bound(Action::PruneBack));
     }
 
     #[test]

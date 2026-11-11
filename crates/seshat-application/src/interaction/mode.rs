@@ -63,6 +63,11 @@ pub enum Intent {
     Open {
         launch_files: bool,
     },
+    /// A complete binding for an action this mode does not allow. Nothing
+    /// happens; the caller may say why. Pruning in Visual Mode is the case
+    /// (decision B6): there `d` must neither delete files, as it would in
+    /// Vim, nor drop panels holding the selection being made.
+    NotInThisMode(Action),
     /// Everything else, carried out the same way in every mode.
     Perform(Action),
 }
@@ -90,6 +95,15 @@ impl Interaction {
         if self.mode == Mode::Command {
             self.mode = Mode::Normal;
         }
+    }
+
+    /// Abandons an unfinished sequence because its context changed (a
+    /// click elsewhere, the window lost focus), so a later key cannot
+    /// complete it somewhere else. Returns whether keys were pending.
+    pub fn cancel_pending(&mut self) -> bool {
+        let pending = !self.pending.is_empty();
+        self.pending.clear();
+        pending
     }
 
     /// Back to Normal Mode from anywhere (e.g. the selection was used up).
@@ -172,6 +186,9 @@ impl Interaction {
             (mode, Action::Open) => Intent::Open {
                 launch_files: !matches!(mode, Mode::Visual { .. }),
             },
+            (Mode::Visual { .. }, Action::PruneBack | Action::PruneBackSegment) => {
+                Intent::NotInThisMode(action)
+            }
             (_, other) => Intent::Perform(other),
         }
     }
@@ -320,6 +337,83 @@ mod tests {
             [Intent::Pending, Intent::Perform(Action::FocusMode)]
         );
         assert_eq!(i.mode(), Mode::Visual { range: true });
+    }
+
+    #[test]
+    fn prune_fires_only_after_the_complete_sequence() {
+        let map = KeyMap::default();
+        let mut i = Interaction::default();
+        assert_eq!(
+            type_keys(&mut i, &map, "db"),
+            [Intent::Pending, Intent::Perform(Action::PruneBack)]
+        );
+        assert_eq!(
+            type_keys(&mut i, &map, "dB"),
+            [Intent::Pending, Intent::Perform(Action::PruneBackSegment)]
+        );
+        assert_eq!(
+            type_keys(&mut i, &map, "u"),
+            [Intent::Perform(Action::UndoWorkspace)]
+        );
+    }
+
+    #[test]
+    fn prune_incomplete_or_invalid_sequences_do_nothing() {
+        let map = KeyMap::default();
+        let mut i = Interaction::default();
+        for text in ["d<Esc>", "dd", "dj", "dl", "d<Del>", "dw"] {
+            assert_eq!(
+                type_keys(&mut i, &map, text),
+                [Intent::Pending, Intent::Cancelled],
+                "{text}: the second key is swallowed, never run"
+            );
+            assert!(i.pending().is_empty());
+            assert_eq!(i.mode(), Mode::Normal);
+        }
+    }
+
+    #[test]
+    fn prune_is_not_available_in_visual_mode_and_never_reaches_the_toolkit() {
+        let map = KeyMap::default();
+        let mut i = Interaction::default();
+        type_keys(&mut i, &map, "v");
+        assert_eq!(
+            type_keys(&mut i, &map, "dbdB"),
+            [
+                Intent::Pending,
+                Intent::NotInThisMode(Action::PruneBack),
+                Intent::Pending,
+                Intent::NotInThisMode(Action::PruneBackSegment)
+            ]
+        );
+        assert_eq!(
+            i.mode(),
+            Mode::Visual { range: false },
+            "selection continues"
+        );
+        assert_eq!(
+            type_keys(&mut i, &map, "u"),
+            [Intent::Perform(Action::UndoWorkspace)]
+        );
+    }
+
+    #[test]
+    fn prune_a_cancelled_operator_cannot_be_completed_later() {
+        let map = KeyMap::default();
+        let mut i = Interaction::default();
+        assert_eq!(type_keys(&mut i, &map, "d"), [Intent::Pending]);
+        assert!(i.cancel_pending(), "e.g. a click on another panel");
+        assert!(!i.cancel_pending());
+        // `b` alone is not bound: it goes to the toolkit, nothing is pruned.
+        assert_eq!(type_keys(&mut i, &map, "b"), [Intent::Unhandled]);
+    }
+
+    #[test]
+    fn prune_keys_go_to_the_command_line_in_command_mode() {
+        let map = KeyMap::default();
+        let mut i = Interaction::default();
+        type_keys(&mut i, &map, ":");
+        assert_eq!(type_keys(&mut i, &map, "dbdBu"), [Intent::Unhandled; 5]);
     }
 
     #[test]

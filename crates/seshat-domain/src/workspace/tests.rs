@@ -781,3 +781,353 @@ fn nav_identities_survive_persistence() {
     let restored = Workspace::from_parts(ws.to_parts()).unwrap();
     assert_eq!(restored.panel(docs).unwrap().identity(), id(77));
 }
+
+// ── Backward branch pruning (3-BACKWARD-BRANCH-PRUNING.md) ──────────────
+
+/// Home → Documents → Projects → Rust → Cargo, active on Cargo (spec 3 §4).
+fn cargo_chain() -> (Workspace, Vec<PanelId>) {
+    let mut ws = home();
+    let mut chain = vec![ws.active_panel()];
+    for name in ["Documents", "Projects", "Rust", "Cargo"] {
+        let from = *chain.last().unwrap();
+        let location = ws.panel(from).unwrap().location().child(name.as_ref());
+        chain.push(ws.open_child(from, location, None).unwrap().panel);
+    }
+    ok(&ws);
+    (ws, chain)
+}
+
+fn prune_active(ws: &mut Workspace, motion: PruneMotion) -> Result<PrunedSegment, PruneRefusal> {
+    let (branch, panel) = (ws.active_branch().id(), ws.active_panel());
+    let pruned = ws.prune(branch, panel, motion);
+    ok(ws);
+    pruned
+}
+
+type Structure = (
+    Vec<PanelParts>,
+    Vec<(BranchId, PanelId, PanelId)>,
+    BranchId,
+    PanelId,
+);
+
+/// Everything structural, without logical clocks or the jump list.
+fn structure(ws: &Workspace) -> Structure {
+    let parts = ws.to_parts();
+    let branches = parts
+        .branches
+        .iter()
+        .map(|b| (b.id, b.tip, b.cursor))
+        .collect();
+    (parts.panels, branches, parts.active, ws.active_panel())
+}
+
+#[test]
+fn prune_db_removes_one_navigation_step() {
+    let (mut ws, chain) = cargo_chain();
+    let branch = ws.active_branch().id();
+    let pruned = prune_active(&mut ws, PruneMotion::Step).unwrap();
+    assert_eq!(pruned.removed(), vec![chain[4]]);
+    assert_eq!(pruned.destination(), chain[3]);
+    assert!(!pruned.ends_branch());
+    assert_eq!(ws.active_panel(), chain[3], "Rust is active");
+    assert_eq!(ws.active_branch().id(), branch, "branch identity is kept");
+    assert_eq!(ws.active_branch().tip(), chain[3]);
+    assert!(ws.panel(chain[4]).is_none());
+    assert_eq!(
+        path_names(&ws, branch),
+        [
+            "/home/u",
+            "/home/u/Documents",
+            "/home/u/Documents/Projects",
+            "/home/u/Documents/Projects/Rust"
+        ]
+    );
+}
+
+#[test]
+fn prune_db_b_without_shared_ancestors_goes_back_to_the_root() {
+    let (mut ws, chain) = cargo_chain();
+    let pruned = prune_active(&mut ws, PruneMotion::Segment).unwrap();
+    assert_eq!(pruned.removed(), chain[1..].to_vec());
+    assert_eq!(ws.active_panel(), chain[0]);
+    assert_eq!(ws.panel_count(), 1);
+    assert!(!pruned.ends_branch());
+}
+
+#[test]
+fn prune_db_b_goes_back_to_the_nearest_shared_ancestor_and_ends_the_branch() {
+    // Home → Documents ─┬─ Projects → Rust → Cargo   (active)
+    //                   └─ Notes
+    let (mut ws, chain) = cargo_chain();
+    let cargo_branch = ws.active_branch().id();
+    let notes = ws
+        .open_child(chain[1], loc("/home/u/Documents/Notes"), None)
+        .unwrap();
+    let notes_before = ws.panel(notes.panel).unwrap().clone();
+    ws.activate_branch(cargo_branch).unwrap();
+
+    let pruned = prune_active(&mut ws, PruneMotion::Segment).unwrap();
+    assert_eq!(pruned.destination(), chain[1], "Documents");
+    assert_eq!(pruned.removed(), chain[2..].to_vec());
+    assert!(pruned.ends_branch());
+    assert!(ws.branch(cargo_branch).is_none());
+    assert_eq!(ws.active_branch().id(), notes.branch, "Notes takes over");
+    assert_eq!(ws.active_panel(), chain[1]);
+    assert_eq!(
+        ws.panel(notes.panel),
+        Some(&notes_before),
+        "Notes untouched"
+    );
+    assert_eq!(ws.branch(notes.branch).unwrap().tip(), notes.panel);
+}
+
+#[test]
+fn prune_db_and_db_b_coincide_directly_below_a_shared_ancestor() {
+    let s = scenario();
+    assert_eq!(s.ws.active_panel(), s.downloads);
+    let step =
+        s.ws.resolve_prune(s.downloads_branch, s.downloads, PruneMotion::Step);
+    let segment =
+        s.ws.resolve_prune(s.downloads_branch, s.downloads, PruneMotion::Segment);
+    assert_eq!(step, segment);
+    assert_eq!(step.unwrap().destination, s.home);
+}
+
+#[test]
+fn prune_spec_7_shared_ancestors_and_other_branches_are_preserved() {
+    let mut s = scenario();
+    s.ws.state_mut(s.downloads).unwrap().cursor = Some(loc("/home/u/Downloads/a.iso"));
+    s.ws.activate_panel(s.projects).unwrap();
+    let downloads_before = s.ws.panel(s.downloads).unwrap().clone();
+
+    let pruned = prune_active(&mut s.ws, PruneMotion::Segment).unwrap();
+    assert_eq!(pruned.removed(), vec![s.documents, s.projects]);
+    assert!(
+        s.ws.panel(s.home).is_some(),
+        "Home is still used by Downloads"
+    );
+    assert_eq!(s.ws.panel(s.downloads), Some(&downloads_before));
+    let downloads = s.ws.branch(s.downloads_branch).unwrap();
+    assert_eq!(downloads.tip(), s.downloads, "branch identity is stable");
+    assert_eq!(s.ws.active_branch().id(), s.downloads_branch);
+    assert_eq!(s.ws.active_panel(), s.home);
+}
+
+#[test]
+fn prune_keeps_the_destination_state() {
+    let (mut ws, chain) = cargo_chain();
+    let state = ws.state_mut(chain[3]).unwrap();
+    state.cursor = Some(loc("/home/u/Documents/Projects/Rust/Cargo"));
+    state.options.sort.key = SortKey::Size;
+    state.options.query = "car".into();
+    state.mode = ViewMode::Grid;
+    state
+        .selection
+        .insert(loc("/home/u/Documents/Projects/Rust/notes.md"));
+    let before = ws.panel(chain[3]).unwrap().state.clone();
+    prune_active(&mut ws, PruneMotion::Step).unwrap();
+    assert_eq!(ws.panel(chain[3]).unwrap().state, before);
+}
+
+#[test]
+fn prune_refuses_when_panels_continue_beyond_the_active_panel() {
+    let (mut ws, _) = cargo_chain();
+    ws.move_left();
+    let before = ws.clone();
+    assert_eq!(
+        prune_active(&mut ws, PruneMotion::Step),
+        Err(PruneRefusal::PanelsBeyond)
+    );
+    assert_eq!(ws, before, "a refused prune changes nothing");
+}
+
+#[test]
+fn prune_refuses_on_a_shared_panel() {
+    let mut s = scenario();
+    s.ws.activate_panel(s.home).unwrap();
+    let before = s.ws.clone();
+    assert_eq!(
+        prune_active(&mut s.ws, PruneMotion::Segment),
+        Err(PruneRefusal::Shared { branches: 2 })
+    );
+    assert_eq!(s.ws, before);
+}
+
+#[test]
+fn prune_refuses_at_a_root_and_for_stale_requests() {
+    let mut ws = home();
+    let before = ws.clone();
+    assert_eq!(
+        prune_active(&mut ws, PruneMotion::Step),
+        Err(PruneRefusal::NoDestination)
+    );
+    assert_eq!(ws, before);
+
+    let (mut ws, chain) = cargo_chain();
+    let branch = ws.active_branch().id();
+    let before = ws.clone();
+    assert_eq!(
+        ws.prune(branch, chain[2], PruneMotion::Step),
+        Err(PruneRefusal::Stale),
+        "only the active panel can be pruned from"
+    );
+    assert_eq!(
+        ws.prune(BranchId::from_raw(999), chain[4], PruneMotion::Step),
+        Err(PruneRefusal::Stale)
+    );
+    assert_eq!(ws, before);
+}
+
+#[test]
+fn prune_removes_pruned_panels_from_the_jump_list() {
+    let (mut ws, _) = cargo_chain();
+    let pruned = prune_active(&mut ws, PruneMotion::Segment).unwrap();
+    let parts = ws.to_parts();
+    for id in pruned.removed() {
+        assert!(!parts.back.contains(&id), "{id} left in the back list");
+        assert!(
+            !parts.forward.contains(&id),
+            "{id} left in the forward list"
+        );
+    }
+}
+
+#[test]
+fn prune_never_changes_focus_mode_even_when_a_branch_ends() {
+    let mut s = scenario();
+    s.ws.set_retain_focus_on_branch_switch(false);
+    s.ws.activate_panel(s.projects).unwrap();
+    s.ws.set_focus_mode(true);
+    let pruned = prune_active(&mut s.ws, PruneMotion::Segment).unwrap();
+    assert!(pruned.ends_branch());
+    assert!(s.ws.focus_mode(), "pruning is not a branch switch (B4)");
+    s.ws.restore_pruned(&pruned).unwrap();
+    assert!(s.ws.focus_mode());
+}
+
+#[test]
+fn prune_undo_restores_the_workspace() {
+    let (mut ws, chain) = cargo_chain();
+    let state = ws.state_mut(chain[4]).unwrap();
+    state.cursor = Some(loc("/home/u/Documents/Projects/Rust/Cargo/Cargo.toml"));
+    state
+        .selection
+        .insert(loc("/home/u/Documents/Projects/Rust/Cargo/src"));
+    let before = structure(&ws);
+    let pruned = prune_active(&mut ws, PruneMotion::Segment).unwrap();
+    assert_eq!(pruned.deselected(), 1);
+    ws.restore_pruned(&pruned).unwrap();
+    ok(&ws);
+    assert_eq!(structure(&ws), before);
+}
+
+#[test]
+fn prune_undo_restores_an_ended_branch_and_the_order_of_branches() {
+    // Documents (pruned) sits before Downloads under Home: undo must put
+    // it back first, so `[`/`]` order is unchanged.
+    let mut s = scenario();
+    s.ws.activate_panel(s.projects).unwrap();
+    let order: Vec<BranchId> = s.ws.branches().iter().map(|b| b.id()).collect();
+    let before = structure(&s.ws);
+    let pruned = prune_active(&mut s.ws, PruneMotion::Segment).unwrap();
+    assert!(pruned.ends_branch());
+    s.ws.restore_pruned(&pruned).unwrap();
+    ok(&s.ws);
+    assert_eq!(structure(&s.ws), before, "Downloads' cursor came back too");
+    let after: Vec<BranchId> = s.ws.branches().iter().map(|b| b.id()).collect();
+    assert_eq!(after, order);
+}
+
+#[test]
+fn prune_undo_is_refused_when_the_workspace_changed_there() {
+    // The branch grew again from the destination.
+    let (mut ws, chain) = cargo_chain();
+    let pruned = prune_active(&mut ws, PruneMotion::Step).unwrap();
+    ws.open_child(chain[3], loc("/home/u/Documents/Projects/Rust/Cargo"), None)
+        .unwrap();
+    let before = ws.clone();
+    assert_eq!(ws.restore_pruned(&pruned), Err(RestoreRefusal::Changed));
+    assert_eq!(ws, before);
+
+    // The ended branch's folder was reopened under the shared ancestor.
+    let mut s = scenario();
+    s.ws.activate_panel(s.projects).unwrap();
+    let pruned = prune_active(&mut s.ws, PruneMotion::Segment).unwrap();
+    s.ws.open_child(s.home, loc("/home/u/Documents"), None)
+        .unwrap();
+    assert_eq!(s.ws.restore_pruned(&pruned), Err(RestoreRefusal::Changed));
+
+    // The destination itself was pruned since.
+    let (mut ws, _) = cargo_chain();
+    let first = prune_active(&mut ws, PruneMotion::Step).unwrap();
+    prune_active(&mut ws, PruneMotion::Step).unwrap();
+    assert_eq!(
+        ws.restore_pruned(&first),
+        Err(RestoreRefusal::DestinationGone)
+    );
+}
+
+#[test]
+fn prune_results_persist_and_restore() {
+    let mut s = scenario();
+    s.ws.activate_panel(s.projects).unwrap();
+    prune_active(&mut s.ws, PruneMotion::Step).unwrap();
+    let restored = Workspace::from_parts(s.ws.to_parts()).unwrap();
+    assert_eq!(structure(&restored), structure(&s.ws));
+}
+
+#[test]
+fn invariants_hold_across_random_sequences_with_pruning_and_undo() {
+    for seed in 0..40 {
+        let mut rng = Lcg(seed);
+        let mut ws = home();
+        let mut undo: Vec<PrunedSegment> = Vec::new();
+        for step in 0..400 {
+            let ids: Vec<PanelId> = ws.panels().map(Panel::id).collect();
+            let any = ids[rng.next(ids.len())];
+            let name = format!("d{}", rng.next(4));
+            match rng.next(9) {
+                0..=2 => {
+                    let from = ws.active_panel();
+                    let location = ws.panel(from).unwrap().location().child(name.as_ref());
+                    ws.open_child(from, location, None).unwrap();
+                }
+                3 => {
+                    ws.move_left();
+                }
+                4 => {
+                    ws.activate_panel(any).unwrap();
+                }
+                5 => {
+                    let branches: Vec<BranchId> = ws.branches().iter().map(|b| b.id()).collect();
+                    let _ = ws.close_branch(branches[rng.next(branches.len())]);
+                }
+                6 | 7 => {
+                    let motion = if rng.next(2) == 0 {
+                        PruneMotion::Step
+                    } else {
+                        PruneMotion::Segment
+                    };
+                    let before = ws.clone();
+                    let (branch, panel) = (ws.active_branch().id(), ws.active_panel());
+                    match ws.prune(branch, panel, motion) {
+                        Ok(pruned) => undo.push(pruned),
+                        Err(_) => assert_eq!(ws, before, "seed {seed}, step {step}"),
+                    }
+                }
+                _ => {
+                    if let Some(pruned) = undo.pop() {
+                        let before = ws.clone();
+                        if ws.restore_pruned(&pruned).is_err() {
+                            assert_eq!(ws, before, "seed {seed}, step {step}");
+                        }
+                    }
+                }
+            }
+            if let Err(err) = ws.check_invariants() {
+                panic!("seed {seed}, step {step}: {err}");
+            }
+        }
+    }
+}

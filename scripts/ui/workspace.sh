@@ -148,6 +148,46 @@ type_text L   # the plain move to the next panel, without opening (C2)
 check "and their path"                              active_is "$H/Downloads"
 shot restored
 
+# Backward branch pruning (3-BACKWARD-BRANCH-PRUNING.md, ADR 0007). Two
+# branches: Home → Documents → Projects, and Home → Downloads (active, at
+# its end). Pruning changes panels only: the files must stay exactly as
+# they are, which a fingerprint of the home folder checks.
+fingerprint() { find "$H" -printf '%P %s %T@\n' | sort | sha256sum; }
+files_before=$(fingerprint)
+files_unchanged() { [[ "$(fingerprint)" == "$files_before" ]]; }
+
+# Not in Focus Mode (decision B9): db, dB and u change nothing.
+type_text zz; type_text db; type_text dB; type_text u
+check "prune: refused in Focus Mode"                 state_has "branches=2 panels=4 "
+check "    Focus Mode is kept"                       state_has "focus_mode=true"
+type_text zz
+# Not in Visual Mode (B6), and incomplete or invalid sequences do nothing.
+type_text v; type_text db; press Escape; press Escape
+type_text d; press Escape; type_text dj
+check "prune: Visual Mode, d<Esc> and dj prune nothing" state_has "branches=2 panels=4 "
+check "    still on Downloads"                       active_is "$H/Downloads"
+# db from Downloads: Home is shared, so the Downloads branch ends (B3).
+type_text db
+check "prune: db goes back to Home"                  active_is "$H"
+check "    the Downloads branch ended, Home is kept" state_has "branches=1 panels=3 "
+check "    logged as a workspace change"             log_has "workspace pruned"
+shot pruned
+type_text u
+check "prune: u puts Downloads back"                 active_is "$H/Downloads"
+check "    both branches again"                      state_has "branches=2 panels=4 "
+# dB from Projects: back to the shared Home in one go.
+type_text "["
+check "prune: [ reaches Projects"                    active_is "$H/Documents/Projects"
+type_text dB
+check "prune: dB goes back to where branches meet"   active_is "$H"
+check "    Documents and Projects removed"           state_has "branches=1 panels=2 "
+type_text u
+check "prune: u restores Documents and Projects"     active_is "$H/Documents/Projects"
+check "    with every branch"                        state_has "branches=2 panels=4 "
+check "prune: no file was touched"                   files_unchanged
+type_text "]"
+check "    branch switching still works"             active_is "$H/Downloads"
+
 # Path completion on the command line. Without it, ~/Doc would open a
 # folder called "Doc".
 type_text :; type_text "open ~/Doc"; press Tab; shot completion-unique

@@ -11,9 +11,9 @@ use seshat_application::interaction::{Action, Intent};
 use seshat_application::navigation::parse_address;
 use seshat_application::operations::OperationRequest;
 use seshat_application::ports::ListingError;
-use seshat_application::workspace::{TransferKind, TransferPlan};
+use seshat_application::workspace::{PruneError, TransferKind, TransferPlan};
 use seshat_domain::entities::Location;
-use seshat_domain::workspace::BranchId;
+use seshat_domain::workspace::{BranchId, PruneMotion};
 
 use super::workspace::capitalise;
 use super::{App, Msg};
@@ -77,6 +77,10 @@ impl App {
             }
             Intent::OpenCommandLine => self.open_command_line(),
             Intent::Open { launch_files } => self.open_cursor(launch_files),
+            Intent::NotInThisMode(_) => {
+                self.notice =
+                    Some("Pruning isn't available in Visual Mode; press Esc first.".to_owned());
+            }
             Intent::Perform(action) => self.perform(action, sender),
         }
     }
@@ -117,6 +121,9 @@ impl App {
             Action::Yank => self.clipboard_store(false),
             Action::Cut => self.clipboard_store(true),
             Action::Paste => self.paste(sender),
+            Action::PruneBack => self.prune_back(PruneMotion::Step),
+            Action::PruneBackSegment => self.prune_back(PruneMotion::Segment),
+            Action::UndoWorkspace => self.undo_workspace(),
             // Mode actions are resolved by the interaction layer.
             Action::CursorDown
             | Action::CursorUp
@@ -132,6 +139,53 @@ impl App {
                 self.intent(intent, sender);
             }
         }
+    }
+
+    /// `db` / `dB`: the service resolves and prunes; this only reports.
+    /// Workspace structure only: files are never touched.
+    fn prune_back(&mut self, motion: PruneMotion) {
+        let ws = self.service.workspace();
+        let (branch, panel) = (ws.active_branch().id(), ws.active_panel());
+        self.notice = Some(match self.service.prune_back(branch, panel, motion) {
+            Ok(outcome) => {
+                let mut text = match outcome.removed {
+                    1 => "Pruned 1 panel".to_owned(),
+                    n => format!("Pruned {n} panels"),
+                };
+                if outcome.ended_branch {
+                    text.push_str("; the branch ended");
+                }
+                match outcome.deselected {
+                    0 => {}
+                    1 => text.push_str("; 1 selected item was deselected"),
+                    n => text.push_str(&format!("; {n} selected items were deselected")),
+                }
+                if let Some(undo) = self
+                    .keys
+                    .borrow()
+                    .keymap
+                    .keys_for(Action::UndoWorkspace)
+                    .first()
+                {
+                    text.push_str(&format!(". Press {undo} to undo"));
+                }
+                text.push('.');
+                text
+            }
+            Err(PruneError::FocusMode) => "Pruning isn't available in Focus Mode.".to_owned(),
+            Err(PruneError::Refused(refusal)) => format!("Nothing pruned: {refusal}."),
+        });
+    }
+
+    /// `u`: undoes the last prune. Never undoes file operations.
+    fn undo_workspace(&mut self) {
+        self.notice = Some(match self.service.undo_workspace() {
+            Ok(outcome) => match outcome.restored {
+                1 => "Restored 1 panel.".to_owned(),
+                n => format!("Restored {n} panels."),
+            },
+            Err(err) => format!("{}.", capitalise(&err.to_string())),
+        });
     }
 
     fn after_cursor_move(&mut self, extend: bool) {

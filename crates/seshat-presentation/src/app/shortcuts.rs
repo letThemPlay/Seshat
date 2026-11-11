@@ -94,6 +94,18 @@ fn install_modal_keys(
     command_entry: &gtk::Entry,
     sender: &ComponentSender<App>,
 ) {
+    {
+        // Leaving the window abandons a half-typed sequence (e.g. the `d`
+        // of `db`), so it cannot complete in a context the user no longer
+        // sees. Re-render so the pending indicator clears.
+        let router = router.clone();
+        let sender = sender.clone();
+        window.connect_is_active_notify(move |window| {
+            if !window.is_active() && router.borrow_mut().interaction.cancel_pending() {
+                sender.input_sender().emit(Msg::Intent(Intent::Cancelled));
+            }
+        });
+    }
     let controller = gtk::EventControllerKey::new();
     controller.set_propagation_phase(gtk::PropagationPhase::Capture);
     let router = router.clone();

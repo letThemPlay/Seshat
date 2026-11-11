@@ -4,10 +4,14 @@ use std::path::Path;
 use seshat_domain::entities::{FileEntry, Location};
 use seshat_domain::view::{SortKey, ViewMode};
 use seshat_domain::workspace::{
-    BranchId, Opened, PanelId, PanelState, ScrollAnchor, Unavailability, Workspace, WorkspaceError,
+    BranchId, Opened, PanelId, PanelState, PruneMotion, ScrollAnchor, Unavailability, Workspace,
+    WorkspaceError,
 };
 
 use super::listing::{Content, PanelListing};
+use super::undo::{
+    PruneError, PruneOutcome, UndoError, UndoOutcome, WorkspaceChange, WorkspaceUndo,
+};
 use crate::ports::{DirectoryChange, ListingError};
 use crate::view::arrange;
 
@@ -67,6 +71,8 @@ pub struct WorkspaceService {
     clock: u64,
     /// Whether the cursor wraps around at the ends of a list.
     wrap_cursor: bool,
+    /// Reversible workspace changes of this session (decision B5).
+    undo: WorkspaceUndo,
 }
 
 impl WorkspaceService {
@@ -81,6 +87,7 @@ impl WorkspaceService {
             generation: 0,
             clock: 0,
             wrap_cursor: false,
+            undo: WorkspaceUndo::default(),
         };
         service.after_navigation();
         service
@@ -207,14 +214,75 @@ impl WorkspaceService {
     /// their own paths).
     pub fn close_branch(&mut self, branch: BranchId) -> Result<Vec<PanelId>, WorkspaceError> {
         let removed = self.workspace.close_branch(branch)?;
-        for panel in &removed {
-            self.visible.remove(panel);
-            if self.listings.remove(panel).is_some() {
-                self.effects.push(Effect::Unwatch { panel: *panel });
-            }
-        }
+        self.forget_panels(&removed);
         self.after_navigation();
         Ok(removed)
+    }
+
+    /// Backward pruning (`db`, `dB`): removes panels of `branch` from
+    /// `panel` back to the destination `motion` resolves to, which becomes
+    /// active with its state intact. See [`Workspace::prune`].
+    ///
+    /// Workspace structure only: no file is ever touched, and the only
+    /// effects are unwatching the removed panels and saving. Refused in
+    /// Focus Mode (decision B9). A completed prune can be undone with
+    /// [`Self::undo_workspace`].
+    pub fn prune_back(
+        &mut self,
+        branch: BranchId,
+        panel: PanelId,
+        motion: PruneMotion,
+    ) -> Result<PruneOutcome, PruneError> {
+        if self.workspace.focus_mode() {
+            return Err(PruneError::FocusMode);
+        }
+        let pruned = self.workspace.prune(branch, panel, motion)?;
+        let removed = pruned.removed();
+        self.forget_panels(&removed);
+        let outcome = PruneOutcome {
+            destination: pruned.destination(),
+            removed: removed.len(),
+            deselected: pruned.deselected(),
+            ended_branch: pruned.ends_branch(),
+        };
+        tracing::debug!(
+            ?motion,
+            branch = %branch,
+            destination = %outcome.destination,
+            removed = outcome.removed,
+            ended_branch = outcome.ended_branch,
+            "workspace pruned"
+        );
+        self.undo.push(WorkspaceChange::Prune(pruned));
+        self.after_navigation();
+        Ok(outcome)
+    }
+
+    /// Undoes the most recent workspace change (a prune), putting its
+    /// panels back with their state. Never undoes file operations. Refused
+    /// in Focus Mode (decision B9). A change that can no longer be undone
+    /// is dropped from the history, so the next undo reaches the one
+    /// before it (decision B5).
+    pub fn undo_workspace(&mut self) -> Result<UndoOutcome, UndoError> {
+        if self.workspace.focus_mode() {
+            return Err(UndoError::FocusMode);
+        }
+        let change = self.undo.pop().ok_or(UndoError::NothingToUndo)?;
+        let outcome = match change {
+            WorkspaceChange::Prune(pruned) => {
+                self.workspace.restore_pruned(&pruned)?;
+                UndoOutcome {
+                    restored: pruned.removed().len(),
+                }
+            }
+        };
+        self.after_navigation();
+        Ok(outcome)
+    }
+
+    /// How many workspace changes can be undone.
+    pub fn undo_depth(&self) -> usize {
+        self.undo.len()
     }
 
     /// Opens `entry` from `panel`. This is the single entry point for
@@ -654,6 +722,16 @@ impl WorkspaceService {
     fn next_generation(&mut self) -> u64 {
         self.generation += 1;
         self.generation
+    }
+
+    /// Drops the listings and watches of panels removed from the workspace.
+    fn forget_panels(&mut self, removed: &[PanelId]) {
+        for panel in removed {
+            self.visible.remove(panel);
+            if self.listings.remove(panel).is_some() {
+                self.effects.push(Effect::Unwatch { panel: *panel });
+            }
+        }
     }
 
     fn after_navigation(&mut self) {
