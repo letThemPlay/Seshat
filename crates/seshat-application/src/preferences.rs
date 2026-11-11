@@ -65,27 +65,16 @@ pub struct WorkspacePreferences {
     pub key_bindings: Vec<(String, Vec<String>)>,
 }
 
-/// How branches are laid out (decision L2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum WorkspaceLayout {
-    /// Branches side by side: tree depth across, branches down, with
-    /// connectors. Falls back to one row when the window is too short.
-    #[default]
-    Tree,
-    /// Only the active branch, as a single strip.
-    Strip,
-}
-
-impl WorkspaceLayout {
-    pub fn id(self) -> &'static str {
-        match self {
-            Self::Tree => "tree",
-            Self::Strip => "strip",
-        }
-    }
-
-    pub fn from_id(id: &str) -> Option<Self> {
-        [Self::Tree, Self::Strip].into_iter().find(|l| l.id() == id)
+seshat_domain::stable_ids! {
+    /// How branches are laid out (decision L2).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub enum WorkspaceLayout {
+        /// Branches side by side: tree depth across, branches down, with
+        /// connectors. Falls back to one row when the window is too short.
+        #[default]
+        Tree => "tree",
+        /// Only the active branch, as a single strip.
+        Strip => "strip",
     }
 }
 

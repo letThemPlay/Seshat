@@ -3,112 +3,50 @@ use std::fmt;
 
 use super::keys::{KeyPress, format_sequence, parse_sequence};
 
-/// Everything a key binding can do. Keyboard, mouse, menus and the command
-/// line all map onto these and the same application services.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Action {
-    PanelLeft,
-    PanelRight,
-    CursorDown,
-    CursorUp,
-    CursorFirst,
-    CursorLast,
-    HalfPageDown,
-    HalfPageUp,
-    Open,
-    Parent,
-    BranchPrevious,
-    BranchNext,
-    Back,
-    Forward,
-    /// `v`: enter Visual Mode (toggling the cursor item), or in Visual Mode
-    /// toggle the cursor item.
-    Visual,
-    /// `V`: range selection from the cursor.
-    VisualRange,
-    CommandLine,
-    Search,
-    FocusMode,
-    /// Esc: leave Visual Mode, or in Normal Mode clear the selection.
-    Escape,
-    Yank,
-    Cut,
-    Paste,
-    /// `db`: prune the active branch back one panel. Workspace only; files
-    /// are never touched (3-BACKWARD-BRANCH-PRUNING.md).
-    PruneBack,
-    /// `dB`: prune the active branch back to where it meets another branch.
-    PruneBackSegment,
-    /// `u`: undo the last workspace change (a prune), not a file operation.
-    UndoWorkspace,
+seshat_domain::stable_ids! {
+    /// Everything a key binding can do. Keyboard, mouse, menus and the command
+    /// line all map onto these and the same application services. The ids are
+    /// used in the settings file.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum Action {
+        PanelLeft => "panel-left",
+        PanelRight => "panel-right",
+        CursorDown => "cursor-down",
+        CursorUp => "cursor-up",
+        CursorFirst => "cursor-first",
+        CursorLast => "cursor-last",
+        HalfPageDown => "half-page-down",
+        HalfPageUp => "half-page-up",
+        Open => "open",
+        Parent => "parent",
+        BranchPrevious => "branch-previous",
+        BranchNext => "branch-next",
+        Back => "back",
+        Forward => "forward",
+        /// `v`: enter Visual Mode (toggling the cursor item), or in Visual Mode
+        /// toggle the cursor item.
+        Visual => "visual",
+        /// `V`: range selection from the cursor.
+        VisualRange => "visual-range",
+        CommandLine => "command-line",
+        Search => "search",
+        FocusMode => "focus-mode",
+        /// Esc: leave Visual Mode, or in Normal Mode clear the selection.
+        Escape => "escape",
+        Yank => "yank",
+        Cut => "cut",
+        Paste => "paste",
+        /// `db`: prune the active branch back one panel. Workspace only; files
+        /// are never touched (3-BACKWARD-BRANCH-PRUNING.md).
+        PruneBack => "prune-back",
+        /// `dB`: prune the active branch back to where it meets another branch.
+        PruneBackSegment => "prune-back-segment",
+        /// `u`: undo the last workspace change (a prune), not a file operation.
+        UndoWorkspace => "undo-workspace",
+    }
 }
 
 impl Action {
-    pub const ALL: [Self; 26] = [
-        Self::PanelLeft,
-        Self::PanelRight,
-        Self::CursorDown,
-        Self::CursorUp,
-        Self::CursorFirst,
-        Self::CursorLast,
-        Self::HalfPageDown,
-        Self::HalfPageUp,
-        Self::Open,
-        Self::Parent,
-        Self::BranchPrevious,
-        Self::BranchNext,
-        Self::Back,
-        Self::Forward,
-        Self::Visual,
-        Self::VisualRange,
-        Self::CommandLine,
-        Self::Search,
-        Self::FocusMode,
-        Self::Escape,
-        Self::Yank,
-        Self::Cut,
-        Self::Paste,
-        Self::PruneBack,
-        Self::PruneBackSegment,
-        Self::UndoWorkspace,
-    ];
-
-    /// Stable identifier used in the settings file.
-    pub fn id(self) -> &'static str {
-        match self {
-            Self::PanelLeft => "panel-left",
-            Self::PanelRight => "panel-right",
-            Self::CursorDown => "cursor-down",
-            Self::CursorUp => "cursor-up",
-            Self::CursorFirst => "cursor-first",
-            Self::CursorLast => "cursor-last",
-            Self::HalfPageDown => "half-page-down",
-            Self::HalfPageUp => "half-page-up",
-            Self::Open => "open",
-            Self::Parent => "parent",
-            Self::BranchPrevious => "branch-previous",
-            Self::BranchNext => "branch-next",
-            Self::Back => "back",
-            Self::Forward => "forward",
-            Self::Visual => "visual",
-            Self::VisualRange => "visual-range",
-            Self::CommandLine => "command-line",
-            Self::Search => "search",
-            Self::FocusMode => "focus-mode",
-            Self::Escape => "escape",
-            Self::Yank => "yank",
-            Self::Cut => "cut",
-            Self::Paste => "paste",
-            Self::PruneBack => "prune-back",
-            Self::PruneBackSegment => "prune-back-segment",
-            Self::UndoWorkspace => "undo-workspace",
-        }
-    }
-
-    pub fn from_id(id: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|a| a.id() == id)
-    }
-
     pub fn description(self) -> &'static str {
         match self {
             Self::PanelLeft => "Previous panel",

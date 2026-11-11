@@ -7,6 +7,7 @@ pub mod entities;
 pub mod error;
 pub mod operation;
 pub mod search;
+mod stable_ids;
 pub mod view;
 pub mod workspace;
 

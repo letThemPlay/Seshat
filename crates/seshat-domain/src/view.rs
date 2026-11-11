@@ -1,32 +1,19 @@
 //! How a panel presents its listing: sort order, view mode and filters.
 //! Pure value objects shared by panel state and the application view logic.
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum SortKey {
-    #[default]
-    Name,
-    Size,
-    Modified,
-    Type,
+crate::stable_ids! {
+    /// What a panel is sorted by.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+    pub enum SortKey {
+        #[default]
+        Name => "name",
+        Size => "size",
+        Modified => "modified",
+        Type => "type",
+    }
 }
 
 impl SortKey {
-    pub const ALL: [Self; 4] = [Self::Name, Self::Size, Self::Modified, Self::Type];
-
-    /// Stable identifier used in settings and UI actions.
-    pub fn id(self) -> &'static str {
-        match self {
-            Self::Name => "name",
-            Self::Size => "size",
-            Self::Modified => "modified",
-            Self::Type => "type",
-        }
-    }
-
-    pub fn from_id(id: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|k| k.id() == id)
-    }
-
     pub fn label(self) -> &'static str {
         match self {
             Self::Name => "Name",
@@ -43,23 +30,13 @@ pub struct SortOrder {
     pub descending: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum ViewMode {
-    #[default]
-    List,
-    Grid,
-}
-
-impl ViewMode {
-    pub fn id(self) -> &'static str {
-        match self {
-            Self::List => "list",
-            Self::Grid => "grid",
-        }
-    }
-
-    pub fn from_id(id: &str) -> Option<Self> {
-        [Self::List, Self::Grid].into_iter().find(|m| m.id() == id)
+crate::stable_ids! {
+    /// How a panel shows its entries.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+    pub enum ViewMode {
+        #[default]
+        List => "list",
+        Grid => "grid",
     }
 }
 
