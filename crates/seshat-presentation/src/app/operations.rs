@@ -15,10 +15,10 @@ use seshat_application::operations::{
 use seshat_domain::entities::Location;
 use seshat_domain::operation::{OperationId, OperationKind};
 
-use super::file_ops::plural;
 use super::{App, Cx, Msg};
 use crate::conflicts::{ConflictRequest, UiConflictResolver};
 use crate::dialogs;
+use crate::notice::{Notice, count};
 use crate::operations_panel::OperationsPanel;
 
 #[derive(Debug)]
@@ -118,7 +118,7 @@ impl OperationsController {
 
         match (event.kind, op.kind()) {
             (OperationEventKind::Failed, _) if op.kind() != OperationKind::Trash => {
-                *cx.notice = op.error.clone();
+                *cx.notice = op.error.clone().map(Notice::error);
             }
             // Items the Trash refused were left alone; offer deletion.
             (_, OperationKind::Trash) if !op.failures.is_empty() => {
@@ -132,7 +132,7 @@ impl OperationsController {
                     &self.window,
                     &format!(
                         "{} could not be moved to the Trash",
-                        plural(paths.len(), "1 item", "items")
+                        count(paths.len(), "item", "items")
                     ),
                     "They were not deleted. The location may not support a Trash (for example some network or removable drives). Delete them permanently instead?",
                     "Delete Permanently",

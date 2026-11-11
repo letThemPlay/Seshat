@@ -449,8 +449,10 @@ window.seshat button.destructive-action {{
   color: @seshat_surface;
 }}
 
-.seshat-status.seshat-notice {{
-  color: @seshat_warning;
+/* Status messages (decision N1): information in the normal status
+   colour, errors in the error colour. */
+.seshat-status.seshat-notice-error {{
+  color: @seshat_error;
 }}
 
 .seshat-status {{
@@ -579,6 +581,19 @@ mod tests {
         assert_eq!(css.matches("@define-color seshat_surface ").count(), 1);
         // The raw value must not be duplicated into rules.
         assert_eq!(css.matches(surface_value.as_str()).count(), 1);
+    }
+
+    #[test]
+    fn error_messages_use_the_error_colour_and_others_the_normal_one() {
+        for theme in [light(), dark()] {
+            let css = render_css(&theme);
+            let error = rule_body(&css, ".seshat-status.seshat-notice-error");
+            assert!(error.contains("color: @seshat_error;"), "{error}");
+            assert!(
+                !css.contains("seshat-notice {"),
+                "information notices have no colour of their own"
+            );
+        }
     }
 
     #[test]

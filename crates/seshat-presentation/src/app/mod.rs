@@ -53,6 +53,7 @@ use crate::actions::{self, ActionContext, Actions};
 use crate::clipboard::ClipboardFiles;
 use crate::diagnostics;
 use crate::keys::{KeyRouter, SharedKeys};
+use crate::notice::{self, Notice, Severity};
 use crate::operations_panel::OperationsPanel;
 use crate::pathbar::address_text;
 use crate::sidebar::{Sidebar, SidebarInit, SidebarOutput};
@@ -83,7 +84,7 @@ const MAX_FILES_TO_OPEN: usize = 20;
 pub(super) struct Cx<'a> {
     pub service: &'a mut WorkspaceService,
     /// The status bar's transient message.
-    pub notice: &'a mut Option<String>,
+    pub notice: &'a mut Option<Notice>,
     pub sender: &'a ComponentSender<App>,
 }
 
@@ -254,7 +255,7 @@ pub struct App {
     preferences: Preferences,
     staged: Option<Staged>,
     /// Transient message for the status bar (errors, device events).
-    notice: Option<String>,
+    notice: Option<Notice>,
     editing_address: bool,
     save_pending: bool,
 
@@ -464,7 +465,7 @@ impl SimpleComponent for App {
             staged: None,
             notice: key_warnings
                 .first()
-                .map(|w| format!("Key bindings: {w} (see the log)")),
+                .map(|w| Notice::error(format!("Key bindings: {w} (see the log)"))),
             editing_address: false,
             save_pending: false,
             operations,
@@ -581,7 +582,7 @@ impl SimpleComponent for App {
                         self.editing_address = false;
                         self.service.open_location(location);
                     }
-                    Err(err) => self.notice = Some(err.to_string()),
+                    Err(err) => self.notice = Some(Notice::from_error(&err)),
                 }
             }
 
@@ -629,7 +630,9 @@ impl SimpleComponent for App {
                     self.sidebar.emit(input);
                 }
             }
-            Msg::OpenFailed(err) => self.notice = Some(format!("Could not open: {err}")),
+            Msg::OpenFailed(err) => {
+                self.notice = Some(Notice::error(format!("Could not open: {err}")));
+            }
             Msg::ClipboardStore { cut } => self.clipboard_store(cut),
             Msg::Paste => self.paste(&sender),
             Msg::PasteFiles(files) => self.paste_files(files, &sender),
@@ -711,10 +714,16 @@ impl SimpleComponent for App {
 
         let status = self.status_text();
         widgets.status_bar.set_label(&status);
-        if self.notice.is_some() {
-            widgets.status_bar.add_css_class("seshat-notice");
-        } else {
-            widgets.status_bar.remove_css_class("seshat-notice");
+        let severity = self.notice.as_ref().map(Notice::severity);
+        for (class, on) in [
+            ("seshat-notice", severity.is_some()),
+            ("seshat-notice-error", severity == Some(Severity::Error)),
+        ] {
+            if on {
+                widgets.status_bar.add_css_class(class);
+            } else {
+                widgets.status_bar.remove_css_class(class);
+            }
         }
     }
 
@@ -728,7 +737,7 @@ impl SimpleComponent for App {
 impl App {
     fn status_text(&self) -> String {
         if let Some(notice) = &self.notice {
-            return notice.clone();
+            return notice.text().to_owned();
         }
         let selection = self.service.selection();
         if !selection.is_empty() {
@@ -740,17 +749,11 @@ impl App {
             };
         }
         if let Some(staged) = self.staged {
-            let what = if staged.count == 1 {
-                "1 item".to_owned()
-            } else {
-                format!("{} items", staged.count)
-            };
-            let verb = if staged.cut { "move" } else { "copy" };
-            return format!("{what} ready to {verb}: paste (p or Ctrl+V) into a panel");
+            return notice::staged(staged.count, staged.cut);
         }
         let active = self.service.active_panel();
         match self.service.listing(active) {
-            Some(listing) => item_count(listing.shown().len(), listing.total()),
+            Some(listing) => notice::item_count(listing.shown().len(), listing.total()),
             None => "Loading…".to_owned(),
         }
     }
@@ -803,9 +806,9 @@ impl App {
             .map(|e| e.location)
             .collect();
         if files.len() > MAX_FILES_TO_OPEN {
-            self.notice = Some(format!(
-                "Select at most {MAX_FILES_TO_OPEN} files to open at once."
-            ));
+            self.notice = Some(Notice::error(format!(
+                "Select at most {MAX_FILES_TO_OPEN} files to open at once"
+            )));
             return;
         }
         self.launch(files);
@@ -824,10 +827,7 @@ impl App {
         }
         if let Some(display) = gtk::gdk::Display::default() {
             display.clipboard().set_text(&paths.join("\n"));
-            self.notice = Some(match paths.len() {
-                1 => "Copied path to the clipboard.".to_owned(),
-                n => format!("Copied {n} paths to the clipboard."),
-            });
+            self.notice = Some(notice::copied_paths(paths.len()));
         }
     }
 
@@ -868,14 +868,5 @@ impl App {
         if let Err(err) = self.preferences_store.save(&self.preferences) {
             tracing::warn!(error = %err, "preferences not saved");
         }
-    }
-}
-
-fn item_count(shown: usize, total: usize) -> String {
-    let plural = |n: usize| if n == 1 { "" } else { "s" };
-    if shown == total {
-        format!("{total} item{}", plural(total))
-    } else {
-        format!("{shown} of {total} item{}", plural(total))
     }
 }

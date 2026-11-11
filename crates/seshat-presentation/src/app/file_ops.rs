@@ -21,23 +21,15 @@ use seshat_application::workspace::{TransferKind, TransferPlan};
 use seshat_domain::entities::Location;
 use seshat_domain::workspace::PanelId;
 
-use super::workspace::capitalise;
 use super::{App, Msg, Staged};
 use crate::clipboard::{self, ClipboardFiles};
 use crate::dialogs;
-
-pub(super) fn plural(n: usize, one: &str, many: &str) -> String {
-    if n == 1 {
-        one.to_owned()
-    } else {
-        format!("{n} {many}")
-    }
-}
+use crate::notice::{self, Notice, count};
 
 fn quoted_or_count(items: &[Location]) -> String {
     match items {
         [single] => format!("“{}”", crate::workspace_view::folder_title(single)),
-        many => format!("{} items", many.len()),
+        many => count(many.len(), "item", "items"),
     }
 }
 
@@ -55,7 +47,10 @@ fn confirmation_text(confirmation: &Confirmation) -> (String, String, &'static s
     const UNRECOVERABLE: &str = "Deleted items are not moved to the Trash and cannot be recovered.";
     match confirmation {
         Confirmation::TrashAcrossPanels { count, origins } => (
-            format!("Move {} to the Trash?", plural(*count, "1 item", "items")),
+            format!(
+                "Move {} to the Trash?",
+                notice::count(*count, "item", "items")
+            ),
             format!(
                 "The items come from several panels:\n{}",
                 origin_lines(origins)
@@ -77,19 +72,10 @@ fn confirmation_text(confirmation: &Confirmation) -> (String, String, &'static s
             "Empty the Trash?".to_owned(),
             format!(
                 "{} will be permanently deleted. This cannot be undone.",
-                plural(*count, "1 item", "items")
+                notice::count(*count, "item", "items")
             ),
             "Empty Trash",
         ),
-    }
-}
-
-/// "1 item in the Trash was left out." — items an action could not take.
-fn left_out_notice(left_out: usize) -> Option<String> {
-    match left_out {
-        0 => None,
-        1 => Some("1 item in the Trash was left out.".to_owned()),
-        n => Some(format!("{n} items in the Trash were left out.")),
     }
 }
 
@@ -113,14 +99,14 @@ impl App {
                     self.service.select_when_listed(panel, location);
                 }
             }
-            Err(err) => self.notice = Some(capitalise(&err.to_string())),
+            Err(err) => self.notice = Some(Notice::from_error(&err)),
         }
     }
 
     /// Says why an action did not run, unless the user can already see it.
     fn refuse(&mut self, refusal: &ActionRefusal) {
         if !refusal.is_silent() {
-            self.notice = Some(format!("{}.", capitalise(&refusal.to_string())));
+            self.notice = Some(Notice::from_error(refusal));
         }
     }
 
@@ -188,7 +174,7 @@ impl App {
             cut,
             count: paths.len(),
         });
-        self.notice = left_out_notice(sources.left_out);
+        self.notice = notice::left_out(sources.left_out);
         self.service.clear_selections();
         self.keys.borrow_mut().interaction.reset();
     }
@@ -213,11 +199,11 @@ impl App {
         sender: &ComponentSender<Self>,
     ) {
         let Some(files) = files else {
-            self.notice = Some("The clipboard has no files to paste.".to_owned());
+            self.notice = Some(Notice::error("The clipboard has no files to paste"));
             return;
         };
         let Some(destination) = self.active_folder() else {
-            self.notice = Some("Files can't be pasted here.".to_owned());
+            self.notice = Some(Notice::error("Files can't be pasted here"));
             return;
         };
         let kind = if files.cut {
@@ -238,7 +224,7 @@ impl App {
                 }
                 self.confirm_transfer(plan, sender);
             }
-            Err(err) => self.notice = Some(capitalise(&err.to_string())),
+            Err(err) => self.notice = Some(Notice::from_error(&err)),
         }
     }
 
@@ -257,7 +243,7 @@ impl App {
         match file_actions::trash(&self.service) {
             Ok(plan) => {
                 // Set first, so a submission error from `carry_out` wins.
-                self.notice = left_out_notice(plan.left_out);
+                self.notice = notice::left_out(plan.left_out);
                 self.carry_out(Ok(plan.value), sender);
             }
             Err(refusal) => self.refuse(&refusal),
@@ -314,7 +300,7 @@ impl App {
             _ => None,
         };
         let Some(destination) = row.or(folder) else {
-            self.notice = Some("Files can't be dropped here.".to_owned());
+            self.notice = Some(Notice::error("Files can't be dropped here"));
             return;
         };
         let kind = if copy {
@@ -329,7 +315,7 @@ impl App {
                 let _ = self.service.activate_panel(panel);
                 self.submit_transfer(plan);
             }
-            Err(err) => self.notice = Some(capitalise(&err.to_string())),
+            Err(err) => self.notice = Some(Notice::from_error(&err)),
         }
     }
 }

@@ -10,9 +10,9 @@ use seshat_domain::entities::Location;
 use seshat_domain::workspace::{BranchId, PruneMotion};
 
 use super::command_line::CommandLineOutcome;
-use super::workspace::capitalise;
 use super::{App, Msg};
 use crate::dialogs;
+use crate::notice::{self, Notice};
 use crate::workspace_view::folder_title;
 
 impl App {
@@ -72,10 +72,7 @@ impl App {
             }
             Intent::OpenCommandLine => self.open_command_line(),
             Intent::Open { launch_files } => self.open_cursor(launch_files),
-            Intent::NotInThisMode(_) => {
-                self.notice =
-                    Some("Pruning isn't available in Visual Mode; press Esc first.".to_owned());
-            }
+            Intent::NotInThisMode(action) => self.notice = Some(notice::not_in_mode(action)),
             Intent::Perform(action) => self.perform(action, sender),
         }
     }
@@ -143,43 +140,27 @@ impl App {
         let (branch, panel) = (ws.active_branch().id(), ws.active_panel());
         self.notice = Some(match self.service.prune_back(branch, panel, motion) {
             Ok(outcome) => {
-                let mut text = match outcome.removed {
-                    1 => "Pruned 1 panel".to_owned(),
-                    n => format!("Pruned {n} panels"),
-                };
-                if outcome.ended_branch {
-                    text.push_str("; the branch ended");
-                }
-                match outcome.deselected {
-                    0 => {}
-                    1 => text.push_str("; 1 selected item was deselected"),
-                    n => text.push_str(&format!("; {n} selected items were deselected")),
-                }
-                if let Some(undo) = self
+                let undo = self
                     .keys
                     .borrow()
                     .keymap
                     .keys_for(Action::UndoWorkspace)
                     .first()
-                {
-                    text.push_str(&format!(". Press {undo} to undo"));
-                }
-                text.push('.');
-                text
+                    .cloned();
+                notice::pruned(&outcome, undo.as_deref())
             }
-            Err(PruneError::FocusMode) => "Pruning isn't available in Focus Mode.".to_owned(),
-            Err(PruneError::Refused(refusal)) => format!("Nothing pruned: {refusal}."),
+            Err(PruneError::FocusMode) => Notice::error("Pruning isn't available in Focus Mode"),
+            Err(PruneError::Refused(refusal)) => {
+                Notice::error(format!("Nothing pruned: {refusal}"))
+            }
         });
     }
 
     /// `u`: undoes the last prune. Never undoes file operations.
     fn undo_workspace(&mut self) {
         self.notice = Some(match self.service.undo_workspace() {
-            Ok(outcome) => match outcome.restored {
-                1 => "Restored 1 panel.".to_owned(),
-                n => format!("Restored {n} panels."),
-            },
-            Err(err) => format!("{}.", capitalise(&err.to_string())),
+            Ok(outcome) => notice::restored(outcome.restored),
+            Err(err) => Notice::from_error(&err),
         });
     }
 
@@ -217,7 +198,9 @@ impl App {
             return;
         };
         if !entry.is_browsable() && !launch_files {
-            self.notice = Some("Files don't open in Visual Mode; press Esc first.".to_owned());
+            self.notice = Some(Notice::error(
+                "Files don't open in Visual Mode; press Esc first",
+            ));
             return;
         }
         let selected = self
@@ -260,7 +243,7 @@ impl App {
                         self.notice = None;
                         self.run_command(command, sender);
                     }
-                    Err(err) => self.notice = Some(capitalise(&err.to_string())),
+                    Err(err) => self.notice = Some(Notice::from_error(&err)),
                 }
             }
         }
@@ -317,13 +300,13 @@ impl App {
                 Some(branch) => {
                     let _ = self.service.activate_branch(branch);
                 }
-                None => self.notice = Some(format!("There is no branch {n}.")),
+                None => self.notice = Some(Notice::error(format!("There is no branch {n}"))),
             },
             Command::Open(text) => {
                 let current = self.service.active_location().clone();
                 match parse_address(&text, &self.home, Some(&current)) {
                     Ok(location) => self.service.open_location(location),
-                    Err(err) => self.notice = Some(err.to_string()),
+                    Err(err) => self.notice = Some(Notice::from_error(&err)),
                 }
             }
             Command::Help => self.show_help(),
@@ -350,7 +333,9 @@ impl App {
     ) {
         let targets = self.service.targets();
         if targets.is_empty() {
-            self.notice = Some("Select files first (v to select, V for a range).".to_owned());
+            self.notice = Some(Notice::error(
+                "Select files first (v to select, V for a range)",
+            ));
             return;
         }
         let destination = match destination {
@@ -365,7 +350,7 @@ impl App {
                     self.service.location(panel).cloned()
                 }
                 None => {
-                    self.notice = Some(format!("There is no branch {n}."));
+                    self.notice = Some(Notice::error(format!("There is no branch {n}")));
                     return;
                 }
             },
@@ -374,7 +359,7 @@ impl App {
                 match parse_address(&text, &self.home, Some(&current)) {
                     Ok(location) => Some(location),
                     Err(err) => {
-                        self.notice = Some(err.to_string());
+                        self.notice = Some(Notice::from_error(&err));
                         return;
                     }
                 }
@@ -397,10 +382,10 @@ impl App {
     ) {
         match TransferPlan::new(kind, &self.service.targets(), destination) {
             Ok(plan) if plan.is_noop() => {
-                self.notice = Some("The items are already in that folder.".to_owned());
+                self.notice = Some(Notice::info("The items are already in that folder"));
             }
             Ok(plan) => self.confirm_transfer(plan, sender),
-            Err(err) => self.notice = Some(capitalise(&err.to_string())),
+            Err(err) => self.notice = Some(Notice::from_error(&err)),
         }
     }
 
@@ -440,7 +425,7 @@ impl App {
                 self.service.clear_selections();
                 self.keys.borrow_mut().interaction.reset();
             }
-            Err(err) => self.notice = Some(capitalise(&err.to_string())),
+            Err(err) => self.notice = Some(Notice::from_error(&err)),
         }
     }
 

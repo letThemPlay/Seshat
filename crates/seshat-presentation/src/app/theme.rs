@@ -10,6 +10,7 @@ use seshat_domain::entities::Location;
 
 use super::{App, Cx, Msg, RELOAD_DEBOUNCE};
 use crate::actions;
+use crate::notice::{Notice, count};
 use crate::theme::{Theme, ThemeRegistry, render_css};
 
 #[derive(Debug)]
@@ -90,7 +91,11 @@ impl ThemeController {
             ThemeMsg::FilesChanged => {}
             ThemeMsg::OpenFolder => match self.repository.ensure_directory() {
                 Ok(directory) => cx.service.open_location(Location::Path(directory)),
-                Err(err) => *cx.notice = Some(format!("Cannot open the themes folder: {err}")),
+                Err(err) => {
+                    *cx.notice = Some(Notice::error(format!(
+                        "Cannot open the themes folder: {err}"
+                    )));
+                }
             },
             ThemeMsg::SystemColorSchemeChanged => {
                 if self.choice == ThemeChoice::System {
@@ -106,10 +111,10 @@ impl ThemeController {
         self.menu_button
             .set_menu_model(Some(&actions::theme_menu(&self.registry)));
         if let Some(error) = self.registry.errors().first() {
-            *cx.notice = Some(format!(
+            *cx.notice = Some(Notice::error(format!(
                 "Theme “{}” could not be loaded: {}",
                 error.id, error.message
-            ));
+            )));
         }
     }
 
@@ -152,12 +157,12 @@ fn pick(
     registry: &ThemeRegistry,
     choice: &ThemeChoice,
     system_dark: bool,
-) -> (Theme, Option<String>) {
+) -> (Theme, Option<Notice>) {
     let Some(theme) = registry.resolve(choice, system_dark) else {
-        let notice = format!(
-            "Theme “{}” is not available; following the system theme.",
+        let notice = Notice::error(format!(
+            "Theme “{}” is not available; following the system theme",
             choice.id().trim_start_matches("custom:")
-        );
+        ));
         let fallback = registry
             .resolve(&ThemeChoice::System, system_dark)
             .expect("built-in themes always resolve");
@@ -168,11 +173,11 @@ fn pick(
             .custom(id)
             .filter(|custom| !custom.warnings.is_empty())
             .map(|custom| {
-                format!(
-                    "Theme “{}” has {} issue(s); see the log for details.",
+                Notice::error(format!(
+                    "Theme “{}” has {}; see the log for details",
                     custom.theme.name,
-                    custom.warnings.len()
-                )
+                    count(custom.warnings.len(), "issue", "issues")
+                ))
             }),
         _ => None,
     };
@@ -226,7 +231,7 @@ mod tests {
         let (theme, notice) = pick(&registry(), &ThemeChoice::Custom("gone".into()), true);
         assert!(theme.dark, "the system prefers dark");
         assert_eq!(
-            notice.as_deref(),
+            notice.as_ref().map(Notice::text),
             Some("Theme “gone” is not available; following the system theme.")
         );
     }
@@ -236,8 +241,8 @@ mod tests {
         let (theme, notice) = pick(&registry(), &ThemeChoice::Custom("odd".into()), false);
         assert_eq!(theme.name, "Odd");
         assert_eq!(
-            notice.as_deref(),
-            Some("Theme “Odd” has 1 issue(s); see the log for details.")
+            notice.as_ref().map(Notice::text),
+            Some("Theme “Odd” has 1 issue; see the log for details.")
         );
     }
 }

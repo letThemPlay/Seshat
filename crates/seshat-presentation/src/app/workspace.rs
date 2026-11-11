@@ -12,6 +12,7 @@ use seshat_domain::workspace::{BranchId, PanelId, ScrollAnchor};
 
 use super::{App, ListingResult, MAX_RELOAD_DEBOUNCE, Msg, RELOAD_DEBOUNCE, SAVE_DELAY};
 use crate::files::FileViewEvent;
+use crate::notice::Notice;
 use crate::panel_view::PanelEvent;
 use crate::sidebar::SidebarInput;
 use crate::workspace_view::WorkspaceEvent;
@@ -328,7 +329,7 @@ impl App {
     ) {
         let reload = self.service.directory_changed(panel, generation, change);
         if change == DirectoryChange::Removed && self.service.active_panel() == panel {
-            self.notice = Some("The folder was deleted or moved.".to_owned());
+            self.notice = Some(Notice::error("The folder was deleted or moved"));
         }
         if reload && self.reload_pending.insert(panel) {
             let sender = sender.clone();
@@ -363,7 +364,7 @@ impl App {
                 }
                 self.focused_panel = None;
             }
-            Err(err) => self.notice = Some(capitalise(&err.to_string())),
+            Err(err) => self.notice = Some(Notice::from_error(&err)),
         }
     }
 
@@ -394,13 +395,5 @@ impl App {
             }
             self.ui.search_bar.set_search_mode(show);
         }
-    }
-}
-
-pub(super) fn capitalise(text: &str) -> String {
-    let mut chars = text.chars();
-    match chars.next() {
-        Some(first) => first.to_uppercase().chain(chars).collect(),
-        None => String::new(),
     }
 }
