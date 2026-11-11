@@ -42,7 +42,6 @@ pub struct Handles {
     pub search_entry: gtk::SearchEntry,
     pub context_menu: gtk::PopoverMenu,
     pub window: gtk::Window,
-    pub panel: OperationsPanel,
 }
 
 fn icon_button(
@@ -81,7 +80,7 @@ pub fn build(
     root: &gtk::Window,
     sidebar: &gtk::ScrolledWindow,
     workspace: Rc<WorkspaceView>,
-    panel: OperationsPanel,
+    panel: &OperationsPanel,
     classic_keys: bool,
     sender: &ComponentSender<App>,
 ) -> (AppWidgets, Handles) {
@@ -364,7 +363,6 @@ pub fn build(
             search_entry,
             context_menu,
             window: root.clone(),
-            panel,
         },
     )
 }

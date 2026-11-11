@@ -8,6 +8,7 @@
 mod commands;
 mod devices;
 mod file_ops;
+mod operations;
 mod shortcuts;
 mod theme;
 mod view;
@@ -15,6 +16,8 @@ mod workspace;
 
 use devices::DeviceController;
 pub use devices::DeviceMsg;
+use operations::OperationsController;
+pub use operations::OperationsMsg;
 use theme::ThemeController;
 pub use theme::ThemeMsg;
 
@@ -31,7 +34,7 @@ use seshat_application::interaction::command::CommandHistory;
 use seshat_application::interaction::completion::CompletionCycle;
 use seshat_application::interaction::{Action, Intent, KeyMap, Mode, format_sequence};
 use seshat_application::navigation::{breadcrumbs, parse_address};
-use seshat_application::operations::{OperationEvent, OperationManager, OperationRequest};
+use seshat_application::operations::{OperationManager, OperationRequest};
 use seshat_application::ports::{
     DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError, ThemeRepository,
     WatchGuard,
@@ -42,13 +45,11 @@ use seshat_application::view::{SortKey, ViewMode};
 use seshat_application::workspace::file_actions::Availability;
 use seshat_application::workspace::{TransferKind, TransferPlan, WorkspaceService, WorkspaceStore};
 use seshat_domain::entities::{FileEntry, Location, StandardLocation};
-use seshat_domain::operation::OperationId;
 use seshat_domain::view::ViewOptions;
 use seshat_domain::workspace::{PanelId, PanelState};
 
 use crate::actions::{self, ActionContext, Actions};
 use crate::clipboard::ClipboardFiles;
-use crate::conflicts::{ConflictRequest, UiConflictResolver};
 use crate::diagnostics;
 use crate::keys::{KeyRouter, SharedKeys};
 use crate::operations_panel::OperationsPanel;
@@ -215,11 +216,7 @@ pub enum Msg {
     EmptyTrash,
     /// Submit a request; select the given item in that panel once listed.
     Submit(OperationRequest, Option<(PanelId, Location)>),
-    Operation(OperationEvent),
-    CancelOperation(OperationId),
-    Conflict(ConflictRequest),
-    ConflictAnswered,
-    WindowHidden,
+    Operations(OperationsMsg),
 }
 
 /// Listing result whose `Debug` output is a summary. Relm4 logs messages at
@@ -282,12 +279,7 @@ pub struct App {
 
     theme: ThemeController,
 
-    operations: OperationManager,
-    /// Conflicts waiting for the open dialog to close.
-    conflict_queue: std::collections::VecDeque<ConflictRequest>,
-    conflict_dialog: Option<(OperationId, gtk::Window)>,
-    /// Keeps the process alive while the window is hidden with work left.
-    hold: Option<gtk::gio::ApplicationHoldGuard>,
+    operations: OperationsController,
 }
 
 impl std::fmt::Debug for App {
@@ -373,28 +365,23 @@ impl SimpleComponent for App {
         }));
         let panel = OperationsPanel::new({
             let sender = sender.clone();
-            move |id| sender.input_sender().emit(Msg::CancelOperation(id))
+            move |id| {
+                sender
+                    .input_sender()
+                    .emit(Msg::Operations(OperationsMsg::Cancel(id)))
+            }
         });
         let (widgets, ui) = view::build(
             &root,
             sidebar.widget(),
             workspace_view,
-            panel,
+            &panel,
             prefs.workspace.classic_keys,
             &sender,
         );
         let ui_theme_button = ui.theme_button.clone();
-        init.operations
-            .set_conflict_resolver(std::sync::Arc::new(UiConflictResolver::new(
-                sender.input_sender().clone(),
-            )));
-        {
-            // Called on worker threads: only forward.
-            let input = sender.input_sender().clone();
-            init.operations.subscribe(Box::new(move |event| {
-                let _ = input.send(Msg::Operation(event.clone()));
-            }));
-        }
+        let operations = OperationsController::new(init.operations.clone(), panel, root.clone());
+        operations.connect(&sender);
         {
             // Keyboard focus decides the cursor: a click or arrow key in a
             // file list moves it there, and activates that panel.
@@ -422,7 +409,9 @@ impl SimpleComponent for App {
             root.connect_close_request(move |window| {
                 if operations.active_count() > 0 {
                     window.set_visible(false);
-                    sender.input_sender().emit(Msg::WindowHidden);
+                    sender
+                        .input_sender()
+                        .emit(Msg::Operations(OperationsMsg::WindowHidden));
                     gtk::glib::Propagation::Stop
                 } else {
                     gtk::glib::Propagation::Proceed
@@ -494,10 +483,7 @@ impl SimpleComponent for App {
                 .map(|w| format!("Key bindings: {w} (see the log)")),
             editing_address: false,
             save_pending: false,
-            operations: init.operations,
-            conflict_queue: std::collections::VecDeque::new(),
-            conflict_dialog: None,
-            hold: None,
+            operations,
         };
         let watcher = model.directory_watcher.clone();
         model
@@ -677,25 +663,12 @@ impl SimpleComponent for App {
             Msg::NewItem { directory } => self.new_item(directory, None, &sender),
             Msg::EmptyTrash => self.empty_trash(&sender),
             Msg::Submit(request, select) => self.submit(request, select),
-            Msg::Operation(event) => self.operation_event(event, &sender),
-            Msg::CancelOperation(id) => {
-                let _ = self.operations.cancel(id);
-            }
-            Msg::Conflict(request) => {
-                self.conflict_queue.push_back(request);
-                self.show_next_conflict(&sender);
-            }
-            Msg::ConflictAnswered => {
-                self.conflict_dialog = None;
-                self.show_next_conflict(&sender);
-            }
-            Msg::WindowHidden => {
-                tracing::info!(
-                    active = self.operations.active_count(),
-                    "window closed; finishing operations in the background"
-                );
-                self.save_workspace();
-                self.hold = Some(relm4::main_application().hold());
+            Msg::Operations(msg) => {
+                let hidden = matches!(msg, OperationsMsg::WindowHidden);
+                self.operations.update(msg, &mut cx!(self, &sender));
+                if hidden {
+                    self.save_workspace();
+                }
             }
         }
         self.sync(&sender);

@@ -7,7 +7,7 @@ use std::time::Duration;
 use seshat_application::operations::{CancelToken, ConflictResolver};
 use seshat_domain::operation::{Conflict, ConflictDecision, ConflictResolution, Operation};
 
-use crate::app::Msg;
+use crate::app::{Msg, OperationsMsg};
 
 /// A conflict waiting for the user, with the channel the worker waits on.
 pub struct ConflictRequest {
@@ -54,7 +54,11 @@ impl ConflictResolver for UiConflictResolver {
             conflict: conflict.clone(),
             reply,
         };
-        if self.ui.send(Msg::Conflict(request)).is_err() {
+        if self
+            .ui
+            .send(Msg::Operations(OperationsMsg::Conflict(request)))
+            .is_err()
+        {
             return CANCEL; // UI is gone
         }
         loop {
