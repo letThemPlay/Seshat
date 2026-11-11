@@ -35,6 +35,8 @@ toml = "1"
 rustix = { version = "1", features = ["fs", "process"] }
 zbus = "6"
 async-channel = "2"
+nucleo-matcher = "0.3"
+unicode-segmentation = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

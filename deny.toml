@@ -23,6 +23,9 @@ allow = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "MIT",
+    # nucleo-matcher (Fuzzy Find, decision F1). File-level copyleft,
+    # compatible with GPL-3.0-or-later.
+    "MPL-2.0",
     "Unicode-3.0",
 ]
 confidence-threshold = 0.9

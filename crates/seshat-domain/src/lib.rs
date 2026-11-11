@@ -6,6 +6,7 @@
 pub mod entities;
 pub mod error;
 pub mod operation;
+pub mod search;
 pub mod view;
 pub mod workspace;
 
