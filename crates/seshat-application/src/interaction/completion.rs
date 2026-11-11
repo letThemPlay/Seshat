@@ -8,6 +8,7 @@
 
 use std::path::Path;
 
+use seshat_domain::Direction;
 use seshat_domain::entities::{FileEntry, Location};
 
 use super::command::COMMANDS;
@@ -202,14 +203,10 @@ impl CompletionCycle {
     }
 
     /// The next (or previous) match, as the full command-line text.
-    pub fn step(&mut self, forward: bool) -> String {
-        let n = self.candidates.len();
-        let index = match (self.index, forward) {
-            (None, true) => 0,
-            (None, false) => n - 1,
-            (Some(i), true) => (i + 1) % n,
-            (Some(i), false) => (i + n - 1) % n,
-        };
+    pub fn step(&mut self, direction: Direction) -> String {
+        let index = direction
+            .wrapping_step(self.index, self.candidates.len())
+            .expect("a cycle has candidates");
         self.index = Some(index);
         self.shown = format!("{}{}", self.keep, self.candidates[index]);
         self.shown.clone()
@@ -437,10 +434,14 @@ mod tests {
         let candidates = vec!["Desktop/".to_owned(), "Documents/".to_owned()];
         let mut cycle = CompletionCycle::new(":move ~/".into(), candidates, ":move ~/D".into());
         assert!(cycle.is_current(":move ~/D"));
-        assert_eq!(cycle.step(true), ":move ~/Desktop/");
-        assert_eq!(cycle.step(true), ":move ~/Documents/");
-        assert_eq!(cycle.step(true), ":move ~/Desktop/", "wraps around");
-        assert_eq!(cycle.step(false), ":move ~/Documents/");
+        assert_eq!(cycle.step(Direction::Next), ":move ~/Desktop/");
+        assert_eq!(cycle.step(Direction::Next), ":move ~/Documents/");
+        assert_eq!(
+            cycle.step(Direction::Next),
+            ":move ~/Desktop/",
+            "wraps around"
+        );
+        assert_eq!(cycle.step(Direction::Previous), ":move ~/Documents/");
         assert!(cycle.is_current(":move ~/Documents/"));
         assert!(
             !cycle.is_current(":move ~/Documents/x"),
@@ -452,6 +453,10 @@ mod tests {
             vec!["a/".into(), "b/".into(), "c/".into()],
             "k ".into(),
         );
-        assert_eq!(back.step(false), "k c/", "Shift+Tab starts from the last");
+        assert_eq!(
+            back.step(Direction::Previous),
+            "k c/",
+            "Shift+Tab starts from the last"
+        );
     }
 }

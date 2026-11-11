@@ -19,6 +19,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gtk::prelude::*;
+use seshat_application::preferences::WorkspaceLayout;
 use seshat_application::workspace::WorkspaceService;
 use seshat_domain::entities::Location;
 use seshat_domain::workspace::{BranchId, PanelId, Workspace};
@@ -83,8 +84,8 @@ pub struct WorkspaceView {
     reveal_generation: Rc<Cell<u64>>,
     first_row: Cell<Option<usize>>,
     last_logged: RefCell<Option<(usize, usize, usize, usize)>>,
-    /// The single-strip layout was chosen (decision L2).
-    strip: Cell<bool>,
+    /// Branches side by side or a single strip (decision L2).
+    layout: WorkspaceLayout,
     on_event: Rc<dyn Fn(WorkspaceEvent)>,
 }
 
@@ -98,7 +99,7 @@ impl std::fmt::Debug for WorkspaceView {
 }
 
 impl WorkspaceView {
-    pub fn new(strip: bool, on_event: impl Fn(WorkspaceEvent) + 'static) -> Self {
+    pub fn new(layout: WorkspaceLayout, on_event: impl Fn(WorkspaceEvent) + 'static) -> Self {
         let on_event: Rc<dyn Fn(WorkspaceEvent)> = Rc::new(on_event);
         let branch_bar = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
@@ -175,7 +176,7 @@ impl WorkspaceView {
             reveal_generation: Rc::default(),
             first_row: Cell::new(None),
             last_logged: RefCell::new(None),
-            strip: Cell::new(strip),
+            layout,
             on_event,
         }
     }
@@ -185,7 +186,7 @@ impl WorkspaceView {
         let ws = service.workspace();
         let active = ws.active_panel();
         let focus = ws.focus_mode();
-        let max_rows = if self.strip.get() {
+        let max_rows = if self.layout == WorkspaceLayout::Strip {
             1
         } else {
             rows_for_height(self.viewport_height())

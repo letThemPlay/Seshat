@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use thiserror::Error;
 
 use super::{Branch, BranchId, JumpList, Panel, PanelId, PanelState, Unavailability};
+use crate::Direction;
 use crate::entities::{DirectoryIdentity, Location};
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -551,17 +552,15 @@ impl Workspace {
 
     /// Switches to the next (or previous) branch in spatial order,
     /// wrapping around. Returns whether the active branch changed.
-    pub fn cycle_branch(&mut self, forward: bool) -> bool {
+    pub fn cycle_branch(&mut self, direction: Direction) -> bool {
         let order: Vec<BranchId> = self.branches().iter().map(|b| b.id).collect();
         if order.len() < 2 {
             return false;
         }
         let index = order.iter().position(|&b| b == self.active).unwrap_or(0);
-        let next = if forward {
-            (index + 1) % order.len()
-        } else {
-            (index + order.len() - 1) % order.len()
-        };
+        let next = direction
+            .wrapping_step(Some(index), order.len())
+            .expect("at least two branches");
         let cursor = self.branches[&order[next]].cursor;
         self.set_active(order[next], cursor, true)
     }

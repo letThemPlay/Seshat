@@ -445,6 +445,7 @@ fn identity_from_file(text: &str) -> Option<DirectoryIdentity> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use seshat_domain::Direction;
 
     fn loc(s: &str) -> Location {
         Location::Path(s.into())
@@ -501,7 +502,7 @@ mod tests {
         let (_dir, store) = store();
         let mut ws = sample();
         for _ in 0..20 {
-            ws.cycle_branch(true);
+            ws.cycle_branch(Direction::Next);
             store.save(&ws).unwrap();
         }
         store.flush();

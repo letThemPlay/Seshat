@@ -12,7 +12,8 @@ use relm4::ComponentSender;
 use seshat_application::interaction::Action;
 use seshat_application::preferences::ThemeChoice;
 use seshat_application::view::{SortKey, SortOrder, ViewMode};
-use seshat_application::workspace::file_actions::{Availability, FileAction};
+use seshat_application::workspace::TransferKind;
+use seshat_application::workspace::file_actions::{Availability, FileAction, ItemKind};
 
 use crate::app::{App, Msg, ThemeMsg};
 use crate::theme::ThemeRegistry;
@@ -37,15 +38,15 @@ const COMMANDS: &[Command] = &[
     ("refresh", || Msg::Refresh),
     ("reload-themes", || Msg::Theme(ThemeMsg::Reload)),
     ("open-themes-folder", || Msg::Theme(ThemeMsg::OpenFolder)),
-    ("cut", || Msg::ClipboardStore { cut: true }),
-    ("copy", || Msg::ClipboardStore { cut: false }),
+    ("cut", || Msg::ClipboardStore(TransferKind::Move)),
+    ("copy", || Msg::ClipboardStore(TransferKind::Copy)),
     ("paste", || Msg::Paste),
     ("rename", || Msg::RenameSelection),
     ("trash", || Msg::TrashSelection),
     ("delete", || Msg::DeleteSelection),
     ("restore", || Msg::RestoreSelection),
-    ("new-folder", || Msg::NewItem { directory: true }),
-    ("new-file", || Msg::NewItem { directory: false }),
+    ("new-folder", || Msg::NewItem(ItemKind::Folder)),
+    ("new-file", || Msg::NewItem(ItemKind::File)),
     ("empty-trash", || Msg::EmptyTrash),
     ("branches", || Msg::ShowBranches),
     ("close-branch", || Msg::CloseBranch),

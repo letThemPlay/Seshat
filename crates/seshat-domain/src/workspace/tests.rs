@@ -1,4 +1,5 @@
 use super::*;
+use crate::Direction;
 use crate::entities::{DirectoryIdentity, Location};
 use crate::view::{SortKey, ViewMode};
 
@@ -130,13 +131,13 @@ fn spec_16_1_switching_branches_restores_their_position_and_state() {
         Some(loc("/home/u/Documents/Projects/a.rs"))
     );
 
-    assert!(s.ws.cycle_branch(true));
+    assert!(s.ws.cycle_branch(Direction::Next));
     assert_eq!(s.ws.active_panel(), s.downloads);
     assert_eq!(
         s.ws.panel(s.downloads).unwrap().state.options.sort.key,
         SortKey::Modified
     );
-    assert!(s.ws.cycle_branch(true));
+    assert!(s.ws.cycle_branch(Direction::Next));
     assert_eq!(
         s.ws.active_panel(),
         s.projects,
@@ -358,7 +359,7 @@ fn spec_16_4_navigation_and_branch_switching_keep_focus_mode() {
     s.ws.set_focus_mode(true);
     s.ws.move_left();
     s.ws.move_right();
-    s.ws.cycle_branch(true);
+    s.ws.cycle_branch(Direction::Next);
     s.ws.open_child(s.ws.active_panel(), loc("/home/u/x"), None)
         .unwrap();
     assert!(s.ws.focus_mode());
@@ -372,7 +373,7 @@ fn focus_mode_can_be_dropped_on_branch_switch_by_preference() {
     s.ws.set_focus_mode(true);
     s.ws.move_left(); // same branch
     assert!(s.ws.focus_mode());
-    s.ws.cycle_branch(true);
+    s.ws.cycle_branch(Direction::Next);
     assert!(!s.ws.focus_mode());
 }
 
@@ -514,7 +515,11 @@ fn invariants_hold_across_random_operation_sequences() {
                     ws.move_right();
                 }
                 5 => {
-                    ws.cycle_branch(rng.next(2) == 0);
+                    ws.cycle_branch(if rng.next(2) == 0 {
+                        Direction::Next
+                    } else {
+                        Direction::Previous
+                    });
                 }
                 6 => {
                     let branches: Vec<BranchId> = ws.branches().iter().map(|b| b.id()).collect();

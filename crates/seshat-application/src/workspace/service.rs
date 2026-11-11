@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use seshat_domain::Direction;
 use seshat_domain::entities::{FileEntry, Location};
 use seshat_domain::view::{SortKey, ViewMode};
 use seshat_domain::workspace::{
@@ -179,8 +180,8 @@ impl WorkspaceService {
         self.navigate(Workspace::go_forward)
     }
 
-    pub fn cycle_branch(&mut self, forward: bool) -> bool {
-        self.navigate(|w| w.cycle_branch(forward))
+    pub fn cycle_branch(&mut self, direction: Direction) -> bool {
+        self.navigate(|w| w.cycle_branch(direction))
     }
 
     pub fn activate_branch(&mut self, branch: BranchId) -> Result<bool, WorkspaceError> {

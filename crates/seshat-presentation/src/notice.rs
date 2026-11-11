@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use seshat_application::interaction::Action;
 use seshat_application::ports::ListingError;
-use seshat_application::workspace::{PruneError, PruneOutcome};
+use seshat_application::workspace::{PruneError, PruneOutcome, TransferKind};
 
 /// How a message is shown (decision N1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -289,8 +289,11 @@ pub fn theme_has_issues(name: &str, issues: usize) -> Notice {
 }
 
 /// Files waiting on the clipboard (decision D9), for the status line.
-pub fn staged(count_staged: usize, cut: bool) -> String {
-    let verb = if cut { "move" } else { "copy" };
+pub fn staged(count_staged: usize, kind: TransferKind) -> String {
+    let verb = match kind {
+        TransferKind::Copy => "copy",
+        TransferKind::Move => "move",
+    };
     format!(
         "{} ready to {verb}: paste (p or Ctrl+V) into a panel",
         count(count_staged, "item", "items")
@@ -360,7 +363,7 @@ mod tests {
         assert_eq!(item_count(3, 12), "3 of 12 items");
         assert_eq!(item_count(1, 1), "1 item");
         assert_eq!(
-            staged(1, true),
+            staged(1, TransferKind::Move),
             "1 item ready to move: paste (p or Ctrl+V) into a panel"
         );
     }

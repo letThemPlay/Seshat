@@ -5,7 +5,9 @@ use relm4::ComponentSender;
 use seshat_application::interaction::command::{BranchCommand, COMMANDS, Command, Destination};
 use seshat_application::interaction::{Action, Intent};
 use seshat_application::navigation::parse_address;
+use seshat_application::workspace::file_actions::ItemKind;
 use seshat_application::workspace::{TransferKind, TransferPlan};
+use seshat_domain::Direction;
 use seshat_domain::entities::Location;
 use seshat_domain::workspace::PruneMotion;
 
@@ -95,10 +97,10 @@ impl App {
                 self.intent(intent, sender);
             }
             Action::BranchPrevious => {
-                self.service.cycle_branch(false);
+                self.service.cycle_branch(Direction::Previous);
             }
             Action::BranchNext => {
-                self.service.cycle_branch(true);
+                self.service.cycle_branch(Direction::Next);
             }
             Action::Back => {
                 self.service.go_back();
@@ -110,8 +112,8 @@ impl App {
             Action::FocusMode => {
                 self.service.toggle_focus_mode();
             }
-            Action::Yank => self.clipboard_store(false),
-            Action::Cut => self.clipboard_store(true),
+            Action::Yank => self.clipboard_store(TransferKind::Copy),
+            Action::Cut => self.clipboard_store(TransferKind::Move),
             Action::Paste => self.paste(sender),
             Action::PruneBack => self.prune_back(PruneMotion::Step),
             Action::PruneBackSegment => self.prune_back(PruneMotion::Segment),
@@ -262,8 +264,8 @@ impl App {
             Command::Delete { permanently: false } => self.trash_selection(sender),
             Command::Delete { permanently: true } => self.delete_selection(sender),
             Command::Rename(name) => self.rename_selection(name, sender),
-            Command::Mkdir(name) => self.new_item(true, Some(name), sender),
-            Command::Touch(name) => self.new_item(false, Some(name), sender),
+            Command::Mkdir(name) => self.new_item(ItemKind::Folder, Some(name), sender),
+            Command::Touch(name) => self.new_item(ItemKind::File, Some(name), sender),
             Command::Search(query) => {
                 self.service.set_query(active, &query);
                 self.focused_panel = None;
