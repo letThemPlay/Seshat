@@ -9,7 +9,6 @@ use seshat_application::interaction::command::{
 use seshat_application::interaction::completion::{self, CompletionCycle, Plan};
 use seshat_application::interaction::{Action, Intent};
 use seshat_application::navigation::parse_address;
-use seshat_application::operations::OperationRequest;
 use seshat_application::ports::ListingError;
 use seshat_application::workspace::{PruneError, TransferKind, TransferPlan};
 use seshat_domain::entities::Location;
@@ -422,30 +421,7 @@ impl App {
             }
             Command::Delete { permanently: false } => self.trash_selection(sender),
             Command::Delete { permanently: true } => self.delete_selection(sender),
-            Command::Rename(None) => self.rename_selection(sender),
-            Command::Rename(Some(name)) => {
-                let targets = self.service.targets();
-                match targets.as_slice() {
-                    [group] if group.items.len() == 1 => match &group.items[0] {
-                        Location::Path(path) => {
-                            let select = path
-                                .parent()
-                                .map(|p| (group.panel, Location::Path(p.join(&name))));
-                            self.submit(
-                                OperationRequest::Rename {
-                                    path: path.clone(),
-                                    new_name: name,
-                                },
-                                select,
-                            );
-                        }
-                        Location::Trash(_) => {
-                            self.notice = Some("Items in the Trash can't be renamed.".to_owned());
-                        }
-                    },
-                    _ => self.notice = Some("Select exactly one item to rename.".to_owned()),
-                }
-            }
+            Command::Rename(name) => self.rename_selection(name, sender),
             Command::Mkdir(name) => self.new_item(true, Some(name), sender),
             Command::Touch(name) => self.new_item(false, Some(name), sender),
             Command::Search(query) => {

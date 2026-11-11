@@ -1,8 +1,10 @@
 //! The spatial workspace as application services: navigation, panel
 //! listings and selection ([`WorkspaceService`]), cross-panel transfers
 //! ([`TransferPlan`]), the persistence port ([`WorkspaceStore`]) and
-//! workspace undo for backward pruning ([`WorkspaceChange`]).
+//! workspace undo for backward pruning ([`WorkspaceChange`]), and the rules
+//! of file actions on the workspace's targets ([`file_actions`]).
 
+pub mod file_actions;
 mod listing;
 mod service;
 mod store;

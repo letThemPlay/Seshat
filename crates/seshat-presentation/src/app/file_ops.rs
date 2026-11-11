@@ -1,22 +1,24 @@
 //! File-operation commands. Every change goes through the
-//! [`OperationManager`](seshat_application::operations::OperationManager);
-//! the UI only builds requests, asks for confirmation and shows results.
+//! [`OperationManager`](seshat_application::operations::OperationManager).
+//! What an action targets, and whether it may run, is decided by the
+//! application layer ([`file_actions`]); the UI only asks for confirmation
+//! or a name, shows results and submits the captured request.
 //!
 //! Sources are the workspace-wide selection (or the active panel's cursor
-//! item), captured as absolute paths when the request is built. A
-//! destination is always explicit: the panel pasted or dropped into, or a
-//! folder named on the command line. Nothing depends on which panel
-//! happens to be active when an operation runs.
+//! item), captured as absolute paths when the plan is made. A destination
+//! is always explicit: the panel pasted or dropped into, or a folder named
+//! on the command line. Nothing depends on which panel happens to be
+//! active when an operation runs.
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use gtk::prelude::{ApplicationExt, GtkWindowExt};
 use relm4::ComponentSender;
-use seshat_application::operations::{
-    OperationEvent, OperationEventKind, OperationRequest, unique_path,
+use seshat_application::operations::{OperationEvent, OperationEventKind, OperationRequest};
+use seshat_application::workspace::file_actions::{
+    self, ActionPlan, ActionRefusal, Confirmation, NameKind,
 };
-use seshat_application::workspace::{SelectionGroup, TransferKind, TransferPlan};
+use seshat_application::workspace::{TransferKind, TransferPlan};
 use seshat_domain::entities::Location;
 use seshat_domain::operation::OperationKind;
 use seshat_domain::workspace::PanelId;
@@ -41,6 +43,58 @@ fn quoted_or_count(items: &[Location]) -> String {
     }
 }
 
+/// "• 2 from ~/Documents" lines for a confirmation.
+fn origin_lines(origins: &[(Location, usize)]) -> String {
+    origins
+        .iter()
+        .map(|(folder, n)| format!("• {n} from {}", crate::pathbar::address_text(folder)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Heading, body and button of a confirmation dialog.
+fn confirmation_text(confirmation: &Confirmation) -> (String, String, &'static str) {
+    const UNRECOVERABLE: &str = "Deleted items are not moved to the Trash and cannot be recovered.";
+    match confirmation {
+        Confirmation::TrashAcrossPanels { count, origins } => (
+            format!("Move {} to the Trash?", plural(*count, "1 item", "items")),
+            format!(
+                "The items come from several panels:\n{}",
+                origin_lines(origins)
+            ),
+            "Move to Trash",
+        ),
+        Confirmation::Delete { items, origins } => (
+            format!("Permanently delete {}?", quoted_or_count(items)),
+            match origins {
+                Some(origins) => format!(
+                    "The items come from several panels:\n{}\n\n{UNRECOVERABLE}",
+                    origin_lines(origins)
+                ),
+                None => UNRECOVERABLE.to_owned(),
+            },
+            "Delete Permanently",
+        ),
+        Confirmation::EmptyTrash { count } => (
+            "Empty the Trash?".to_owned(),
+            format!(
+                "{} will be permanently deleted. This cannot be undone.",
+                plural(*count, "1 item", "items")
+            ),
+            "Empty Trash",
+        ),
+    }
+}
+
+/// "1 item in the Trash was left out." — items an action could not take.
+fn left_out_notice(left_out: usize) -> Option<String> {
+    match left_out {
+        0 => None,
+        1 => Some("1 item in the Trash was left out.".to_owned()),
+        n => Some(format!("{n} items in the Trash were left out.")),
+    }
+}
+
 impl App {
     /// The active panel's folder, if it is a regular folder.
     fn active_folder(&self) -> Option<PathBuf> {
@@ -48,28 +102,6 @@ impl App {
             Location::Path(path) => Some(path.clone()),
             Location::Trash(_) => None,
         }
-    }
-
-    fn target_items(&self) -> Vec<Location> {
-        self.service
-            .targets()
-            .into_iter()
-            .flat_map(|g| g.items)
-            .collect()
-    }
-
-    fn target_paths(&self) -> Vec<PathBuf> {
-        self.target_items()
-            .into_iter()
-            .filter_map(|l| match l {
-                Location::Path(p) => Some(p),
-                Location::Trash(_) => None,
-            })
-            .collect()
-    }
-
-    fn spans_panels(&self) -> bool {
-        self.service.targets().len() > 1
     }
 
     pub(super) fn submit(
@@ -87,21 +119,78 @@ impl App {
         }
     }
 
+    /// Says why an action did not run, unless the user can already see it.
+    fn refuse(&mut self, refusal: &ActionRefusal) {
+        if !refusal.is_silent() {
+            self.notice = Some(format!("{}.", capitalise(&refusal.to_string())));
+        }
+    }
+
+    /// Carries out a file action's plan: submit it, or first ask for
+    /// confirmation or a name. The request was captured when the plan was
+    /// made, so nothing is looked up again when the user answers.
+    pub(super) fn carry_out(
+        &mut self,
+        plan: Result<ActionPlan, ActionRefusal>,
+        sender: &ComponentSender<Self>,
+    ) {
+        let plan = match plan {
+            Ok(plan) => plan,
+            Err(refusal) => return self.refuse(&refusal),
+        };
+        let sender = sender.clone();
+        match plan {
+            ActionPlan::Submit { request, select } => self.submit(request, select),
+            ActionPlan::Confirm {
+                request,
+                confirmation,
+            } => {
+                let (heading, body, button) = confirmation_text(&confirmation);
+                dialogs::confirm(&self.ui.window, &heading, &body, button, move || {
+                    sender
+                        .input_sender()
+                        .emit(Msg::Submit(request.clone(), None))
+                });
+            }
+            ActionPlan::AskName(prompt) => {
+                let (title, button) = match prompt.kind {
+                    NameKind::Rename => ("Rename", "Rename"),
+                    NameKind::NewFolder => ("New Folder", "Create"),
+                    NameKind::NewFile => ("New File", "Create"),
+                };
+                let suggestion = prompt.suggestion.clone();
+                dialogs::name_prompt(
+                    &self.ui.window,
+                    title,
+                    button,
+                    &suggestion,
+                    prompt.select_stem,
+                    move |name| {
+                        let (request, select) = prompt.complete(name);
+                        sender.input_sender().emit(Msg::Submit(request, select));
+                    },
+                );
+            }
+        }
+    }
+
     /// Copy or cut: the targets go to the system clipboard, interoperable
     /// with other file managers (decision D9). The selection is consumed.
     pub(super) fn clipboard_store(&mut self, cut: bool) {
-        let paths = self.target_paths();
-        if paths.is_empty() {
-            return;
-        }
+        let sources = match file_actions::clipboard_sources(&self.service) {
+            Ok(sources) => sources,
+            Err(refusal) => return self.refuse(&refusal),
+        };
         let Some(display) = gtk::gdk::Display::default() else {
             return;
         };
+        let paths = sources.value;
         clipboard::set_files(&display, &paths, cut);
         self.staged = Some(Staged {
             cut,
             count: paths.len(),
         });
+        self.notice = left_out_notice(sources.left_out);
         self.service.clear_selections();
         self.keys.borrow_mut().interaction.reset();
     }
@@ -138,11 +227,7 @@ impl App {
         } else {
             TransferKind::Copy
         };
-        let plan = TransferPlan::new(
-            kind,
-            &groups_by_folder(&files.paths),
-            &Location::Path(destination),
-        );
+        let plan = TransferPlan::from_paths(kind, &files.paths, &Location::Path(destination));
         match plan {
             Ok(plan) if plan.is_noop() => {}
             Ok(plan) => {
@@ -159,136 +244,36 @@ impl App {
         }
     }
 
-    pub(super) fn rename_selection(&mut self, sender: &ComponentSender<Self>) {
-        let targets = self.service.targets();
-        let [group] = targets.as_slice() else {
-            self.notice = Some("Select exactly one item to rename.".to_owned());
-            return;
-        };
-        let [Location::Path(path)] = group.items.as_slice() else {
-            return;
-        };
-        let panel = group.panel;
-        let entry = self
-            .service
-            .listing(panel)
-            .and_then(|l| l.entry(&group.items[0]))
-            .cloned();
-        let (name, is_file) = match &entry {
-            Some(e) => (e.display_name.clone(), !e.is_directory()),
-            None => (
-                path.file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default(),
-                true,
-            ),
-        };
-        let path = path.clone();
-        let sender = sender.clone();
-        dialogs::name_prompt(
-            &self.ui.window,
-            "Rename",
-            "Rename",
-            &name,
-            is_file,
-            move |new_name| {
-                let select = path
-                    .parent()
-                    .map(|p| (panel, Location::Path(p.join(&new_name))));
-                let request = OperationRequest::Rename {
-                    path: path.clone(),
-                    new_name,
-                };
-                sender.input_sender().emit(Msg::Submit(request, select));
-            },
-        );
+    pub(super) fn rename_selection(
+        &mut self,
+        name: Option<String>,
+        sender: &ComponentSender<Self>,
+    ) {
+        let plan = file_actions::rename(&self.service, name);
+        self.carry_out(plan, sender);
     }
 
     /// Moves the targets to the Trash. When they come from several panels,
     /// the user confirms first (decision D7).
     pub(super) fn trash_selection(&mut self, sender: &ComponentSender<Self>) {
-        let paths = self.target_paths();
-        if paths.is_empty() {
-            return;
+        match file_actions::trash(&self.service) {
+            Ok(plan) => {
+                // Set first, so a submission error from `carry_out` wins.
+                self.notice = left_out_notice(plan.left_out);
+                self.carry_out(Ok(plan.value), sender);
+            }
+            Err(refusal) => self.refuse(&refusal),
         }
-        if !self.spans_panels() {
-            self.submit(OperationRequest::Trash { paths }, None);
-            return;
-        }
-        let details = self.describe_targets();
-        let sender = sender.clone();
-        dialogs::confirm(
-            &self.ui.window,
-            &format!(
-                "Move {} to the Trash?",
-                plural(paths.len(), "1 item", "items")
-            ),
-            &format!("The items come from several panels:\n{details}"),
-            "Move to Trash",
-            move || sender.input_sender().emit(Msg::TrashPaths(paths.clone())),
-        );
     }
 
     pub(super) fn delete_selection(&mut self, sender: &ComponentSender<Self>) {
-        let items = self.target_items();
-        if items.is_empty() {
-            return;
-        }
-        let detail = if self.spans_panels() {
-            format!(
-                "The items come from several panels:\n{}\n\nDeleted items are not moved to the Trash and cannot be recovered.",
-                self.describe_targets()
-            )
-        } else {
-            "Deleted items are not moved to the Trash and cannot be recovered.".to_owned()
-        };
-        let sender = sender.clone();
-        dialogs::confirm(
-            &self.ui.window,
-            &format!("Permanently delete {}?", quoted_or_count(&items)),
-            &detail,
-            "Delete Permanently",
-            move || {
-                sender.input_sender().emit(Msg::Submit(
-                    OperationRequest::Delete {
-                        items: items.clone(),
-                    },
-                    None,
-                ))
-            },
-        );
+        let plan = file_actions::delete(&self.service);
+        self.carry_out(plan, sender);
     }
 
-    fn describe_targets(&self) -> String {
-        self.service
-            .targets()
-            .iter()
-            .map(|g| {
-                format!(
-                    "• {} from {}",
-                    g.items.len(),
-                    crate::pathbar::address_text(&g.folder)
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
-    pub(super) fn restore_selection(&mut self) {
-        let items: Vec<PathBuf> = self
-            .target_items()
-            .into_iter()
-            .filter_map(|l| match l {
-                Location::Trash(rel) if rel.components().count() == 1 => Some(rel),
-                _ => None,
-            })
-            .collect();
-        if items.is_empty() {
-            self.notice =
-                Some("Only items at the top level of the Trash can be restored.".to_owned());
-            return;
-        }
-        self.submit(OperationRequest::Restore { items }, None);
+    pub(super) fn restore_selection(&mut self, sender: &ComponentSender<Self>) {
+        let plan = file_actions::restore(&self.service);
+        self.carry_out(plan, sender);
     }
 
     /// Creates a folder or file in the active panel. With `name` (from the
@@ -299,88 +284,13 @@ impl App {
         name: Option<String>,
         sender: &ComponentSender<Self>,
     ) {
-        let Some(parent) = self.active_folder() else {
-            self.notice = Some("Folders can't be created here.".to_owned());
-            return;
-        };
-        let panel = self.service.active_panel();
-        let request = move |parent: PathBuf, name: String| {
-            if directory {
-                OperationRequest::CreateDirectory { parent, name }
-            } else {
-                OperationRequest::CreateFile { parent, name }
-            }
-        };
-        if let Some(name) = name {
-            let select = Some((panel, Location::Path(parent.join(&name))));
-            self.submit(request(parent, name), select);
-            return;
-        }
-        let base = if directory { "New Folder" } else { "New File" };
-        // Suggest a free name based on what is already listed.
-        let listing = self.service.listing(panel);
-        let taken = |p: &Path| {
-            listing.is_some_and(|l| l.entries().iter().any(|e| e.local_path() == Some(p)))
-        };
-        let suggestion = {
-            let first = parent.join(base);
-            let path = if taken(&first) {
-                unique_path(&first, directory, taken)
-            } else {
-                first
-            };
-            path.file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| base.to_owned())
-        };
-        let sender = sender.clone();
-        dialogs::name_prompt(
-            &self.ui.window,
-            base,
-            "Create",
-            &suggestion,
-            false,
-            move |name| {
-                let select = Some((panel, Location::Path(parent.join(&name))));
-                sender
-                    .input_sender()
-                    .emit(Msg::Submit(request(parent.clone(), name), select));
-            },
-        );
+        let plan = file_actions::new_item(&self.service, directory, name);
+        self.carry_out(plan, sender);
     }
 
     pub(super) fn empty_trash(&mut self, sender: &ComponentSender<Self>) {
-        let panel = self.service.active_panel();
-        if self.service.active_location() != &Location::trash_root() {
-            self.notice = Some("Open the Trash to empty it.".to_owned());
-            return;
-        }
-        let items: Vec<Location> = self
-            .service
-            .listing(panel)
-            .map(|l| l.entries().iter().map(|e| e.location.clone()).collect())
-            .unwrap_or_default();
-        if items.is_empty() {
-            return;
-        }
-        let sender = sender.clone();
-        dialogs::confirm(
-            &self.ui.window,
-            "Empty the Trash?",
-            &format!(
-                "{} will be permanently deleted. This cannot be undone.",
-                plural(items.len(), "1 item", "items")
-            ),
-            "Empty Trash",
-            move || {
-                sender.input_sender().emit(Msg::Submit(
-                    OperationRequest::Delete {
-                        items: items.clone(),
-                    },
-                    None,
-                ))
-            },
-        );
+        let plan = file_actions::empty_trash(&self.service);
+        self.carry_out(plan, sender);
     }
 
     /// Files dropped on `panel`: into the folder row they were dropped on,
@@ -414,11 +324,7 @@ impl App {
         } else {
             TransferKind::Move
         };
-        match TransferPlan::new(
-            kind,
-            &groups_by_folder(&paths),
-            &Location::Path(destination),
-        ) {
+        match TransferPlan::from_paths(kind, &paths, &Location::Path(destination)) {
             // Dropping items back where they are is not a move.
             Ok(plan) if plan.is_noop() => {}
             Ok(plan) => {
@@ -507,30 +413,4 @@ impl App {
         });
         self.conflict_dialog = Some((request.operation.id(), window));
     }
-}
-
-/// Groups loose paths (clipboard, drag and drop) by their folder, so a
-/// transfer can say where its items come from.
-fn groups_by_folder(paths: &[PathBuf]) -> Vec<SelectionGroup> {
-    let mut by_folder: BTreeMap<PathBuf, Vec<Location>> = BTreeMap::new();
-    let mut order = Vec::new();
-    for path in paths {
-        let folder = path.parent().map(Path::to_path_buf).unwrap_or_default();
-        if !by_folder.contains_key(&folder) {
-            order.push(folder.clone());
-        }
-        by_folder
-            .entry(folder)
-            .or_default()
-            .push(Location::Path(path.clone()));
-    }
-    order
-        .into_iter()
-        .map(|folder| SelectionGroup {
-            // Not from a panel; the id only distinguishes groups.
-            panel: PanelId::from_raw(0),
-            items: by_folder.remove(&folder).unwrap_or_default(),
-            folder: Location::Path(folder),
-        })
-        .collect()
 }

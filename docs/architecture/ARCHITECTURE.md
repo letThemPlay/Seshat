@@ -45,6 +45,7 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 - Navigation state never lives in widgets: views are rebuilt from the service.
 - One dispatcher: an action that a key, menu, toolbar button, mouse button or command can trigger is an `Action` and runs through `App::perform` (`Msg::Perform`). A command maps to its action with `Command::as_action`. Never add a second handler for the same action.
 - Focus Mode changes presentation only, and never creates, destroys or duplicates panels.
+- File action rules live in the application layer (`workspace::file_actions`): what rename, Trash, delete, restore, new item, empty Trash and the clipboard act on, and when they are refused. The window shows the confirmation or name prompt an `ActionPlan` asks for and submits its captured request; it never decides targets itself.
 - Operations capture absolute source and destination paths when they are planned. Switching or closing branches, or toggling Focus Mode, does not affect a running operation.
 - Branches, cursors and selections never resolve sources through "the active panel at execution time".
 - Pruning (`db`, `dB`) and workspace undo change panels and branches only. They go through `WorkspaceService`, whose only effects are unwatching and saving, and they never reach the operation manager or the filesystem. Pruning removes only panels no other branch uses ([ADR 0007](../decisions/0007-backward-branch-pruning.md)).

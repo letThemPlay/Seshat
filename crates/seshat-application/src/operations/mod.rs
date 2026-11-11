@@ -24,4 +24,5 @@ pub use events::{
 pub use filesystem::{FileSystem, FsError, FsErrorKind, FsMetadata};
 pub use manager::{CancelError, ConflictResolver, OperationManager};
 pub use naming::unique_path;
+pub(crate) use request::top_level_trash_item;
 pub use request::{OperationRequest, RequestError, validate_name};

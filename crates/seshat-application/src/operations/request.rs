@@ -96,7 +96,7 @@ fn not_root(path: &Path, verb: &'static str) -> Result<(), RequestError> {
     }
 }
 
-fn top_level_trash_item(item: &Path) -> Result<(), RequestError> {
+pub(crate) fn top_level_trash_item(item: &Path) -> Result<(), RequestError> {
     let mut components = item.components();
     match (components.next(), components.next()) {
         (Some(Component::Normal(_)), None) => Ok(()),

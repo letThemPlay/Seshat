@@ -34,6 +34,7 @@ use seshat_application::preferences::{
 };
 use seshat_application::use_cases::ListDirectory;
 use seshat_application::view::{SortKey, ViewMode};
+use seshat_application::workspace::file_actions::Availability;
 use seshat_application::workspace::{TransferKind, TransferPlan, WorkspaceService, WorkspaceStore};
 use seshat_domain::entities::{Device, DeviceId, FileEntry, Location, StandardLocation};
 use seshat_domain::operation::OperationId;
@@ -187,8 +188,6 @@ pub enum Msg {
     PasteFiles(Option<ClipboardFiles>),
     RenameSelection,
     TrashSelection,
-    /// Confirmed Trash of items from several panels.
-    TrashPaths(Vec<PathBuf>),
     DeleteSelection,
     RestoreSelection,
     NewItem {
@@ -692,11 +691,10 @@ impl SimpleComponent for App {
             Msg::ClipboardStore { cut } => self.clipboard_store(cut),
             Msg::Paste => self.paste(&sender),
             Msg::PasteFiles(files) => self.paste_files(files, &sender),
-            Msg::RenameSelection => self.rename_selection(&sender),
+            Msg::RenameSelection => self.rename_selection(None, &sender),
             Msg::TrashSelection => self.trash_selection(&sender),
-            Msg::TrashPaths(paths) => self.submit(OperationRequest::Trash { paths }, None),
             Msg::DeleteSelection => self.delete_selection(&sender),
-            Msg::RestoreSelection => self.restore_selection(),
+            Msg::RestoreSelection => self.restore_selection(&sender),
             Msg::NewItem { directory } => self.new_item(directory, None, &sender),
             Msg::EmptyTrash => self.empty_trash(&sender),
             Msg::Submit(request, select) => self.submit(request, select),
@@ -729,8 +727,6 @@ impl SimpleComponent for App {
         let current = self.service.active_location();
         let ws = self.service.workspace();
         let state = self.service.state(active).expect("active panel exists");
-        let targets: usize = self.service.targets().iter().map(|g| g.items.len()).sum();
-
         self.actions.sync(
             state.options.show_hidden,
             state.mode,
@@ -738,9 +734,7 @@ impl SimpleComponent for App {
             &self.theme_choice,
             ws.focus_mode(),
             ActionContext {
-                selected: targets,
-                in_trash: current.is_trash(),
-                in_folder: matches!(current, Location::Path(_)),
+                files: Availability::of(&self.service),
                 branches: ws.branch_count(),
             },
         );

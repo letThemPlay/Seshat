@@ -12,6 +12,7 @@ use relm4::ComponentSender;
 use seshat_application::interaction::Action;
 use seshat_application::preferences::ThemeChoice;
 use seshat_application::view::{SortKey, SortOrder, ViewMode};
+use seshat_application::workspace::file_actions::{Availability, FileAction};
 
 use crate::app::{App, Msg};
 use crate::theme::ThemeRegistry;
@@ -21,10 +22,8 @@ pub const GROUP: &str = "seshat";
 /// What the command actions depend on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ActionContext {
-    pub selected: usize,
-    pub in_trash: bool,
-    /// The shown location is a regular folder (not the Trash).
-    pub in_folder: bool,
+    /// Whether file actions apply; the application layer decides.
+    pub files: Availability,
     /// Number of open branches.
     pub branches: usize,
 }
@@ -55,17 +54,31 @@ const COMMANDS: &[Command] = &[
     ("help", || Msg::ShowHelp),
 ];
 
+/// The file action a command action stands for, if any.
+fn file_action(command: &str) -> Option<FileAction> {
+    Some(match command {
+        "open" => FileAction::Open,
+        "copy-path" => FileAction::CopyPath,
+        "cut" => FileAction::Cut,
+        "copy" => FileAction::Copy,
+        "paste" => FileAction::Paste,
+        "rename" => FileAction::Rename,
+        "trash" => FileAction::Trash,
+        "delete" => FileAction::Delete,
+        "restore" => FileAction::Restore,
+        "new-folder" => FileAction::NewFolder,
+        "new-file" => FileAction::NewFile,
+        "empty-trash" => FileAction::EmptyTrash,
+        _ => return None,
+    })
+}
+
 impl ActionContext {
     fn allows(&self, command: &str) -> bool {
-        let any = self.selected > 0;
+        if let Some(action) = file_action(command) {
+            return self.files.allows(action);
+        }
         match command {
-            "open" | "copy-path" => any,
-            "cut" | "copy" | "trash" => any && self.in_folder,
-            "rename" => self.selected == 1 && self.in_folder,
-            "delete" => any,
-            "restore" => any && self.in_trash,
-            "paste" | "new-folder" | "new-file" => self.in_folder,
-            "empty-trash" => self.in_trash,
             "close-branch" | "next-branch" | "previous-branch" => self.branches > 1,
             _ => true,
         }
@@ -327,49 +340,59 @@ pub fn background_menu(in_trash: bool) -> gio::Menu {
 
 #[cfg(test)]
 mod tests {
-    use super::ActionContext;
+    use super::{ActionContext, COMMANDS, file_action};
+    use seshat_application::workspace::file_actions::Availability;
 
     #[test]
-    fn commands_apply_only_where_they_make_sense() {
+    fn file_commands_follow_the_application_rules() {
         let folder_one = ActionContext {
-            selected: 1,
-            in_trash: false,
-            in_folder: true,
+            files: Availability {
+                selected: 1,
+                in_trash: false,
+                in_folder: true,
+            },
             branches: 1,
-        };
-        let folder_many = ActionContext {
-            selected: 3,
-            ..folder_one
         };
         let trash_one = ActionContext {
-            selected: 1,
-            in_trash: true,
-            in_folder: false,
-            branches: 1,
-        };
-        assert!(folder_one.allows("rename"));
-        assert!(!folder_many.allows("rename"));
-        assert!(folder_many.allows("trash"));
-        assert!(!folder_one.allows("restore"));
-        assert!(trash_one.allows("restore"));
-        assert!(trash_one.allows("delete"));
-        assert!(!trash_one.allows("trash"), "already in the Trash");
-        assert!(!trash_one.allows("paste"));
-        assert!(!trash_one.allows("cut"));
-        let nothing = ActionContext {
-            selected: 0,
+            files: Availability {
+                selected: 1,
+                in_trash: true,
+                in_folder: false,
+            },
             ..folder_one
         };
-        assert!(!nothing.allows("delete"));
-        assert!(nothing.allows("paste"));
-        assert!(nothing.allows("new-folder"));
-        assert!(!nothing.allows("close-branch"), "the last branch stays");
-        assert!(
-            ActionContext {
-                branches: 2,
-                ..nothing
-            }
-            .allows("close-branch")
-        );
+        assert!(folder_one.allows("rename"));
+        assert!(!folder_one.allows("restore"));
+        assert!(trash_one.allows("restore"));
+        assert!(!trash_one.allows("trash"), "already in the Trash");
+        assert!(!trash_one.allows("paste"));
+        // Every file command name is mapped (a typo would leave it always on).
+        for name in [
+            "open",
+            "copy-path",
+            "cut",
+            "copy",
+            "paste",
+            "rename",
+            "trash",
+            "delete",
+            "restore",
+            "new-folder",
+            "new-file",
+            "empty-trash",
+        ] {
+            assert!(file_action(name).is_some(), "{name}");
+            assert!(COMMANDS.iter().any(|(n, _)| *n == name), "{name}");
+        }
+    }
+
+    #[test]
+    fn branch_commands_need_another_branch() {
+        let one = ActionContext::default();
+        assert!(!one.allows("close-branch"), "the last branch stays");
+        assert!(!one.allows("next-branch"));
+        let two = ActionContext { branches: 2, ..one };
+        assert!(two.allows("close-branch"));
+        assert!(two.allows("help"));
     }
 }

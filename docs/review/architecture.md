@@ -25,4 +25,5 @@ The check was verified to fail on a deliberate violation (domain → `glib`).
 ## Design review follow-ups (2026-11-11)
 
 - **One dispatcher (R2), done.** Keys, menus, the toolbar, the mouse back and forward buttons and the command line all carry out shared actions through `App::perform(Action)`. `Msg::Perform(Action)` replaced the separate `Back`, `Forward`, `GoUp`, `CycleBranch` and `ToggleFocusMode` messages, and `Command::as_action` sends `:branch next`, `:branch prev` and `:focus` to the same place. A new shared action is therefore handled in one place.
-- **Open:** the `FileActions` application service (R1) and the Fuzzy Find search engine (R4).
+- **File action rules in the application layer (R1), done.** `seshat_application::workspace::file_actions` decides what rename, Trash, delete, restore, new item, empty Trash and the clipboard act on, returning an `ActionPlan` (submit, confirm or ask for a name) or a typed `ActionRefusal`. The window only draws the dialogs, through one `App::carry_out`. The menus read `Availability` from the same module, so menus and handlers can no longer disagree. `TransferPlan::from_paths` replaced the placeholder `PanelId` that clipboard and drag-and-drop transfers used.
+- **Open:** the Fuzzy Find search engine (R4).
