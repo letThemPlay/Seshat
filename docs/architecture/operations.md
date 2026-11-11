@@ -76,4 +76,4 @@ The manager runs inside the UI process. Closing the window while operations are 
    - If it needs a new filesystem primitive, add it to the `FileSystem` port.
 3. **Infrastructure:** implement any new port method in `LocalFileSystem`, plus the test double `MemoryFs`.
 4. **Tests:** add in-memory tests in `operations/tests.rs` (lifecycle, conflicts, failures, cancellation) and a real-filesystem test in `crates/seshat-infrastructure/tests/operations.rs`.
-5. **UI:** add an action in `actions.rs` (with its `ActionContext` rule), a menu entry, optionally a shortcut, and a handler in `app/file_ops.rs` that builds the request and calls `submit`. The progress panel picks it up automatically from the events.
+5. **UI:** add an `AppAction` variant (with its `id`, its `FileAction` in `file_action`, and an entry in `AppAction::COMMANDS`), a `file_actions` function in the application layer that plans it, an arm in `App::perform` that calls a handler in `app/file_ops.rs` passing the plan to `carry_out`, a menu entry, and optionally a shortcut and a command (`Command::as_action`). The progress panel picks it up automatically from the events.

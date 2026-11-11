@@ -4,7 +4,7 @@ use gtk::prelude::*;
 use relm4::ComponentSender;
 use std::rc::Rc;
 
-use seshat_application::interaction::Action;
+use seshat_application::interaction::{Action, AppAction};
 use seshat_application::view::ViewMode;
 use seshat_domain::Direction;
 
@@ -63,18 +63,13 @@ fn icon_button(
     button
 }
 
-fn action_toggle(
-    icon: &str,
-    tooltip: &str,
-    action: &str,
-    target: Option<&str>,
-) -> gtk::ToggleButton {
+fn action_toggle(icon: &str, tooltip: &str, action: AppAction) -> gtk::ToggleButton {
     let button = gtk::ToggleButton::builder()
         .icon_name(icon)
         .tooltip_text(tooltip)
-        .action_name(format!("{}.{action}", actions::GROUP))
+        .action_name(actions::detailed_name(action))
         .build();
-    if let Some(target) = target {
+    if let Some(target) = actions::target(action) {
         button.set_action_target_value(Some(&target.to_variant()));
     }
     button
@@ -95,22 +90,22 @@ pub fn build(
         "go-previous-symbolic",
         "Back (Alt+Left, Ctrl+O)",
         sender,
-        || Msg::Perform(Action::Back),
+        || Msg::Perform(Action::Back.into()),
     );
     let forward_button = icon_button(
         "go-next-symbolic",
         "Forward (Alt+Right, Ctrl+I)",
         sender,
-        || Msg::Perform(Action::Forward),
+        || Msg::Perform(Action::Forward.into()),
     );
     let up_button = icon_button(
         "go-up-symbolic",
         "Parent panel (Alt+Up, Backspace)",
         sender,
-        || Msg::Perform(Action::Parent),
+        || Msg::Perform(Action::Parent.into()),
     );
     let refresh_button = icon_button("view-refresh-symbolic", "Refresh (F5)", sender, || {
-        Msg::Refresh
+        Msg::Perform(AppAction::Refresh)
     });
     header.pack_start(&back_button);
     header.pack_start(&forward_button);
@@ -154,20 +149,17 @@ pub fn build(
     view_toggles.append(&action_toggle(
         "view-list-symbolic",
         "List view (Ctrl+1)",
-        "view-mode",
-        Some(ViewMode::List.id()),
+        AppAction::SetViewMode(ViewMode::List),
     ));
     view_toggles.append(&action_toggle(
         "view-grid-symbolic",
         "Grid view (Ctrl+2)",
-        "view-mode",
-        Some(ViewMode::Grid.id()),
+        AppAction::SetViewMode(ViewMode::Grid),
     ));
     let hidden_toggle = action_toggle(
         "view-reveal-symbolic",
         "Show hidden files (Ctrl+H)",
-        "show-hidden",
-        None,
+        AppAction::ToggleHidden,
     );
     let search_toggle = gtk::ToggleButton::builder()
         .icon_name("system-search-symbolic")
@@ -177,18 +169,17 @@ pub fn build(
         "document-edit-symbolic",
         "Type a location (Ctrl+L)",
         sender,
-        || Msg::EditAddress,
+        || Msg::Perform(AppAction::EditAddress),
     );
     let focus_toggle = action_toggle(
         "view-fullscreen-symbolic",
         "Focus Mode (zz)",
-        "focus-mode",
-        None,
+        Action::FocusMode.into(),
     );
     let branches_button = gtk::Button::builder()
         .icon_name("view-dual-symbolic")
         .tooltip_text("Branches (:branch)")
-        .action_name(format!("{}.branches", actions::GROUP))
+        .action_name(actions::detailed_name(AppAction::ShowBranches))
         .build();
     header.pack_end(&theme_button);
     header.pack_end(&sort_button);

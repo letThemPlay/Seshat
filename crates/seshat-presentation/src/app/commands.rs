@@ -3,7 +3,7 @@
 
 use relm4::ComponentSender;
 use seshat_application::interaction::command::{BranchCommand, COMMANDS, Command, Destination};
-use seshat_application::interaction::{Action, Intent};
+use seshat_application::interaction::{Action, AppAction, Intent};
 use seshat_application::workspace::file_actions::ItemKind;
 use seshat_application::workspace::{TransferKind, TransferPlan};
 use seshat_domain::Direction;
@@ -11,7 +11,7 @@ use seshat_domain::entities::Location;
 use seshat_domain::workspace::PruneMotion;
 
 use super::command_line::CommandLineOutcome;
-use super::{App, Msg};
+use super::{App, Msg, ThemeMsg};
 use crate::dialogs;
 use crate::notice::{self, Notice};
 use crate::workspace_view::folder_title;
@@ -74,12 +74,55 @@ impl App {
             Intent::OpenCommandLine => self.open_command_line(),
             Intent::Open { launch_files } => self.open_cursor(launch_files),
             Intent::NotInThisMode(action) => self.notice = Some(notice::not_in_mode(action)),
-            Intent::Perform(action) => self.perform(action, sender),
+            Intent::Perform(action) => self.perform(action.into(), sender),
         }
     }
 
-    /// Carries out an action that is the same in every mode.
-    pub(super) fn perform(&mut self, action: Action, sender: &ComponentSender<Self>) {
+    /// The single dispatcher: carries out a window action, whether it came
+    /// from a key, a menu, the toolbar, a shortcut, a mouse button or the
+    /// command line. Never add a second handler for one of these.
+    pub(super) fn perform(&mut self, action: AppAction, sender: &ComponentSender<Self>) {
+        let active = self.service.active_panel();
+        match action {
+            AppAction::Key(action) => self.perform_key(action, sender),
+            AppAction::OpenSelection => self.open_targets(),
+            AppAction::CopyPaths => self.copy_paths(),
+            AppAction::Refresh => self.service.reload(active),
+            AppAction::Rename => self.rename_selection(None, sender),
+            AppAction::Trash => self.trash_selection(sender),
+            AppAction::Delete => self.delete_selection(sender),
+            AppAction::Restore => self.restore_selection(sender),
+            AppAction::NewItem(item) => self.new_item(item, None, sender),
+            AppAction::EmptyTrash => self.empty_trash(sender),
+            AppAction::ToggleHidden => {
+                self.service.toggle_hidden(active);
+                self.save_preferences();
+            }
+            AppAction::SetViewMode(mode) => {
+                self.service.set_view_mode(active, mode);
+                self.save_preferences();
+                self.focused_panel = None; // the visible view changed
+            }
+            AppAction::SetSortKey(key) => {
+                self.service.set_sort_key(active, key);
+                self.save_preferences();
+            }
+            AppAction::ToggleSortDescending => {
+                self.service.toggle_sort_descending(active);
+                self.save_preferences();
+            }
+            AppAction::ShowBranches => self.show_branches(),
+            AppAction::CloseBranch => self.close_branch(None),
+            AppAction::Help => self.show_help(),
+            AppAction::ReloadThemes => self.theme_message(ThemeMsg::Reload, sender),
+            AppAction::OpenThemesFolder => self.theme_message(ThemeMsg::OpenFolder, sender),
+            AppAction::EditAddress => self.editing_address = true,
+            AppAction::KeyboardContextMenu => self.keyboard_context_menu(sender),
+        }
+    }
+
+    /// Carries out a key-bindable action, the same in every mode.
+    fn perform_key(&mut self, action: Action, sender: &ComponentSender<Self>) {
         match action {
             Action::PanelLeft => {
                 self.service.move_left();
@@ -246,7 +289,7 @@ impl App {
     }
 
     fn run_command(&mut self, command: Command, sender: &ComponentSender<Self>) {
-        // A command with a key-bindable equivalent goes through the same
+        // A command with a window action equivalent goes through the same
         // dispatcher as keys, menus and the toolbar.
         if let Some(action) = command.as_action() {
             self.perform(action, sender);
@@ -260,8 +303,6 @@ impl App {
             Command::Move(destination) => {
                 self.transfer_command(TransferKind::Move, destination, sender)
             }
-            Command::Delete { permanently: false } => self.trash_selection(sender),
-            Command::Delete { permanently: true } => self.delete_selection(sender),
             Command::Rename(name) => self.rename_selection(name, sender),
             Command::Mkdir(name) => self.new_item(ItemKind::Folder, Some(name), sender),
             Command::Touch(name) => self.new_item(ItemKind::File, Some(name), sender),
@@ -269,29 +310,18 @@ impl App {
                 self.service.set_query(active, &query);
                 self.focused_panel = None;
             }
+            // `:sort <key> asc|desc`: the two window actions it combines.
             Command::Sort { key, descending } => {
-                self.service.set_sort_key(active, key);
+                self.perform(AppAction::SetSortKey(key), sender);
                 if let Some(descending) = descending
                     && self
                         .service
                         .state(active)
                         .is_some_and(|s| s.options.sort.descending != descending)
                 {
-                    self.service.toggle_sort_descending(active);
+                    self.perform(AppAction::ToggleSortDescending, sender);
                 }
-                self.save_preferences();
             }
-            Command::View(mode) => {
-                self.service.set_view_mode(active, mode);
-                self.save_preferences();
-                self.focused_panel = None;
-            }
-            Command::Hidden => {
-                self.service.toggle_hidden(active);
-                self.save_preferences();
-            }
-            Command::Branch(BranchCommand::Overview) => self.show_branches(),
-            Command::Branch(BranchCommand::Close) => self.close_branch(None),
             Command::Branch(BranchCommand::Switch(n)) => {
                 match self.service.workspace().branch_number(n) {
                     Some(branch) => {
@@ -304,9 +334,18 @@ impl App {
                 Ok(location) => self.service.open_location(location),
                 Err(err) => self.notice = Some(Notice::from_error(&err)),
             },
-            Command::Help => self.show_help(),
-            // Handled above by `perform` (see `Command::as_action`).
-            Command::Branch(BranchCommand::Next | BranchCommand::Previous) | Command::Focus => {}
+            // Carried out above by `perform` (see `Command::as_action`).
+            Command::Delete { .. }
+            | Command::View(_)
+            | Command::Hidden
+            | Command::Help
+            | Command::Focus
+            | Command::Branch(
+                BranchCommand::Next
+                | BranchCommand::Previous
+                | BranchCommand::Overview
+                | BranchCommand::Close,
+            ) => {}
         }
     }
 
