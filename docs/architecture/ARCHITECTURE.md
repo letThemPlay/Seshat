@@ -33,9 +33,10 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 
 | State | Owner |
 |---|---|
-| Panels, branches, active branch, jump list, Focus Mode | `seshat_domain::workspace::Workspace` |
+| Panels, branches, active branch, Focus Mode | `seshat_domain::workspace::Workspace` |
+| Back/forward through panel activations (D2) | `JumpList`, inside the `Workspace`; saved with it |
 | Per-panel cursor, scroll anchor, sort, view mode, hidden files, search, selection | `PanelState`, inside the workspace |
-| Directory listings and their load and watch generations | `WorkspaceService` (cached per panel; never in widgets) |
+| Directory listings, their least-recently-used eviction (D13) and their load and watch generations | `ListingCache`, inside `WorkspaceService` (cached per panel; never in widgets) |
 | Interaction mode, pending keys | `Interaction` (shared with the key controller) |
 | Fuzzy Find sessions, their search generations and cached candidates | `SearchSessions` and `SearchEngine` (application), for one session; never saved ([search.md](search.md)) |
 | Workspace undo history (pruned panels with their state) | `WorkspaceService`, for the session; never saved ([ADR 0007](../decisions/0007-backward-branch-pruning.md)) |
