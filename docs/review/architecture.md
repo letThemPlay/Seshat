@@ -31,3 +31,21 @@ The check was verified to fail on a deliberate violation (domain → `glib`).
 - **Listing cache and jump list extracted (R6), done.** `WorkspaceService` keeps its listings in a `ListingCache` (LRU, visible and active panels protected, generations), and `Workspace` keeps back/forward in a `JumpList` (a `VecDeque`, so the size limit no longer shifts the whole list; one `forget` instead of two copies). Both have their own tests, the saved format is unchanged, and the unused `NavigationHistory` was deleted.
 - **Typed status messages (R5), done.** Messages are `Notice` values with one formatter and a severity (Info or Error); errors are styled with the error colour and announced to screen readers. About 45 places that built their own text now pass typed errors or call named constructors, and `capitalise`, `plural`, `left_out_notice` and `item_count` are gone. The Visual Mode refusal no longer assumes the refused action is pruning.
 - **Feature controllers (R3), done.** `App` coordinates `ThemeController`, `DeviceController`, `OperationsController` and `CommandLineController`. Each one owns its own state and nested message enum and borrows shared state through `Cx`. Theme fallback notices and device removal are now unit-tested without GTK.
+
+## Patterns and principles review (2026-11-11)
+
+A second review against the specifications, design patterns and SOLID, DRY and YAGNI. It found the architecture sound: the layer rules hold, and the patterns in use (ports and adapters, effects, observer, strategy, mediator, state machine, memento) fit. Its recommendations are delivered as small, separate pull requests in this order. Numbered P1 to P10 to keep them apart from R1 to R6 above.
+
+| # | Recommendation | Status |
+|---|---|---|
+| P2 | All status-bar wording in `notice.rs`, enforced by the compiler | **Done**: about 20 call sites that built their own text now call named constructors (`notice::no_branch`, `notice::not_pruned`, …). `Notice::info` and `Notice::error` are private to the module, so wording can't be added elsewhere. The duplicated "There is no branch N" is one function. Wording and severity are unchanged and pinned by `named_messages_keep_their_wording_and_severity`. |
+| P3 | Enums instead of boolean flags (`cut`, `directory`, `strip`, `forward`), reusing `TransferKind`, `NameKind` and `WorkspaceLayout` | Planned |
+| P9 | Parse ids at the boundary; one address-resolving helper; preference mapping in the application layer | Planned |
+| P1 | One dispatcher for file actions, view settings and refresh: `Action` ids replace the string tables in `actions.rs` and `shortcuts.rs`, and the command line's duplicate handlers | Planned |
+| P5, P6 | Split `WorkspaceService` and the domain `Workspace` into files by concern, behind the same API; `PanelListing` owns its failure state | Planned |
+| P7 | One `FileSystem` conformance suite run against both `MemoryFs` and `LocalFileSystem` | Planned |
+| P4 | An effect runner that owns watches, reload debouncing and save scheduling, out of `App` | Planned |
+| P10 | Address bar and panel search as controllers, before the Fuzzy Find overlay | Planned |
+| P8 | Narrower `Cx` per controller | Planned |
+
+Considered and not recommended: trait objects for file operations (the closed `OperationRequest` enum is serialisable and exhaustively checked), an observer on `Workspace` (the update-then-render loop already gives one-way data flow), more strategy types for search scopes, and a general undo stack before a second undoable change exists.

@@ -10,7 +10,7 @@ use seshat_domain::entities::Location;
 
 use super::{App, Cx, Msg, RELOAD_DEBOUNCE};
 use crate::actions;
-use crate::notice::{Notice, count};
+use crate::notice::{self, Notice};
 use crate::theme::{Theme, ThemeRegistry, render_css};
 
 #[derive(Debug)]
@@ -92,9 +92,7 @@ impl ThemeController {
             ThemeMsg::OpenFolder => match self.repository.ensure_directory() {
                 Ok(directory) => cx.service.open_location(Location::Path(directory)),
                 Err(err) => {
-                    *cx.notice = Some(Notice::error(format!(
-                        "Cannot open the themes folder: {err}"
-                    )));
+                    *cx.notice = Some(notice::themes_folder_failed(&err));
                 }
             },
             ThemeMsg::SystemColorSchemeChanged => {
@@ -111,10 +109,7 @@ impl ThemeController {
         self.menu_button
             .set_menu_model(Some(&actions::theme_menu(&self.registry)));
         if let Some(error) = self.registry.errors().first() {
-            *cx.notice = Some(Notice::error(format!(
-                "Theme “{}” could not be loaded: {}",
-                error.id, error.message
-            )));
+            *cx.notice = Some(notice::theme_not_loaded(&error.id, &error.message));
         }
     }
 
@@ -159,10 +154,7 @@ fn pick(
     system_dark: bool,
 ) -> (Theme, Option<Notice>) {
     let Some(theme) = registry.resolve(choice, system_dark) else {
-        let notice = Notice::error(format!(
-            "Theme “{}” is not available; following the system theme",
-            choice.id().trim_start_matches("custom:")
-        ));
+        let notice = notice::theme_unavailable(choice.id().trim_start_matches("custom:"));
         let fallback = registry
             .resolve(&ThemeChoice::System, system_dark)
             .expect("built-in themes always resolve");
@@ -172,13 +164,7 @@ fn pick(
         ThemeChoice::Custom(id) => registry
             .custom(id)
             .filter(|custom| !custom.warnings.is_empty())
-            .map(|custom| {
-                Notice::error(format!(
-                    "Theme “{}” has {}; see the log for details",
-                    custom.theme.name,
-                    count(custom.warnings.len(), "issue", "issues")
-                ))
-            }),
+            .map(|custom| notice::theme_has_issues(&custom.theme.name, custom.warnings.len())),
         _ => None,
     };
     (theme, notice)

@@ -463,9 +463,7 @@ impl SimpleComponent for App {
             ),
             preferences: prefs,
             staged: None,
-            notice: key_warnings
-                .first()
-                .map(|w| Notice::error(format!("Key bindings: {w} (see the log)"))),
+            notice: key_warnings.first().map(notice::key_bindings),
             editing_address: false,
             save_pending: false,
             operations,
@@ -631,7 +629,7 @@ impl SimpleComponent for App {
                 }
             }
             Msg::OpenFailed(err) => {
-                self.notice = Some(Notice::error(format!("Could not open: {err}")));
+                self.notice = Some(notice::open_failed(&err));
             }
             Msg::ClipboardStore { cut } => self.clipboard_store(cut),
             Msg::Paste => self.paste(&sender),
@@ -816,9 +814,7 @@ impl App {
             .map(|e| e.location)
             .collect();
         if files.len() > MAX_FILES_TO_OPEN {
-            self.notice = Some(Notice::error(format!(
-                "Select at most {MAX_FILES_TO_OPEN} files to open at once"
-            )));
+            self.notice = Some(notice::too_many_files(MAX_FILES_TO_OPEN));
             return;
         }
         self.launch(files);

@@ -18,7 +18,7 @@ use seshat_domain::operation::{OperationId, OperationKind};
 use super::{App, Cx, Msg};
 use crate::conflicts::{ConflictRequest, UiConflictResolver};
 use crate::dialogs;
-use crate::notice::{Notice, count};
+use crate::notice::{self, count};
 use crate::operations_panel::OperationsPanel;
 
 #[derive(Debug)]
@@ -118,7 +118,7 @@ impl OperationsController {
 
         match (event.kind, op.kind()) {
             (OperationEventKind::Failed, _) if op.kind() != OperationKind::Trash => {
-                *cx.notice = op.error.clone().map(Notice::error);
+                *cx.notice = op.error.as_deref().map(notice::operation_failed);
             }
             // Items the Trash refused were left alone; offer deletion.
             (_, OperationKind::Trash) if !op.failures.is_empty() => {

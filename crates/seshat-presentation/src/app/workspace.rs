@@ -12,7 +12,7 @@ use seshat_domain::workspace::{BranchId, PanelId, ScrollAnchor};
 
 use super::{App, ListingResult, MAX_RELOAD_DEBOUNCE, Msg, RELOAD_DEBOUNCE, SAVE_DELAY};
 use crate::files::FileViewEvent;
-use crate::notice::Notice;
+use crate::notice::{self, Notice};
 use crate::panel_view::PanelEvent;
 use crate::sidebar::SidebarInput;
 use crate::workspace_view::WorkspaceEvent;
@@ -329,7 +329,7 @@ impl App {
     ) {
         let reload = self.service.directory_changed(panel, generation, change);
         if change == DirectoryChange::Removed && self.service.active_panel() == panel {
-            self.notice = Some(Notice::error("The folder was deleted or moved"));
+            self.notice = Some(notice::folder_removed());
         }
         if reload && self.reload_pending.insert(panel) {
             let sender = sender.clone();
