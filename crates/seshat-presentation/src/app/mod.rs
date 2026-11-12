@@ -11,6 +11,7 @@ mod commands;
 mod devices;
 mod effects;
 mod file_ops;
+mod fuzzy_find;
 mod operations;
 mod search;
 mod shortcuts;
@@ -25,6 +26,8 @@ pub use command_line::CommandLineMsg;
 use devices::DeviceController;
 pub use devices::DeviceMsg;
 use effects::EffectRunner;
+pub use fuzzy_find::FuzzyMsg;
+use fuzzy_find::{FuzzyFindController, FuzzyOutcome};
 use operations::OperationsController;
 pub use operations::OperationsMsg;
 pub use search::SearchMsg;
@@ -34,6 +37,7 @@ use theme::{ThemeController, ThemeOutcome};
 
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use gtk::prelude::*;
@@ -44,7 +48,8 @@ use seshat_application::interaction::{AppAction, Intent, KeyMap, Mode, format_se
 use seshat_application::navigation::{AddressError, breadcrumbs};
 use seshat_application::operations::{OperationManager, OperationRequest};
 use seshat_application::ports::{
-    DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError, ThemeRepository,
+    DeviceMonitor, DirectoryChange, DirectoryWatcher, FuzzyMatcher, Launcher, ListingError,
+    ThemeRepository, TreeWalker,
 };
 use seshat_application::preferences::{Preferences, PreferencesStore};
 use seshat_application::use_cases::ListDirectory;
@@ -131,6 +136,9 @@ pub struct AppInit {
     pub themes: Rc<dyn ThemeRepository>,
     pub workspace_store: Rc<dyn WorkspaceStore>,
     pub operations: OperationManager,
+    /// Fuzzy Find's folder walking and matching (Spec 4 §13).
+    pub search_walker: Arc<dyn TreeWalker>,
+    pub search_matcher: Arc<dyn FuzzyMatcher>,
 }
 
 impl std::fmt::Debug for AppInit {
@@ -197,6 +205,7 @@ pub enum Msg {
     /// Submit a request; select the given item in that panel once listed.
     Submit(OperationRequest, Option<(PanelId, Location)>),
     Operations(OperationsMsg),
+    FuzzyFind(FuzzyMsg),
 }
 
 /// Listing result whose `Debug` output is a summary. Relm4 logs messages at
@@ -248,6 +257,7 @@ pub struct App {
     theme: ThemeController,
 
     operations: OperationsController,
+    fuzzy: FuzzyFindController,
 }
 
 impl std::fmt::Debug for App {
@@ -414,6 +424,11 @@ impl SimpleComponent for App {
         );
         let search = SearchController::new(ui.search_bar.clone(), ui.search_entry.clone());
         let address = AddressBarController::new(init.home.clone());
+        let fuzzy = FuzzyFindController::new(
+            ui.fuzzy.clone(),
+            init.search_walker.clone(),
+            init.search_matcher.clone(),
+        );
         let mut model = App {
             home: init.home,
             preferences_store: init.preferences,
@@ -445,6 +460,7 @@ impl SimpleComponent for App {
             staged: None,
             notice: key_warnings.first().map(notice::key_bindings),
             operations,
+            fuzzy,
         };
         let watcher = model.effects.watcher();
         model
@@ -500,7 +516,24 @@ impl SimpleComponent for App {
                 self.service.reload_if_current(panel, generation);
             }
             Msg::Intent(intent) => self.intent(intent, &sender),
-            Msg::FocusMoved => self.focus_moved(),
+            Msg::FocusMoved => {
+                // Fuzzy Find closes when the keyboard leaves it (F12).
+                if self.fuzzy.is_open()
+                    && !gtk::prelude::GtkWindowExt::focus(&self.ui.window)
+                        .is_some_and(|focus| self.fuzzy.contains(&focus))
+                {
+                    self.fuzzy.close();
+                }
+                self.focus_moved();
+            }
+            Msg::FuzzyFind(msg) => match self.fuzzy.update(msg) {
+                FuzzyOutcome::Stay => {}
+                FuzzyOutcome::Open(result) => {
+                    self.service.open_result(&result);
+                    self.focus_active();
+                }
+                FuzzyOutcome::Closed => self.focus_active(),
+            },
             Msg::CommandLine(msg) => {
                 let outcome =
                     self.command_line
@@ -628,6 +661,7 @@ impl SimpleComponent for App {
     }
 
     fn shutdown(&mut self, _widgets: &mut AppWidgets, _output: relm4::Sender<()>) {
+        self.fuzzy.close();
         self.save_workspace();
         // Saves are written in the background; wait for the last one.
         self.effects.flush();
@@ -662,6 +696,12 @@ impl App {
     /// against Home and the active panel's folder.
     fn resolve_address(&self, text: &str) -> Result<Location, AddressError> {
         self.address.resolve(text, self.service.active_location())
+    }
+
+    /// Ctrl+P: opens Fuzzy Find over the workspace, which stays as it is.
+    pub(super) fn open_fuzzy_find(&mut self, sender: &ComponentSender<Self>) {
+        self.fuzzy
+            .open(&self.service, &mut notice_cx!(self, sender));
     }
 
     /// A message for the theme controller, and what it asks for: saving

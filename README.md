@@ -82,6 +82,7 @@ cargo test --workspace
 scripts/verify-wayland.sh           # headless Weston: proves native Wayland, no XWayland
 scripts/ui-session.sh scripts/ui/file-operations.sh   # sandboxed UI end-to-end test
 scripts/ui-session.sh scripts/ui/workspace.sh         # the spatial workspace, end to end
+scripts/ui-session.sh scripts/ui/fuzzy-find.sh        # Fuzzy Find, end to end
 cargo run -p seshat -- --check-backend
 ```
 

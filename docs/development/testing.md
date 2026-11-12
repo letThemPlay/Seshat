@@ -10,6 +10,7 @@ cargo test --workspace                 # unit + integration tests
 scripts/verify-wayland.sh              # native Wayland verification (headless Weston)
 scripts/ui-session.sh scripts/ui/file-operations.sh [artifact-dir]   # UI end-to-end
 scripts/ui-session.sh scripts/ui/workspace.sh [artifact-dir]         # spatial workspace end-to-end
+scripts/ui-session.sh scripts/ui/fuzzy-find.sh [artifact-dir]        # Fuzzy Find end-to-end
 ```
 
 ## Automated tests
@@ -41,6 +42,7 @@ The two scripts:
 
 - `file-operations.sh`: copy, paste, conflicts, create, rename, Trash, permanent delete, a large background copy after the window closes, and D-Bus publication.
 - `workspace.sh`: the spatial spec's definition of done (§19). It covers branches, the side-by-side layout (rows, columns, cards, connectors, and the single-row fallback in a short window), Focus Mode navigation and branch switching, a cross-branch copy with confirmation, and the workspace restored after a restart. It reads workspace state from the `workspace state` debug line, which lists locations, never file listings.
+- `fuzzy-find.sh`: Fuzzy Find (Spec 4 §17 UI tests). Ctrl+P opens the overlay without changing the workspace; typing shows results; Enter opens a folder along the path (one panel per level, one branch) and Back returns in one step; Esc closes and changes nothing; it works in Focus Mode and keeps it; Ctrl+P does nothing in Visual Mode; no file is changed. Opening a file is left to the service test and the manual checklist, since it would start the machine's own applications.
 
 Notes for writing scripts:
 

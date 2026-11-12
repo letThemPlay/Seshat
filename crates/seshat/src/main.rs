@@ -17,6 +17,7 @@ use seshat_infrastructure::ipc::{IpcConfig, IpcService};
 use seshat_infrastructure::persistence::{
     FileThemeRepository, TomlPreferencesStore, TomlWorkspaceStore,
 };
+use seshat_infrastructure::search::{LocalTreeWalker, NucleoMatcher};
 use seshat_presentation::AppInit;
 use tracing_subscriber::EnvFilter;
 
@@ -86,6 +87,8 @@ fn run_app() -> ExitCode {
         themes: Rc::new(FileThemeRepository::default_location()),
         workspace_store: Rc::new(TomlWorkspaceStore::default_location()),
         operations: operations.clone(),
+        search_walker: Arc::new(LocalTreeWalker::new()),
+        search_matcher: Arc::new(NucleoMatcher::new()),
     };
 
     // Other applications observe operations over D-Bus. Seshat works

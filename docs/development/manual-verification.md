@@ -86,6 +86,20 @@ Use the desktop's file manager (GNOME *Files*, KDE *Dolphin*) next to Seshat.
 
 Notes:
 
+## 5a. Fuzzy Find (Spec 4)
+
+In `~/seshat-verify`, with a few nested folders and files.
+
+- [ ] `Ctrl+P` opens Fuzzy Find over the workspace with the keyboard in its search field, and says which folder it searches.
+- [ ] Typing filters the list as you type; `dcm`-style partial queries match (for example `prj` finds `Projects`), and matched characters are bold and underlined.
+- [ ] `Down`, `Up`, `Page Down`, `Page Up` move the highlight; the highlighted row has a coloured bar on its left as well as its background.
+- [ ] `Enter` on a folder opens it as panels along the path (one per level), reusing panels already open; `Alt+Left` goes back to where the search started in one step.
+- [ ] `Enter` on a file opens it in its default application, and the workspace doesn't change. (The automated UI test skips this step, since it would start the machine's own applications.)
+- [ ] A click highlights a result and a double-click opens it; typing continues in the search field after a click.
+- [ ] `Esc`, or clicking a panel, closes it and leaves the workspace as it was.
+- [ ] In Visual Mode (`v`), `Ctrl+P` does nothing and the status bar says "Fuzzy Find isn't available in Visual Mode; press Esc first."
+- [ ] Readable with the light, dark and a custom theme: the highlighted characters, the folder and file icons, and the highlighted row.
+
 ## 6. Opening files and portals
 
 - [ ] `Enter` on `notes.txt` opens the desktop's default text editor.
@@ -124,6 +138,7 @@ Start Orca (GNOME: `Super+Alt+S`; KDE: install `orca` and run it).
 - [ ] A panel is announced as "Folder panel". The branch bar is announced as "Branches", and its entries by name and number.
 - [ ] A card of another branch reads like "Branch 2, Downloads".
 - [ ] The mode indicator ("Interaction mode") and the command line ("Command") are announced.
+- [ ] Fuzzy Find's search field is announced as "Fuzzy Find", and moving through results reads each one, such as "Projects, folder, in Development".
 - [ ] Dialogs (rename, conflicts, confirmations, help) read their text and button labels.
 - [ ] Everything in sections 3 and 7 can be done with the keyboard alone.
 

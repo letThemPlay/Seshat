@@ -186,9 +186,12 @@ impl Interaction {
             (mode, Action::Open) => Intent::Open {
                 launch_files: !matches!(mode, Mode::Visual { .. }),
             },
-            (Mode::Visual { .. }, Action::PruneBack | Action::PruneBackSegment) => {
-                Intent::NotInThisMode(action)
-            }
+            // Fuzzy Find is unavailable while selecting (decision F6), so
+            // the selection is never put at risk.
+            (
+                Mode::Visual { .. },
+                Action::PruneBack | Action::PruneBackSegment | Action::FuzzyFind,
+            ) => Intent::NotInThisMode(action),
             (_, other) => Intent::Perform(other),
         }
     }
@@ -354,6 +357,27 @@ mod tests {
         assert_eq!(
             type_keys(&mut i, &map, "u"),
             [Intent::Perform(Action::UndoWorkspace)]
+        );
+    }
+
+    #[test]
+    fn fuzzy_find_is_not_available_in_visual_mode() {
+        let map = KeyMap::default();
+        let mut i = Interaction::default();
+        assert_eq!(
+            type_keys(&mut i, &map, "<C-p>"),
+            [Intent::Perform(Action::FuzzyFind)]
+        );
+        type_keys(&mut i, &map, "v");
+        assert_eq!(
+            type_keys(&mut i, &map, "<C-p>"),
+            [Intent::NotInThisMode(Action::FuzzyFind)],
+            "decision F6"
+        );
+        assert_eq!(
+            i.mode(),
+            Mode::Visual { range: false },
+            "the selection continues"
         );
     }
 
