@@ -8,7 +8,7 @@ use seshat_application::interaction::{Action, AppAction};
 use seshat_application::view::ViewMode;
 use seshat_domain::Direction;
 
-use super::{App, CommandLineMsg, Msg};
+use super::{AddressMsg, App, CommandLineMsg, Msg, SearchMsg};
 use crate::actions;
 use crate::operations_panel::OperationsPanel;
 use crate::pathbar::PathBar;
@@ -118,7 +118,9 @@ pub fn build(
         move |entry| {
             sender
                 .input_sender()
-                .emit(Msg::AddressSubmitted(entry.text().to_string()))
+                .emit(Msg::Address(AddressMsg::Submitted(
+                    entry.text().to_string(),
+                )))
         }
     });
     let escape = gtk::EventControllerKey::new();
@@ -126,7 +128,7 @@ pub fn build(
         let sender = sender.clone();
         move |_, key, _, _| {
             if key == gtk::gdk::Key::Escape {
-                sender.input_sender().emit(Msg::CancelAddress);
+                sender.input_sender().emit(Msg::Address(AddressMsg::Cancel));
                 gtk::glib::Propagation::Stop
             } else {
                 gtk::glib::Propagation::Proceed
@@ -211,7 +213,7 @@ pub fn build(
         let sender = sender.clone();
         move |_, key, _, _| {
             if key == gtk::gdk::Key::Escape {
-                sender.input_sender().emit(Msg::CloseSearch);
+                sender.input_sender().emit(Msg::Search(SearchMsg::Close));
             }
             gtk::glib::Propagation::Proceed
         }
@@ -231,14 +233,20 @@ pub fn build(
     // actions (Ctrl+A, Ctrl+C, Delete…) act on files, not on the search text.
     search_entry.connect_activate({
         let sender = sender.clone();
-        move |_| sender.input_sender().emit(Msg::FocusResults)
+        move |_| {
+            sender
+                .input_sender()
+                .emit(Msg::Search(SearchMsg::FocusResults))
+        }
     });
     let down = gtk::EventControllerKey::new();
     down.connect_key_pressed({
         let sender = sender.clone();
         move |_, key, _, _| {
             if key == gtk::gdk::Key::Down {
-                sender.input_sender().emit(Msg::FocusResults);
+                sender
+                    .input_sender()
+                    .emit(Msg::Search(SearchMsg::FocusResults));
                 gtk::glib::Propagation::Stop
             } else {
                 gtk::glib::Propagation::Proceed
@@ -251,14 +259,16 @@ pub fn build(
         move |entry| {
             sender
                 .input_sender()
-                .emit(Msg::Search(entry.text().to_string()))
+                .emit(Msg::Search(SearchMsg::Changed(entry.text().to_string())))
         }
     });
     search_bar.connect_search_mode_enabled_notify({
         let sender = sender.clone();
         move |bar| {
             if !bar.is_search_mode() {
-                sender.input_sender().emit(Msg::Search(String::new()));
+                sender
+                    .input_sender()
+                    .emit(Msg::Search(SearchMsg::Changed(String::new())));
                 // Give the keyboard back to the files, not to nowhere.
                 sender.input_sender().emit(Msg::FocusFiles);
             }

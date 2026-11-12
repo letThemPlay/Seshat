@@ -5,17 +5,21 @@
 //! (listing, watching, launching, saving) and renders the result. Panel and
 //! branch state lives in the service, never in widgets.
 
+mod address_bar;
 mod command_line;
 mod commands;
 mod devices;
 mod effects;
 mod file_ops;
 mod operations;
+mod search;
 mod shortcuts;
 mod theme;
 mod view;
 mod workspace;
 
+use address_bar::AddressBarController;
+pub use address_bar::AddressMsg;
 use command_line::CommandLineController;
 pub use command_line::CommandLineMsg;
 use devices::DeviceController;
@@ -23,6 +27,8 @@ pub use devices::DeviceMsg;
 use effects::EffectRunner;
 use operations::OperationsController;
 pub use operations::OperationsMsg;
+pub use search::SearchMsg;
+use search::{SearchController, SearchOutcome};
 use theme::ThemeController;
 pub use theme::ThemeMsg;
 
@@ -35,7 +41,7 @@ use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, SimpleComponent,
 };
 use seshat_application::interaction::{AppAction, Intent, KeyMap, Mode, format_sequence};
-use seshat_application::navigation::{AddressError, breadcrumbs, parse_address};
+use seshat_application::navigation::{AddressError, breadcrumbs};
 use seshat_application::operations::{OperationManager, OperationRequest};
 use seshat_application::ports::{
     DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError, ThemeRepository,
@@ -130,13 +136,11 @@ pub enum Msg {
         x: f64,
         y: f64,
     },
-    FocusResults,
+    /// Give keyboard focus back to the files, unless a text field has it.
     FocusFiles,
-    CloseSearch,
-    Search(String),
+    Search(SearchMsg),
+    Address(AddressMsg),
     Theme(ThemeMsg),
-    CancelAddress,
-    AddressSubmitted(String),
 
     // Workspace
     Workspace(WorkspaceEvent),
@@ -213,14 +217,13 @@ pub struct App {
     focused_on_files: bool,
     /// Last workspace shape logged (active panel, branches, panels, focus).
     logged_shape: Option<(PanelId, usize, usize, bool)>,
-    /// Search text set by the model, so its echo from the entry is ignored.
-    search_echo: Option<String>,
+    search: SearchController,
+    address: AddressBarController,
     devices: DeviceController,
     preferences: Preferences,
     staged: Option<Staged>,
     /// Transient message for the status bar (errors, device events).
     notice: Option<Notice>,
-    editing_address: bool,
 
     theme: ThemeController,
 
@@ -389,6 +392,8 @@ impl SimpleComponent for App {
             init.list_directory.clone(),
             init.home.clone(),
         );
+        let search = SearchController::new(ui.search_bar.clone(), ui.search_entry.clone());
+        let address = AddressBarController::new(init.home.clone());
         let mut model = App {
             home: init.home,
             preferences_store: init.preferences,
@@ -407,7 +412,8 @@ impl SimpleComponent for App {
             focused_panel: None,
             focused_on_files: false,
             logged_shape: None,
-            search_echo: None,
+            search,
+            address,
             devices,
             theme: ThemeController::new(
                 init.themes,
@@ -418,7 +424,6 @@ impl SimpleComponent for App {
             preferences: prefs,
             staged: None,
             notice: key_warnings.first().map(notice::key_bindings),
-            editing_address: false,
             operations,
         };
         let watcher = model.effects.watcher();
@@ -433,7 +438,7 @@ impl SimpleComponent for App {
     fn update(&mut self, msg: Msg, sender: ComponentSender<Self>) {
         match msg {
             Msg::Navigate(location) => {
-                self.editing_address = false;
+                self.address.stop_editing();
                 self.service.open_location(location);
             }
             Msg::Crumb(location) => self.service.open_ancestor(location),
@@ -444,42 +449,18 @@ impl SimpleComponent for App {
                 x,
                 y,
             } => self.context_menu(panel, on_item, x, y),
-            Msg::FocusResults => {
-                let active = self.service.active_panel();
-                if self
-                    .service
-                    .state(active)
-                    .is_some_and(|s| s.cursor.is_none())
-                {
-                    self.service.cursor_to_first(active);
-                }
-                self.focus_active();
-            }
             Msg::FocusFiles => {
                 if !self.typing() {
                     self.focus_active();
                 }
             }
-            Msg::CloseSearch => {
-                if self.ui.search_bar.is_search_mode() {
-                    self.ui.search_bar.set_search_mode(false);
+            Msg::Search(msg) => {
+                if self.search.update(msg, &mut cx!(self, &sender)) == SearchOutcome::FocusFiles {
+                    self.focus_active();
                 }
             }
-            Msg::Search(query) => {
-                if self.search_echo.take().as_deref() != Some(query.as_str()) {
-                    let active = self.service.active_panel();
-                    self.service.set_query(active, &query);
-                }
-            }
+            Msg::Address(msg) => self.address.update(msg, &mut cx!(self, &sender)),
             Msg::Theme(msg) => self.theme_message(msg, &sender),
-            Msg::CancelAddress => self.editing_address = false,
-            Msg::AddressSubmitted(text) => match self.resolve_address(&text) {
-                Ok(location) => {
-                    self.editing_address = false;
-                    self.service.open_location(location);
-                }
-                Err(err) => self.notice = Some(Notice::from_error(&err)),
-            },
 
             Msg::Workspace(event) => self.workspace_event(event, &sender),
             Msg::PanelLoaded {
@@ -569,9 +550,10 @@ impl SimpleComponent for App {
                 });
             widgets.rendered_crumbs = Some(current.clone());
         }
-        if self.editing_address != widgets.editing_address {
-            widgets.editing_address = self.editing_address;
-            if self.editing_address {
+        let editing = self.address.editing();
+        if editing != widgets.editing_address {
+            widgets.editing_address = editing;
+            if editing {
                 widgets.pathbar.show_entry(&address_text(current));
             } else {
                 widgets.pathbar.show_crumbs();
@@ -655,7 +637,7 @@ impl App {
     /// Text from the address bar, `:open`, `:copy` or `:move`, resolved
     /// against Home and the active panel's folder.
     fn resolve_address(&self, text: &str) -> Result<Location, AddressError> {
-        parse_address(text, &self.home, Some(self.service.active_location()))
+        self.address.resolve(text, self.service.active_location())
     }
 
     /// A message for the theme controller; saves preferences if the
