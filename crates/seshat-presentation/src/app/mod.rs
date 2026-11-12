@@ -29,8 +29,8 @@ use operations::OperationsController;
 pub use operations::OperationsMsg;
 pub use search::SearchMsg;
 use search::{SearchController, SearchOutcome};
-use theme::ThemeController;
 pub use theme::ThemeMsg;
+use theme::{ThemeController, ThemeOutcome};
 
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -78,12 +78,22 @@ const RELOAD_DEBOUNCE: Duration = Duration::from_millis(300);
 /// Opening many files at once from one action is almost always a mistake.
 const MAX_FILES_TO_OPEN: usize = 20;
 
-/// What a feature controller may use from the window while it handles a
-/// message. Borrowed from the window's own fields for the duration of one
-/// call, so controllers never keep a copy of workspace state.
+/// What a feature controller that changes the workspace, reports to the
+/// status bar and sends itself messages may use from the window while it
+/// handles a message. Borrowed from the window's own fields for the
+/// duration of one call, so controllers never keep a copy of workspace
+/// state. A controller gets only what it uses: [`NoticeCx`] when it never
+/// touches the workspace, plain arguments when it needs less.
 pub(super) struct Cx<'a> {
     pub service: &'a mut WorkspaceService,
     /// The status bar's transient message.
+    pub notice: &'a mut Option<Notice>,
+    pub sender: &'a ComponentSender<App>,
+}
+
+/// What a controller that never touches the workspace may use: the status
+/// bar's message and the sender for its own messages.
+pub(super) struct NoticeCx<'a> {
     pub notice: &'a mut Option<Notice>,
     pub sender: &'a ComponentSender<App>,
 }
@@ -93,6 +103,16 @@ macro_rules! cx {
     ($app:expr, $sender:expr) => {
         Cx {
             service: &mut $app.service,
+            notice: &mut $app.notice,
+            sender: $sender,
+        }
+    };
+}
+
+/// Lends a controller the status bar and the sender (see [`NoticeCx`]).
+macro_rules! notice_cx {
+    ($app:expr, $sender:expr) => {
+        NoticeCx {
             notice: &mut $app.notice,
             sender: $sender,
         }
@@ -429,7 +449,7 @@ impl SimpleComponent for App {
         let watcher = model.effects.watcher();
         model
             .theme
-            .start(watcher.as_ref(), &mut cx!(model, &sender));
+            .start(watcher.as_ref(), &mut notice_cx!(model, &sender));
         model.sync(&sender);
 
         ComponentParts { model, widgets }
@@ -455,11 +475,13 @@ impl SimpleComponent for App {
                 }
             }
             Msg::Search(msg) => {
-                if self.search.update(msg, &mut cx!(self, &sender)) == SearchOutcome::FocusFiles {
+                if self.search.update(msg, &mut self.service) == SearchOutcome::FocusFiles {
                     self.focus_active();
                 }
             }
-            Msg::Address(msg) => self.address.update(msg, &mut cx!(self, &sender)),
+            Msg::Address(msg) => self
+                .address
+                .update(msg, &mut self.service, &mut self.notice),
             Msg::Theme(msg) => self.theme_message(msg, &sender),
 
             Msg::Workspace(event) => self.workspace_event(event, &sender),
@@ -480,7 +502,9 @@ impl SimpleComponent for App {
             Msg::Intent(intent) => self.intent(intent, &sender),
             Msg::FocusMoved => self.focus_moved(),
             Msg::CommandLine(msg) => {
-                let outcome = self.command_line.update(msg, &mut cx!(self, &sender));
+                let outcome =
+                    self.command_line
+                        .update(msg, &self.service, &mut notice_cx!(self, &sender));
                 self.command_line_outcome(outcome, &sender);
             }
             Msg::TransferTo(kind, destination) => self.plan_transfer(kind, &destination, &sender),
@@ -510,7 +534,7 @@ impl SimpleComponent for App {
             Msg::Submit(request, select) => self.submit(request, select),
             Msg::Operations(msg) => {
                 let hidden = matches!(msg, OperationsMsg::WindowHidden);
-                self.operations.update(msg, &mut cx!(self, &sender));
+                self.operations.update(msg, &mut notice_cx!(self, &sender));
                 if hidden {
                     self.save_workspace();
                 }
@@ -640,11 +664,13 @@ impl App {
         self.address.resolve(text, self.service.active_location())
     }
 
-    /// A message for the theme controller; saves preferences if the
-    /// chosen theme changed.
+    /// A message for the theme controller, and what it asks for: saving
+    /// the chosen theme, or opening the themes folder.
     fn theme_message(&mut self, msg: ThemeMsg, sender: &ComponentSender<Self>) {
-        if self.theme.update(msg, &mut cx!(self, sender)) {
-            self.save_preferences();
+        match self.theme.update(msg, &mut notice_cx!(self, sender)) {
+            ThemeOutcome::Stay => {}
+            ThemeOutcome::SavePreferences => self.save_preferences(),
+            ThemeOutcome::Open(location) => self.service.open_location(location),
         }
     }
 

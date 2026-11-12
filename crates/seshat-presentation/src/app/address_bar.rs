@@ -10,7 +10,6 @@ use seshat_application::navigation::{AddressError, parse_address};
 use seshat_application::workspace::WorkspaceService;
 use seshat_domain::entities::Location;
 
-use super::Cx;
 use crate::notice::Notice;
 
 #[derive(Debug)]
@@ -44,10 +43,15 @@ impl AddressBarController {
         self.editing
     }
 
-    pub(super) fn update(&mut self, msg: AddressMsg, cx: &mut Cx<'_>) {
+    pub(super) fn update(
+        &mut self,
+        msg: AddressMsg,
+        service: &mut WorkspaceService,
+        notice: &mut Option<Notice>,
+    ) {
         match msg {
             AddressMsg::Cancel => self.editing = false,
-            AddressMsg::Submitted(text) => self.submit(&text, cx.service, cx.notice),
+            AddressMsg::Submitted(text) => self.submit(&text, service, notice),
         }
     }
 

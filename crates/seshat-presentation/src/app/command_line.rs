@@ -10,10 +10,11 @@ use seshat_application::interaction::command::{self, Command, CommandError, Comm
 use seshat_application::interaction::completion::{self, CompletionCycle, Plan};
 use seshat_application::ports::ListingError;
 use seshat_application::use_cases::ListDirectory;
+use seshat_application::workspace::WorkspaceService;
 use seshat_domain::Direction;
 use seshat_domain::entities::FileEntry;
 
-use super::{Cx, ListingResult, Msg};
+use super::{ListingResult, Msg, NoticeCx};
 use crate::notice::{self, Notice};
 use crate::workspace_view::folder_title;
 
@@ -90,7 +91,13 @@ impl CommandLineController {
         self.entry.set_visible(false);
     }
 
-    pub(super) fn update(&mut self, msg: CommandLineMsg, cx: &mut Cx<'_>) -> CommandLineOutcome {
+    /// Handles `msg`. The workspace is only read, for completion.
+    pub(super) fn update(
+        &mut self,
+        msg: CommandLineMsg,
+        service: &WorkspaceService,
+        cx: &mut NoticeCx<'_>,
+    ) -> CommandLineOutcome {
         match msg {
             CommandLineMsg::Submitted(text) => {
                 self.history.push(&text);
@@ -98,7 +105,7 @@ impl CommandLineController {
             }
             CommandLineMsg::Cancelled => return CommandLineOutcome::Close,
             CommandLineMsg::History { older } => self.history_step(older),
-            CommandLineMsg::Complete(direction) => self.complete(direction, cx),
+            CommandLineMsg::Complete(direction) => self.complete(direction, service, cx),
             CommandLineMsg::Listed {
                 request,
                 text,
@@ -121,7 +128,12 @@ impl CommandLineController {
 
     /// Tab or Shift+Tab: completes command names, folder paths
     /// and branch targets. Repeated presses cycle through the matches.
-    fn complete(&mut self, direction: Direction, cx: &mut Cx<'_>) {
+    fn complete(
+        &mut self,
+        direction: Direction,
+        service: &WorkspaceService,
+        cx: &mut NoticeCx<'_>,
+    ) {
         let text = self.entry.text().to_string();
         if let Some(cycle) = &mut self.completion
             && cycle.is_current(&text)
@@ -133,7 +145,7 @@ impl CommandLineController {
             return;
         }
         self.completion = None;
-        let current = cx.service.active_location().clone();
+        let current = service.active_location().clone();
         match completion::plan(&text, &self.home, &current) {
             Plan::Nothing => {}
             Plan::Command { partial } => {
@@ -145,7 +157,7 @@ impl CommandLineController {
                 self.finish(keep, &partial, names.clone(), names, cx.notice);
             }
             Plan::Branch { keep, partial } => {
-                let ws = cx.service.workspace();
+                let ws = service.workspace();
                 let names: Vec<String> = ws
                     .branches()
                     .iter()
@@ -168,7 +180,7 @@ impl CommandLineController {
                 // An open panel's listing is used as is; otherwise the
                 // folder is read in the background (decision: no extra
                 // reads for folders already shown).
-                if let Some(listing) = cx.service.listing_for(&folder) {
+                if let Some(listing) = service.listing_for(&folder) {
                     let names = completion::path_candidates(listing.entries(), &partial);
                     self.finish(keep, &partial, names.clone(), names, cx.notice);
                     return;
