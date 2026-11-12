@@ -24,6 +24,7 @@ nucleo-matcher.workspace = true
 unicode-segmentation.workspace = true
 
 [dev-dependencies]
+seshat-application = { workspace = true, features = ["test-support"] }
 futures-util = "0.3"
 
 [lints]

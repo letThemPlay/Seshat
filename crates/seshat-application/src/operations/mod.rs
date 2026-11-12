@@ -2,6 +2,8 @@
 //! port it runs against, and the operation algorithms.
 
 mod cancel;
+#[cfg(any(test, feature = "test-support"))]
+pub mod conformance;
 mod events;
 mod filesystem;
 mod job;

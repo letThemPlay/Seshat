@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
@@ -154,11 +154,19 @@ impl FileSystem for MemoryFs {
     }
 
     fn canonicalize(&self, path: &Path) -> Result<PathBuf, FsError> {
-        // Resolves links in any component (absolute link targets only).
+        // Resolves links in any component (absolute link targets only),
+        // and `.` and `..` against what is resolved so far, like realpath.
         let nodes = self.nodes.lock().unwrap();
         let mut real = PathBuf::from("/");
         for component in path.components().skip(1) {
-            real.push(component);
+            match component {
+                Component::CurDir => continue,
+                Component::ParentDir => {
+                    real.pop();
+                    continue;
+                }
+                _ => real.push(component),
+            }
             if let Some(Node::Link(target)) = nodes.get(&real) {
                 real = target.clone();
             }
@@ -377,5 +385,65 @@ impl FileSystem for MemoryFs {
             .remove(item)
             .map(|_| ())
             .ok_or_else(|| err(FsErrorKind::NotFound, "not in trash"))
+    }
+}
+
+#[cfg(test)]
+mod conformance_tests {
+    use std::path::{Path, PathBuf};
+
+    use super::{FileSystem, MemoryFs, Node};
+    use crate::operations::conformance::{self, Fixture};
+
+    struct MemoryFixture {
+        fs: MemoryFs,
+        root: PathBuf,
+    }
+
+    fn text(path: &Path) -> &str {
+        path.to_str().expect("test paths are UTF-8")
+    }
+
+    impl Fixture for MemoryFixture {
+        fn filesystem(&self) -> &dyn FileSystem {
+            &self.fs
+        }
+
+        fn root(&self) -> &Path {
+            &self.root
+        }
+
+        fn write_file(&self, path: &Path, content: &[u8]) {
+            self.fs
+                .nodes
+                .lock()
+                .unwrap()
+                .insert(path.to_path_buf(), Node::File(content.to_vec()));
+        }
+
+        fn symlink(&self, path: &Path, target: &Path) {
+            self.fs.link(text(path), text(target));
+        }
+
+        fn read_file(&self, path: &Path) -> Option<Vec<u8>> {
+            match self.fs.get(text(path))? {
+                Node::File(bytes) => Some(bytes),
+                _ => None,
+            }
+        }
+    }
+
+    /// The test double keeps the contract the real filesystem keeps, so
+    /// tests written against it mean something.
+    #[test]
+    fn memory_fs_meets_the_filesystem_contract() {
+        conformance::run_all(&|| {
+            let fs = MemoryFs::new();
+            fs.dir("/work");
+            Box::new(MemoryFixture {
+                fs,
+                root: PathBuf::from("/work"),
+            })
+        });
     }
 }
