@@ -215,7 +215,9 @@ impl Workspace {
     /// the active branch or reactivating another) and a new branch is
     /// started only where continuing would replace a path. Each parent's
     /// cursor is left on the folder opened below it, as if the user had
-    /// pressed `l` at every level.
+    /// pressed `l` at every level. Unlike `l`, the walk always ends on the
+    /// last folder: a reactivated branch doesn't land on a remembered
+    /// panel below it (C1); that panel and the rest of the branch stay.
     ///
     /// The whole walk is one step of the jump list (D2): Back returns to
     /// the panel that was active before. With no `steps`, `from` itself
@@ -244,6 +246,14 @@ impl Workspace {
             opened = Some(next);
         }
         let mut opened = match opened {
+            // A reactivated branch may have landed on its remembered panel
+            // below the folder (C1). The folder asked for is the one wanted:
+            // it becomes active, and the panels below it stay (§9.1, §9.4).
+            Some(mut opened) if opened.active != opened.panel => {
+                self.set_active(opened.branch, opened.panel, true);
+                opened.active = opened.panel;
+                opened
+            }
             Some(opened) => opened,
             None => {
                 self.activate_panel(from)?;

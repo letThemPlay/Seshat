@@ -142,7 +142,7 @@ From the design review (R1): the rules for file actions moved from the window to
 
 | # | Topic | Decision |
 |---|---|---|
-| F5 | Opening a folder result (§9.1) | Along the path from the panel that was searched (the result's origin), one folder at a time with the existing continue / reactivate / new-branch rules: existing panels are reused, at most one branch is created, and it is one Back/Forward step (`Workspace::open_path`). |
+| F5 | Opening a folder result (§9.1) | Along the path from the panel that was searched (the result's origin), one folder at a time with the existing continue / reactivate / new-branch rules: existing panels are reused, at most one branch is created, and it is one Back/Forward step (`Workspace::open_path`). It always ends on the result itself, even where `l` would land on a reactivated branch's deeper remembered panel (C1); the deeper panels stay (clarified 2026-11-12, ADR 0008). |
 | F6 | Visual Mode (§4.1) | Fuzzy Find is unavailable in Visual Mode: the shortcut does nothing and the status bar says why (as for pruning, B6). The selection is never touched. |
 | F7 | Reveal key (§8, §9.4) | Alt+Enter. The suggested Ctrl+O already means Back (D2) and keeps that meaning everywhere. |
 | F8 | Open in a new branch (§9.3) | Not supported for now. It is optional in the spec; forcing a branch from the last panel of a branch would break the rule that every branch ends in a panel with no children, and Enter already starts a new branch wherever continuing would replace a path. |

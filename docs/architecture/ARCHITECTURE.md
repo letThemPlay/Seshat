@@ -66,7 +66,7 @@ The window (`seshat-presentation/src/app/`) is a Relm4 component, `App`, that co
 | `CommandLineController` (`app/command_line.rs`) | The command line's field, history and Tab completion | `Msg::CommandLine(CommandLineMsg)` |
 | `SearchController` (`app/search.rs`) | The panel search bar: starting and closing a search, filtering the active panel as the user types, showing each panel's own query | `Msg::Search(SearchMsg)` |
 | `AddressBarController` (`app/address_bar.rs`) | Whether a location is being typed, and resolving typed text (also for `:open`, `:copy` and `:move`) | `Msg::Address(AddressMsg)` |
-| `FuzzyFindController` (`app/fuzzy_find.rs`) | The Fuzzy Find overlay: its open session, the `SearchWorker` running its searches, the latest results and the highlighted one. Never changes the workspace: opening a result is returned for `App` to carry out through `WorkspaceService` | `Msg::FuzzyFind(FuzzyMsg)` |
+| `FuzzyFindController` (`app/fuzzy_find.rs`) | The Fuzzy Find overlay: its open session, the `SearchWorker` running its searches, the chosen scope (kept until Seshat closes, F12), the latest results and the highlighted one. Never changes the workspace: opening or revealing a result, or opening a typed folder, is returned for `App` to carry out through `WorkspaceService` | `Msg::FuzzyFind(FuzzyMsg)` |
 | `EffectRunner` (`app/effects.rs`) | The I/O ports the workspace service's effects need (listing, watching, launching, saving), the watch guards, pending live reloads and the batched save | Results come back as `Msg::PanelLoaded`, `PanelChanged`, `ReloadPanel`, `SaveWorkspace` and `OpenFailed` |
 
 Rules:

@@ -1257,6 +1257,30 @@ fn open_path_through_another_branch_reactivates_it() {
 }
 
 #[test]
+fn open_path_ends_on_the_folder_asked_for_not_deeper() {
+    // Documents is on another branch whose remembered panel is Projects,
+    // below it. `l` would land there (C1); a search result is the folder
+    // itself, so the walk ends on Documents, with Projects kept.
+    let mut s = scenario();
+    let panels = s.ws.panel_count();
+    let opened =
+        s.ws.open_path(s.home, vec![loc("/home/u/Documents")])
+            .unwrap();
+    ok(&s.ws);
+    assert_eq!(opened.branch, s.docs_branch, "the branch comes back");
+    assert_eq!(s.ws.active_panel(), opened.panel);
+    assert_eq!(opened.active, opened.panel);
+    assert_eq!(s.ws.active_panel(), s.documents);
+    assert_eq!(s.ws.panel_count(), panels, "nothing removed or duplicated");
+    assert_eq!(
+        path_names(&s.ws, s.docs_branch),
+        ["/home/u", "/home/u/Documents", "/home/u/Documents/Projects"]
+    );
+    s.ws.go_back();
+    assert_eq!(s.ws.active_branch().id(), s.downloads_branch, "one Back");
+}
+
+#[test]
 fn open_path_is_one_step_back() {
     let mut s = scenario();
     let before = s.ws.active_panel();

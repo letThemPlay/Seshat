@@ -227,6 +227,12 @@ impl WorkspaceService {
             return; // not listed yet; wait for the next reload
         }
         listing.pending = None;
+        tracing::debug!(
+            panel = %panel,
+            location = ?pending.location,
+            select = pending.select,
+            "cursor placed"
+        );
         if let Some(state) = self.workspace.state_mut(panel) {
             state.cursor = Some(pending.location.clone());
             if pending.select {

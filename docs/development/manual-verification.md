@@ -96,6 +96,9 @@ In `~/seshat-verify`, with a few nested folders and files.
 - [ ] `Enter` on a folder opens it as panels along the path (one per level), reusing panels already open; `Alt+Left` goes back to where the search started in one step.
 - [ ] `Enter` on a file opens it in its default application, and the workspace doesn't change. (The automated UI test skips this step, since it would start the machine's own applications.)
 - [ ] A click highlights a result and a double-click opens it; typing continues in the search field after a click.
+- [ ] The drop-down, or `Alt+1`, `Alt+2`, `Alt+3`, switches between Current Directory, Current Branch and Entire Workspace; the line beside it names the folders searched. With Entire Workspace and several branches, each result shows the number of the branch it was found in, and the choice is kept the next time `Ctrl+P` is pressed.
+- [ ] `Alt+Enter` reveals a result: its folder opens (bringing back its branch if needed) with the cursor on the result, and a selection made earlier in that folder is kept.
+- [ ] Typing `~/` or `/` searches in that folder (the drop-down greys out); `~/Documents/` then `Enter` opens Documents; a folder that doesn't exist says so on the status line and `Enter` does nothing.
 - [ ] `Esc`, or clicking a panel, closes it and leaves the workspace as it was.
 - [ ] In Visual Mode (`v`), `Ctrl+P` does nothing and the status bar says "Fuzzy Find isn't available in Visual Mode; press Esc first."
 - [ ] Readable with the light, dark and a custom theme: the highlighted characters, the folder and file icons, and the highlighted row.

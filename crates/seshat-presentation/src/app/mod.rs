@@ -428,6 +428,7 @@ impl SimpleComponent for App {
             ui.fuzzy.clone(),
             init.search_walker.clone(),
             init.search_matcher.clone(),
+            init.home.clone(),
         );
         let mut model = App {
             home: init.home,
@@ -526,14 +527,20 @@ impl SimpleComponent for App {
                 }
                 self.focus_moved();
             }
-            Msg::FuzzyFind(msg) => match self.fuzzy.update(msg) {
-                FuzzyOutcome::Stay => {}
-                FuzzyOutcome::Open(result) => {
-                    self.service.open_result(&result);
+            Msg::FuzzyFind(msg) => {
+                let outcome = self.fuzzy.update(msg, &self.service);
+                let closed = outcome != FuzzyOutcome::Stay;
+                match outcome {
+                    FuzzyOutcome::Stay | FuzzyOutcome::Closed => {}
+                    FuzzyOutcome::Open(result) => self.service.open_result(&result),
+                    FuzzyOutcome::Reveal(result) => self.service.reveal_result(&result),
+                    FuzzyOutcome::OpenFolder(folder) => self.service.open_location(folder),
+                }
+                if closed {
+                    // The keyboard goes back to the files.
                     self.focus_active();
                 }
-                FuzzyOutcome::Closed => self.focus_active(),
-            },
+            }
             Msg::CommandLine(msg) => {
                 let outcome =
                     self.command_line
@@ -700,8 +707,7 @@ impl App {
 
     /// Ctrl+P: opens Fuzzy Find over the workspace, which stays as it is.
     pub(super) fn open_fuzzy_find(&mut self, sender: &ComponentSender<Self>) {
-        self.fuzzy
-            .open(&self.service, &mut notice_cx!(self, sender));
+        self.fuzzy.open(&self.service, sender);
     }
 
     /// A message for the theme controller, and what it asks for: saving

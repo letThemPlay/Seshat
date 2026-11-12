@@ -93,14 +93,17 @@ Opening goes through the workspace's own navigation ([ADR 0008](../decisions/000
 
 `Ctrl+P` (the `fuzzy-find` action, which gives way to a user binding of the same keys, B8) opens a compact panel over the workspace. It is refused in Visual Mode (F6). The workspace doesn't change while it is open (F12).
 
-- **Opening** works out the folders to search (`roots`), starts a `SearchWorker` and runs an empty query at once, so the folder is walked while the user starts typing.
+- **Opening** starts a `SearchWorker` and runs an empty query at once for the chosen scope, so its folders are walked while the user starts typing.
+- **Scopes** (§6): a drop-down offers Current Directory, Current Branch and Entire Workspace, also picked with `Alt+1`, `Alt+2` and `Alt+3` from the search field; the line beside it names the folders searched (`roots`). The choice lasts until Seshat closes and isn't saved (F12); the saved default comes with configuration. The drop-down never takes keyboard focus, so the window's key bindings can't act on the workspace while the overlay is open. With Entire Workspace, each result shows a badge with the number of the branch it was found in, as the branch bar numbers them (§6.3); a folder shared by several branches is searched once and its results carry the first of them.
 - **Typing** starts a new search for every change (the search field waits 50 ms); the previous search is superseded through its ticket, and results that arrive for it are dropped.
 - **The highlight** follows the result, not its position: when results update, the same result stays highlighted if it is still there, otherwise the best one.
-- **Keys** stay in the search field: `Up`, `Down`, `Page Up` and `Page Down` move the highlight, `Enter` opens, `Esc` closes, and `Ctrl+Backspace` deletes a word as in any text field. A click highlights and a double-click opens; keyboard focus returns to the search field.
+- **Keys** stay in the search field: `Up`, `Down`, `Page Up` and `Page Down` move the highlight, `Enter` opens, `Alt+Enter` reveals (F7), `Esc` closes, and `Ctrl+Backspace` deletes a word as in any text field. A click highlights and a double-click opens; keyboard focus returns to the search field.
+- **Reveal** (`Alt+Enter`, §9.4) returns the result for `WorkspaceService::reveal_result`: its folder opens along the path, bringing back its branch if needed, and the cursor moves to the result once listed; the selection is left alone (F9).
+- **A typed folder** (§6.4, F10): a query starting with `/`, `~/` or exactly `~` is read by `PathQuery` (application): the text up to the last `/` is the folder, with the address bar's rules (`parse_address`), and the rest is the pattern. The folder is searched as the `AbsolutePath` scope and the drop-down is greyed out. With nothing after the folder, `Enter` opens it as the address bar would (D3); a folder that doesn't exist or can't be read is reported on the status line and `Enter` does nothing. Results from a typed folder have no origin panel, so they open through `open_location` too (ADR 0008).
 - **Closing**, by `Esc`, by opening a result or by focus moving elsewhere, drops the worker, which cancels its search.
 - **Rows** show an icon and, for folders, a trailing `/`, so the kind is never shown by colour alone (§16). Matched characters are bold and underlined (`fuzzy_view::highlighted`, escaped Pango markup on character boundaries). The second line says which folder the result is in, or shows the path with its matches when only the path matched. The highlighted row has an accent bar as well as the selection colour. Screen readers hear "name, folder, in parent".
 - **The status line** says what the search is doing: "Type to search", "Searching…", "N results so far…", the result count or "No matches", folders that couldn't be read, and whether the walk stopped at its limit.
 
-## Still to build (Spec 4 Phases 3–4)
+## Still to build (Spec 4 Phase 4)
 
-The scope selector with Current Branch and Entire Workspace (branch badges), reveal with `Alt+Enter` (F7, F9), the absolute path form (F10), configuration (§15, F11), and operations on several results (§10, F13).
+Configuration (§15, F11) and timings with the overlay in a release build. Operations on several results (§10, F13) come in a later phase.
