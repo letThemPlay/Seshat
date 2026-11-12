@@ -5,7 +5,7 @@
 
 use gtk::prelude::*;
 
-use super::Cx;
+use seshat_application::workspace::WorkspaceService;
 
 #[derive(Debug)]
 pub enum SearchMsg {
@@ -42,21 +42,25 @@ impl SearchController {
         }
     }
 
-    pub(super) fn update(&mut self, msg: SearchMsg, cx: &mut Cx<'_>) -> SearchOutcome {
+    pub(super) fn update(
+        &mut self,
+        msg: SearchMsg,
+        service: &mut WorkspaceService,
+    ) -> SearchOutcome {
         match msg {
             SearchMsg::Changed(query) => {
                 if self.echo.take().as_deref() != Some(query.as_str()) {
-                    let active = cx.service.active_panel();
-                    cx.service.set_query(active, &query);
+                    let active = service.active_panel();
+                    service.set_query(active, &query);
                 }
             }
             SearchMsg::Close => {
                 self.close();
             }
             SearchMsg::FocusResults => {
-                let active = cx.service.active_panel();
-                if cx.service.state(active).is_some_and(|s| s.cursor.is_none()) {
-                    cx.service.cursor_to_first(active);
+                let active = service.active_panel();
+                if service.state(active).is_some_and(|s| s.cursor.is_none()) {
+                    service.cursor_to_first(active);
                 }
                 return SearchOutcome::FocusFiles;
             }

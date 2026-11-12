@@ -8,10 +8,20 @@ use seshat_application::ports::{DirectoryWatcher, ThemeRepository, WatchGuard};
 use seshat_application::preferences::ThemeChoice;
 use seshat_domain::entities::Location;
 
-use super::{App, Cx, Msg, RELOAD_DEBOUNCE};
+use super::{App, Msg, NoticeCx, RELOAD_DEBOUNCE};
 use crate::actions;
 use crate::notice::{self, Notice};
 use crate::theme::{Theme, ThemeRegistry, render_css};
+
+/// What the window must do after a theme message.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum ThemeOutcome {
+    Stay,
+    /// The chosen theme changed: save the preferences.
+    SavePreferences,
+    /// Open the themes folder (decision D3).
+    Open(Location),
+}
 
 #[derive(Debug)]
 pub enum ThemeMsg {
@@ -59,19 +69,19 @@ impl ThemeController {
 
     /// Loads the custom themes, starts watching their folder and applies
     /// the chosen theme.
-    pub(super) fn start(&mut self, watcher: &dyn DirectoryWatcher, cx: &mut Cx<'_>) {
+    pub(super) fn start(&mut self, watcher: &dyn DirectoryWatcher, cx: &mut NoticeCx<'_>) {
         self.load(cx);
         self.watch_folder(watcher, cx.sender);
         self.apply(cx);
     }
 
-    /// Handles `msg`. Returns whether the preferences must be saved.
-    pub(super) fn update(&mut self, msg: ThemeMsg, cx: &mut Cx<'_>) -> bool {
+    /// Handles `msg`, and says what the window must do next.
+    pub(super) fn update(&mut self, msg: ThemeMsg, cx: &mut NoticeCx<'_>) -> ThemeOutcome {
         match msg {
             ThemeMsg::Set(choice) => {
                 self.choice = choice;
                 self.apply(cx);
-                return true;
+                return ThemeOutcome::SavePreferences;
             }
             ThemeMsg::Reload => {
                 self.reload_pending = false;
@@ -87,7 +97,7 @@ impl ThemeController {
             }
             ThemeMsg::FilesChanged => {}
             ThemeMsg::OpenFolder => match self.repository.ensure_directory() {
-                Ok(directory) => cx.service.open_location(Location::Path(directory)),
+                Ok(directory) => return ThemeOutcome::Open(Location::Path(directory)),
                 Err(err) => {
                     *cx.notice = Some(notice::themes_folder_failed(&err));
                 }
@@ -98,10 +108,10 @@ impl ThemeController {
                 }
             }
         }
-        false
+        ThemeOutcome::Stay
     }
 
-    fn load(&mut self, cx: &mut Cx<'_>) {
+    fn load(&mut self, cx: &mut NoticeCx<'_>) {
         self.registry = ThemeRegistry::from_sources(self.repository.load_all());
         self.menu_button
             .set_menu_model(Some(&actions::theme_menu(&self.registry)));
@@ -132,7 +142,7 @@ impl ThemeController {
             .ok();
     }
 
-    fn apply(&mut self, cx: &mut Cx<'_>) {
+    fn apply(&mut self, cx: &mut NoticeCx<'_>) {
         let (theme, notice) = pick(&self.registry, &self.choice, system_prefers_dark());
         if notice.is_some() {
             *cx.notice = notice;

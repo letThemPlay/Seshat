@@ -15,7 +15,7 @@ use seshat_application::operations::{
 use seshat_domain::entities::Location;
 use seshat_domain::operation::{OperationId, OperationKind};
 
-use super::{App, Cx, Msg};
+use super::{App, Msg, NoticeCx};
 use crate::conflicts::{ConflictRequest, UiConflictResolver};
 use crate::dialogs;
 use crate::notice::{self, count};
@@ -78,7 +78,7 @@ impl OperationsController {
         self.manager.submit(request)
     }
 
-    pub(super) fn update(&mut self, msg: OperationsMsg, cx: &mut Cx<'_>) {
+    pub(super) fn update(&mut self, msg: OperationsMsg, cx: &mut NoticeCx<'_>) {
         match msg {
             OperationsMsg::Event(event) => self.event(event, cx),
             OperationsMsg::Cancel(id) => {
@@ -102,7 +102,7 @@ impl OperationsController {
         }
     }
 
-    fn event(&mut self, event: OperationEvent, cx: &mut Cx<'_>) {
+    fn event(&mut self, event: OperationEvent, cx: &mut NoticeCx<'_>) {
         self.panel.apply(&event);
         let op = &event.operation;
         if !op.is_finished() {
