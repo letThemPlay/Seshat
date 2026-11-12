@@ -22,6 +22,7 @@ scripts/ui-session.sh scripts/ui/workspace.sh [artifact-dir]         # spatial w
 | Infrastructure | `crates/seshat-infrastructure/tests` | real temp directories: listing, watcher events, the manager with `LocalFileSystem` (permissions, mtime, symlinks, no-replace rename, permission errors, cancelling large copies); **D-Bus** on a private `dbus-daemon`: discovery, snapshots, ordered signals without gaps, cancellation, structured errors, queueing, client reconnects, name release and no hijacking |
 | IPC consumer | `crates/seshat-progress/tests` | runs the example client binary against the real service on a private bus: discovery, completion, service stop and restart |
 | Presentation | unit tests | theme rendering and validation, clipboard parsing, action rules, progress text |
+| `FileSystem` contract | `operations::conformance` (application, `test-support` feature) | one set of checks for every promise the `FileSystem` port makes (metadata without following links, no-replace creates, copies and renames, progress and cancellation, links copied and removed as links, `canonicalize`), run against **both** `MemoryFs` (`memory_fs_meets_the_filesystem_contract`) and `LocalFileSystem` in temporary folders (`tests/filesystem_conformance.rs`), so the in-memory tests can be trusted. Not the Trash methods or `available_space` |
 
 The tests never touch the real Trash (GIO would use the session's). Trash behaviour is covered by `MemoryFs` and by the UI test.
 

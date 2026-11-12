@@ -12,5 +12,11 @@ seshat-domain.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
+[features]
+# Shared test code for other crates' tests, such as the FileSystem
+# conformance checks (`operations::conformance`). Never enabled in a build
+# of the application, only as a dev-dependency.
+test-support = []
+
 [lints]
 workspace = true
