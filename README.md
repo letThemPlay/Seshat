@@ -5,11 +5,15 @@
 
 A native Wayland file explorer for Linux, written in Rust with GTK4 and Relm4: a spatial, keyboard-first workspace of persistent folder panels and branches.
 
-> **Status:** 0.1.0. All six phases of the [original specification](docs/specifications/0-INITIAL-PRODUCT-SPEC.md) and of the [spatial file manager](docs/specifications/1-SPATIAL-FILE-MANAGER.md) are implemented. See [implementation status](docs/implementation/STATUS.md) and the [Definition of Done](docs/definition-of-done.md) for what is verified and what still needs manual checks.
+> **Status:** 0.1.0. All six phases of the [original specification](docs/specifications/0-INITIAL-PRODUCT-SPEC.md) and of the [spatial file manager](docs/specifications/1-SPATIAL-FILE-MANAGER.md) are implemented, with [context-aware navigation](docs/specifications/2-CONTEXT-AWARE-NAVIGATION.md), [backward branch pruning](docs/specifications/3-BACKWARD-BRANCH-PRUNING.md) and [Fuzzy Find](docs/specifications/4-FUZZY-FIND.md) (all but operations on several results at once). See [implementation status](docs/implementation/STATUS.md) and the [Definition of Done](docs/definition-of-done.md) for what is verified and what still needs manual checks.
 
 ## The workspace
 
 Opening a folder adds a **panel** to the right instead of replacing the view. Panels keep their cursor, scroll position, sort order, view, search and selection while you move around. Opening a different folder from a panel that already has a child starts a new **branch**. Branches coexist side by side: each row is a branch, a shared folder spans the rows of its branches, and connectors link folders to their subfolders. The active branch gets the space; the others are compact cards you can click. **Focus Mode** (`zz`) expands the active panel without closing anything; navigation keeps working. The workspace is restored when Seshat starts.
+
+## Fuzzy Find
+
+`Ctrl+P` opens a search over the workspace that finds files and folders as you type, fzf-style: `prj` finds `Projects`. Pick where it looks with the drop-down or `Alt+1`, `Alt+2`, `Alt+3`: the current folder, the current branch or every branch (results then show their branch number). Start the search with `/` or `~/` to look inside a folder you type. `Enter` opens a result: a folder opens as panels along the path, reusing those already open, and one Back returns; a file opens in its application. `Alt+Enter` shows a result in its folder with the cursor on it. `Esc` closes without changing anything. The `[fuzzy_find]` settings choose the starting scope, hidden files, ignored names (`.git` and `node_modules` by default), the number of results and letter case. See [search.md](docs/architecture/search.md).
 
 Keys follow Vim. `:help` lists every key and command. Bindings can be changed in `~/.config/seshat/settings.toml`; [docs/examples/settings.toml](docs/examples/settings.toml) lists every setting and every configurable key binding with its default. For example:
 
@@ -35,6 +39,9 @@ restore = true
 | `v` / `V` / `Esc` | Visual Mode: toggle item / range / leave (selection kept); `Esc` again clears the selection |
 | `y` / `x` / `p` | Copy / cut the selection (from any panels) / paste into this panel |
 | `zz` | Focus Mode |
+| `db` / `dB` | Remove the active panel from the end of its branch / remove back to where the branch meets another (no files are touched) |
+| `u` | Undo the last removal of panels (not file operations) |
+| Ctrl+P | Fuzzy Find: search for files and folders (`Alt+Enter` in it: show in folder) |
 | `/` | Search this panel |
 | `:` | Command line: `:copy`, `:move [path \| bN]`, `:delete`, `:rename`, `:mkdir`, `:touch`, `:sort`, `:view`, `:hidden`, `:branch [N \| next \| prev \| close]`, `:focus`, `:open`, `:help`. Tab completes commands, folders and `bN`; Tab / Shift+Tab again cycles through matches |
 | Alt+Left / Alt+Right, Ctrl+O / Ctrl+I, mouse back/forward | Back / Forward (previously active panels) |
@@ -75,7 +82,7 @@ Other distributions need Rust ≥ 1.93, `pkg-config`, GTK ≥ 4.20 and GLib ≥ 
 ## Checks
 
 ```sh
-scripts/check.sh --ui                # everything below, plus the UI end-to-end test
+scripts/check.sh --ui                # everything below, plus the three UI end-to-end tests
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --workspace
@@ -88,12 +95,13 @@ cargo run -p seshat -- --check-backend
 
 ## Documentation
 
-- Specifications: [original](docs/specifications/0-INITIAL-PRODUCT-SPEC.md), [spatial file manager](docs/specifications/1-SPATIAL-FILE-MANAGER.md), [context-aware navigation](docs/specifications/2-CONTEXT-AWARE-NAVIGATION.md)
+- Specifications: [original](docs/specifications/0-INITIAL-PRODUCT-SPEC.md), [spatial file manager](docs/specifications/1-SPATIAL-FILE-MANAGER.md), [context-aware navigation](docs/specifications/2-CONTEXT-AWARE-NAVIGATION.md), [backward branch pruning](docs/specifications/3-BACKWARD-BRANCH-PRUNING.md), [Fuzzy Find](docs/specifications/4-FUZZY-FIND.md)
 - [Implementation status](docs/implementation/STATUS.md) and [roadmap](docs/implementation/ROADMAP.md)
 - [Architecture](docs/architecture/ARCHITECTURE.md), [decisions](docs/architecture/DECISIONS.md), [Linux and Wayland](docs/architecture/LINUX-WAYLAND.md)
 - [Architecture overview](docs/architecture/overview.md)
 - [Filesystem integration](docs/architecture/filesystem.md)
 - [File operations](docs/architecture/operations.md)
+- [Fuzzy Find](docs/architecture/search.md)
 - [D-Bus protocol](docs/ipc/protocol.md)
 - [Wayland verification](docs/development/wayland-verification.md) and the [manual verification checklist](docs/development/manual-verification.md)
 - [Writing themes](docs/development/themes.md)
@@ -103,7 +111,7 @@ cargo run -p seshat -- --check-backend
 - [Packaging](docs/packaging.md)
 - [Definition of Done](docs/definition-of-done.md)
 - Reviews: [security](docs/review/security.md), [performance](docs/review/performance.md), [architecture](docs/review/architecture.md)
-- ADRs: [0001 UI framework](docs/decisions/0001-ui-framework.md), [0002 IPC](docs/decisions/0002-ipc.md), [0003 packaging](docs/decisions/0003-packaging.md), [0004 spatial workspace](docs/decisions/0004-spatial-workspace.md), [0005 branch layout](docs/decisions/0005-branch-layout.md), [0006 context-aware navigation](docs/decisions/0006-context-aware-navigation.md)
+- ADRs: [0001 UI framework](docs/decisions/0001-ui-framework.md), [0002 IPC](docs/decisions/0002-ipc.md), [0003 packaging](docs/decisions/0003-packaging.md), [0004 spatial workspace](docs/decisions/0004-spatial-workspace.md), [0005 branch layout](docs/decisions/0005-branch-layout.md), [0006 context-aware navigation](docs/decisions/0006-context-aware-navigation.md), [0007 backward branch pruning](docs/decisions/0007-backward-branch-pruning.md), [0008 opening search results](docs/decisions/0008-opening-search-results.md)
 - [Changelog](CHANGELOG.md)
 
 ## Layout

@@ -101,4 +101,17 @@ On 2026-11-09 it was decided to document both and revisit them only if they beco
 | Walk and rank all entries | 85 ms | — |
 | A new query on the cached entries | 32 ms | — |
 
-These are engine timings without a UI; the overlay will run the engine on a worker thread.
+These are engine timings without a UI.
+
+## Fuzzy Find with the overlay (2026-11-12)
+
+`SESHAT_RELEASE=1 SESHAT_STALL_MONITOR=1 scripts/ui-session.sh scripts/ui/fuzzy-perf.sh`: the engine runs on its own worker thread, and times run from starting a search to its results being on screen.
+
+| Step | Time | Target (Spec 4 §11) |
+|---|---|---|
+| Small folder (200 files): results on screen | 2.0 ms median, 2.6 ms max | about 100 ms ✅ |
+| 100,100 entries: the walk when the overlay opens | 31 ms | — |
+| 100,100 entries: a query ranked and shown | 24–42 ms | — |
+| Main-loop stalls over 100 ms | none | the interface stays responsive ✅ |
+
+Details, conditions and memory use are in [search.md](../architecture/search.md#with-the-overlay-release-build-2026-11-12).
