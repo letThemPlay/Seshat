@@ -19,7 +19,7 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
        ▼         ▼         ▼                     ▼
  presentation   App (shell): KeyRouter (mode machine) → WorkspaceService calls
                 │   renders WorkspaceView ─ PanelView (stateless) ─ FileView
-                │   carries out Effects: Load / Watch / Unwatch / Launch / Persist
+                │   EffectRunner carries out Effects: Load / Watch / Unwatch / Launch / Persist
                 ▼
  application    WorkspaceService ── listings (LRU 16) ── selection / targets ── undo (prunes, session only)
                 │   TransferPlan ──► OperationRequest ──► OperationManager (unchanged) ──► D-Bus (unchanged)
@@ -64,6 +64,7 @@ The window (`seshat-presentation/src/app/`) is a Relm4 component, `App`, that co
 | `DeviceController` (`app/devices.rs`) | The device list, mounting and ejecting | `Msg::Device(DeviceMsg)` |
 | `OperationsController` (`app/operations.rs`) | The operations panel, conflict dialogs, staying alive while hidden; observes the `OperationManager` | `Msg::Operations(OperationsMsg)` |
 | `CommandLineController` (`app/command_line.rs`) | The command line's field, history and Tab completion | `Msg::CommandLine(CommandLineMsg)` |
+| `EffectRunner` (`app/effects.rs`) | The I/O ports the workspace service's effects need (listing, watching, launching, saving), the watch guards, pending live reloads and the batched save | Results come back as `Msg::PanelLoaded`, `PanelChanged`, `ReloadPanel`, `SaveWorkspace` and `OpenFailed` |
 
 Rules:
 

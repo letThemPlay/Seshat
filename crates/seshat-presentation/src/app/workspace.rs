@@ -1,16 +1,16 @@
 //! The shell around the workspace service: carrying out its effects,
 //! rendering it, and routing panel and branch events into it.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use gtk::prelude::*;
 use relm4::{ComponentController, ComponentSender};
 use seshat_application::ports::DirectoryChange;
-use seshat_application::workspace::Effect;
 use seshat_domain::entities::Location;
 use seshat_domain::workspace::{BranchId, PanelId, ScrollAnchor};
 
-use super::{App, ListingResult, MAX_RELOAD_DEBOUNCE, Msg, RELOAD_DEBOUNCE, SAVE_DELAY};
+use super::effects::reload_delay;
+use super::{App, Msg};
 use crate::files::FileViewEvent;
 use crate::notice::{self, Notice};
 use crate::panel_view::PanelEvent;
@@ -71,96 +71,18 @@ impl App {
         }
     }
 
+    /// Hands the service's pending effects to the runner.
     pub(super) fn run_effects(&mut self, sender: &ComponentSender<Self>) {
-        for effect in self.service.take_effects() {
-            match effect {
-                Effect::Load {
-                    panel,
-                    location,
-                    generation,
-                } => {
-                    tracing::debug!(%panel, "listing requested");
-                    let use_case = self.list_directory.clone();
-                    let sender = sender.clone();
-                    relm4::spawn_local(async move {
-                        let result = use_case.execute(&location).await;
-                        sender.input_sender().emit(Msg::PanelLoaded {
-                            panel,
-                            generation,
-                            result: ListingResult(result),
-                        });
-                    });
-                }
-                Effect::Watch {
-                    panel,
-                    location,
-                    generation,
-                } => {
-                    let watch_sender = sender.clone();
-                    match self.directory_watcher.watch(
-                        &location,
-                        Box::new(move |change| {
-                            watch_sender.input_sender().emit(Msg::PanelChanged {
-                                panel,
-                                generation,
-                                change,
-                            })
-                        }),
-                    ) {
-                        Ok(guard) => {
-                            self.watches.insert(panel, guard);
-                        }
-                        Err(err) => {
-                            self.watches.remove(&panel);
-                            tracing::debug!(%panel, error = %err, "cannot watch; no live updates");
-                        }
-                    }
-                }
-                Effect::Unwatch { panel } => {
-                    self.watches.remove(&panel);
-                }
-                Effect::Launch(files) => self.launch(files),
-                Effect::Persist => self.schedule_save(sender),
-            }
-        }
+        let effects = self.service.take_effects();
+        self.effects.run(effects, sender);
     }
 
-    pub(super) fn launch(&mut self, files: Vec<Location>) {
-        for location in files {
-            let launcher = self.launcher.clone();
-            let sender = self.ui.input.clone();
-            relm4::spawn_local(async move {
-                if let Err(err) = launcher.open(&location).await {
-                    sender.emit(Msg::OpenFailed(err));
-                }
-            });
-        }
-    }
-
-    fn schedule_save(&mut self, sender: &ComponentSender<Self>) {
-        if self.save_pending {
-            return;
-        }
-        self.save_pending = true;
-        let sender = sender.clone();
-        gtk::glib::timeout_add_local_once(SAVE_DELAY, move || {
-            sender.input_sender().emit(Msg::SaveWorkspace);
-        });
-    }
-
+    /// Saves the workspace now, with every shown panel's scroll position.
     pub(super) fn save_workspace(&mut self) {
         for (panel, offset) in self.ui.workspace.scroll_offsets() {
             self.remember_scroll(panel, offset);
         }
-        let started = Instant::now();
-        match self.workspace_store.save(self.service.workspace()) {
-            Ok(()) => tracing::debug!(
-                elapsed_us = started.elapsed().as_micros() as u64,
-                panels = self.service.workspace().panel_count(),
-                "workspace saved"
-            ),
-            Err(err) => tracing::warn!(error = %err, "workspace not saved"),
-        }
+        self.effects.save(self.service.workspace());
     }
 
     /// Records a panel's scroll offset, anchored to its cursor (or first
@@ -331,26 +253,16 @@ impl App {
         if change == DirectoryChange::Removed && self.service.active_panel() == panel {
             self.notice = Some(notice::folder_removed());
         }
-        if reload && self.reload_pending.insert(panel) {
-            let sender = sender.clone();
-            gtk::glib::timeout_add_local_once(self.reload_delay(), move || {
-                sender
-                    .input_sender()
-                    .emit(Msg::ReloadPanel { panel, generation });
-            });
+        if reload {
+            // Large folders wait longer, so constant changes can't keep the
+            // UI busy.
+            let entries = self
+                .service
+                .listing(self.service.active_panel())
+                .map_or(0, |l| l.total());
+            self.effects
+                .schedule_reload(panel, generation, reload_delay(entries), sender);
         }
-    }
-
-    /// Live-reload debounce: at least [`RELOAD_DEBOUNCE`], longer for very
-    /// large folders so a constantly changing one cannot keep the UI busy.
-    fn reload_delay(&self) -> Duration {
-        let largest = self
-            .service
-            .listing(self.service.active_panel())
-            .map_or(0, |l| l.total());
-        // About 3 ms per thousand entries rebuilt, times three.
-        let estimate = Duration::from_micros(largest as u64 * 9);
-        estimate.clamp(RELOAD_DEBOUNCE, MAX_RELOAD_DEBOUNCE)
     }
 
     /// Closes `branch`, or the active branch. Files are never touched, and
@@ -360,7 +272,7 @@ impl App {
         match self.service.close_branch(branch) {
             Ok(removed) => {
                 for panel in removed {
-                    self.reload_pending.remove(&panel);
+                    self.effects.reload_done(panel);
                 }
                 self.focused_panel = None;
             }
