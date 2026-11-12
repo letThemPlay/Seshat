@@ -77,6 +77,18 @@ Highlights are byte ranges of whole graphemes in the displayed name, or in the r
 | Walk and rank 100,100 entries | 85 ms |
 | A new query on the cached entries | 32 ms |
 
+## Running in the background (§11)
+
+`SearchWorker` runs one session's searches on a thread of its own (`seshat-search`), owning that session's `SearchEngine` and its cache. It keeps at most one search waiting: a newer submission replaces one that hasn't started, and the caller cancels the running one through its ticket. Updates (`SearchEvent::Results`, then `SearchEvent::Finished`) go to a listener on the worker thread; the caller drops those its `SearchSessions` no longer accepts. Dropping the worker cancels its searches without waiting for the thread, so a walk stuck on a slow mount can't hold up closing Fuzzy Find or quitting. A panic in a search ends it as failed instead of taking the app down.
+
+## Opening results (§9)
+
+Opening goes through the workspace's own navigation ([ADR 0008](../decisions/0008-opening-search-results.md)), in `WorkspaceService` (`workspace/service/found.rs`):
+
+- `open_result`: a folder (or a link to one) is opened along the path from the panel that was searched, reusing existing panels (F5); a file is launched and the workspace is left as it is.
+- `reveal_result`: opens the folder the result is in, the same way, and moves the cursor to the result without changing the selection (F9).
+- Without a usable origin panel, both use the address bar's rule (D3).
+
 ## Still to build (Spec 4 Phases 2–4)
 
-The overlay and its key binding, running the engine on a worker thread, opening and revealing results through `WorkspaceService`, the Visual Mode decision of §4.1, configuration (§15), and operations on results (§10).
+The overlay and its key binding (F6, F7, F12), the scope selector and the absolute path form (F10), configuration (§15, F11), and operations on several results (§10, F13).

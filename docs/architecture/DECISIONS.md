@@ -11,6 +11,7 @@ Full ADRs live in [`docs/decisions/`](../decisions):
 | [0005](../decisions/0005-branch-layout.md) | Branches side by side with connectors |
 | [0006](../decisions/0006-context-aware-navigation.md) | Context-aware navigation: continue, reactivate or create |
 | [0007](../decisions/0007-backward-branch-pruning.md) | Backward branch pruning (`db`, `dB`) and workspace undo |
+| [0008](../decisions/0008-opening-search-results.md) | Opening Fuzzy Find results in the workspace |
 
 ## Spatial file manager: product decisions (approved 2026-11-09)
 
@@ -134,6 +135,22 @@ From the design review (R1): the rules for file actions moved from the window to
 | F2 | "Current Branch" scope | The active branch's root folder, searched recursively. Every panel of a branch lies inside it. Bounded by `max_entries`, `same_device` and cancellation. Approved 2026-11-11. |
 | F3 | Ignore rules | Exact names (`.git` and `node_modules` by default) until configuration (Spec 4 Phase 4), so no glob dependency is added yet. |
 | F4 | Query syntax and case | Queries are plain text: fzf's operators (`^`, `$`, `'`, `!`) are not interpreted, so a name with those characters is found as typed. Matching ignores case by default (Spec 4 §4.3); `Smart` and `Sensitive` are ready for the setting in §15. |
+
+## Fuzzy Find integration decisions (approved 2026-11-12)
+
+[ADR 0008](../decisions/0008-opening-search-results.md) and the [specification](../specifications/4-FUZZY-FIND.md). F5–F8 were chosen by the maintainer; F9–F13 were proposed in the plan and approved with it.
+
+| # | Topic | Decision |
+|---|---|---|
+| F5 | Opening a folder result (§9.1) | Along the path from the panel that was searched (the result's origin), one folder at a time with the existing continue / reactivate / new-branch rules: existing panels are reused, at most one branch is created, and it is one Back/Forward step (`Workspace::open_path`). |
+| F6 | Visual Mode (§4.1) | Fuzzy Find is unavailable in Visual Mode: the shortcut does nothing and the status bar says why (as for pruning, B6). The selection is never touched. |
+| F7 | Reveal key (§8, §9.4) | Alt+Enter. The suggested Ctrl+O already means Back (D2) and keeps that meaning everywhere. |
+| F8 | Open in a new branch (§9.3) | Not supported for now. It is optional in the spec; forcing a branch from the last panel of a branch would break the rule that every branch ends in a panel with no children, and Enter already starts a new branch wherever continuing would replace a path. |
+| F9 | What Reveal selects (§9.4) | Reveal moves the cursor to the result and leaves the panel's selection as it is, so an earlier selection is never silently replaced. |
+| F10 | Absolute path (§6.4) | A query starting with `/` or `~` is a path: its folder part is the `AbsolutePath` scope and the rest the pattern; Enter with no pattern opens the folder. Such results, and results whose origin panel is gone, open like the address bar (D3, C5). |
+| F11 | Configuration (§15) | Now: the shortcut (`fuzzy-find` in `[keybindings]`), default scope, hidden files, ignored names (exact, F3), maximum results, case. Deferred and recorded as open: following symbolic links (stays off) and preview visibility (there is no preview). |
+| F12 | Overlay lifetime | Closes on Esc or when it loses focus; the workspace doesn't change until a result is opened. The scope chosen in the overlay lasts for the app session and isn't saved; the saved default comes from settings. |
+| F13 | Operations on results (§10) | Several results at once: a later phase, as §10 allows. A single result reaches every file action through Reveal and the usual actions. |
 
 ## Status messages (approved 2026-11-11)
 

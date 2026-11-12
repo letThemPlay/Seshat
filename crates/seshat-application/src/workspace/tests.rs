@@ -8,6 +8,7 @@ use std::time::Duration;
 use seshat_domain::Direction;
 use seshat_domain::entities::{EntryKind, FileEntry, Location};
 use seshat_domain::operation::OperationStatus;
+use seshat_domain::search::SearchResult;
 use seshat_domain::view::{SortKey, ViewMode};
 use seshat_domain::workspace::{PanelId, PanelState, ScrollAnchor, Unavailability};
 
@@ -1126,4 +1127,140 @@ fn prune_keeps_l_h_and_branch_switching_working() {
     s.service.cycle_branch(Direction::Next);
     assert_eq!(s.service.workspace().active_path()[0], home);
     assert_eq!(s.service.workspace().branch_count(), 2);
+}
+
+// ── Fuzzy Find results (Spec 4 §9, decisions F5 and F9) ─────────────────
+
+fn found(path: &str, dir: bool, origin: Option<(&Shell, PanelId)>) -> SearchResult {
+    use seshat_domain::search::{SearchMatch, SearchOrigin};
+    let name = path.rsplit('/').next().unwrap().to_owned();
+    SearchResult {
+        location: loc(path),
+        kind: if dir {
+            EntryKind::Directory
+        } else {
+            EntryKind::File
+        },
+        relative_path: name.clone(),
+        name,
+        origin: origin.map(|(s, panel)| SearchOrigin {
+            branch: *s
+                .service
+                .workspace()
+                .branches_through(panel)
+                .first()
+                .unwrap(),
+            panel,
+        }),
+        score: 1,
+        name_match: SearchMatch::default(),
+        path_match: SearchMatch::default(),
+    }
+}
+
+#[test]
+fn a_folder_result_opens_along_the_path_from_its_origin() {
+    let mut s = Shell::new();
+    let home = s.active();
+    let result = found("/h/Documents/Projects", true, Some((&s, home)));
+    s.service.open_result(&result);
+    s.run();
+    let ws = s.service.workspace();
+    ws.check_invariants().unwrap();
+    assert_eq!(s.service.active_location(), &loc("/h/Documents/Projects"));
+    assert_eq!(ws.panel_count(), 3, "Home, Documents, Projects");
+    assert_eq!(ws.branch_count(), 1, "the branch continued");
+    assert!(ws.can_go_back());
+    s.service.go_back();
+    assert_eq!(s.service.active_panel(), home, "one step back");
+}
+
+#[test]
+fn a_folder_result_reuses_open_panels_and_branches() {
+    let (mut s, [home, documents, projects, _]) = scenario();
+    let panels = s.service.workspace().panel_count();
+    let branches = s.service.workspace().branch_count();
+    let result = found("/h/Documents/Projects", true, Some((&s, home)));
+    s.service.open_result(&result);
+    s.run();
+    let ws = s.service.workspace();
+    ws.check_invariants().unwrap();
+    assert_eq!(ws.panel_count(), panels, "no duplicate panels");
+    assert_eq!(ws.branch_count(), branches, "no duplicate branches");
+    assert_eq!(s.service.active_panel(), projects);
+    assert_eq!(
+        ws.panel(documents).unwrap().state.cursor,
+        Some(loc("/h/Documents/Projects"))
+    );
+}
+
+#[test]
+fn a_file_result_is_launched_and_the_workspace_is_untouched() {
+    let (mut s, [home, ..]) = scenario();
+    let before = s.service.workspace().clone();
+    let result = found("/h/Documents/a.txt", false, Some((&s, home)));
+    s.service.open_result(&result);
+    assert_eq!(
+        s.service.take_effects(),
+        [Effect::Launch(vec![loc("/h/Documents/a.txt")])]
+    );
+    assert_eq!(s.service.workspace(), &before);
+}
+
+#[test]
+fn revealing_a_result_moves_the_cursor_and_keeps_the_selection() {
+    let (mut s, [home, documents, ..]) = scenario();
+    s.service
+        .set_selection(documents, vec![loc("/h/Documents/b.txt")]);
+    let result = found("/h/Documents/a.txt", false, Some((&s, home)));
+    s.service.reveal_result(&result);
+    s.run();
+    assert_eq!(s.service.active_panel(), documents);
+    let state = s.service.state(documents).unwrap();
+    assert_eq!(state.cursor, Some(loc("/h/Documents/a.txt")));
+    assert_eq!(
+        state.selection.items(),
+        [loc("/h/Documents/b.txt")],
+        "the earlier selection is kept (F9)"
+    );
+}
+
+#[test]
+fn revealing_a_result_in_the_searched_folder_activates_that_panel() {
+    let (mut s, [home, ..]) = scenario();
+    let panels = s.service.workspace().panel_count();
+    let result = found("/h/notes.txt", false, Some((&s, home)));
+    s.service.reveal_result(&result);
+    s.run();
+    assert_eq!(s.service.active_panel(), home);
+    assert_eq!(s.service.workspace().panel_count(), panels);
+    assert_eq!(
+        s.service.state(home).unwrap().cursor,
+        Some(loc("/h/notes.txt"))
+    );
+}
+
+#[test]
+fn results_without_a_usable_origin_open_like_a_typed_location() {
+    // No origin (a typed absolute path), a panel closed meanwhile, or a
+    // panel the result isn't below: the address bar's rule (D3).
+    for origin in [None, Some(PanelId::from_raw(999))] {
+        let mut s = Shell::new();
+        let result = SearchResult {
+            origin: origin.map(|panel| seshat_domain::search::SearchOrigin {
+                branch: s.service.workspace().active_branch().id(),
+                panel,
+            }),
+            ..found("/h/Downloads", true, None)
+        };
+        s.service.open_result(&result);
+        s.run();
+        s.service.workspace().check_invariants().unwrap();
+        assert_eq!(s.service.active_location(), &loc("/h/Downloads"));
+        assert_eq!(
+            s.service.workspace().branch_count(),
+            2,
+            "a new root branch, as from the address bar"
+        );
+    }
 }

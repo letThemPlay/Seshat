@@ -208,6 +208,66 @@ impl Workspace {
         Ok(Opened::created(child, branch, new_branch, refreshed))
     }
 
+    /// Opens a folder several levels below panel `from`, one folder at a
+    /// time: `steps` lists each folder on the way, the last being the one
+    /// wanted (decision F5, used by Fuzzy Find). Each step follows
+    /// [`Self::open_directory`], so existing panels are reused (continuing
+    /// the active branch or reactivating another) and a new branch is
+    /// started only where continuing would replace a path. Each parent's
+    /// cursor is left on the folder opened below it, as if the user had
+    /// pressed `l` at every level.
+    ///
+    /// The whole walk is one step of the jump list (D2): Back returns to
+    /// the panel that was active before. With no `steps`, `from` itself
+    /// is activated. Returns how the last step was resolved, with the
+    /// `refreshed` panels of every step.
+    pub fn open_path(
+        &mut self,
+        from: PanelId,
+        steps: Vec<Location>,
+    ) -> Result<Opened, WorkspaceError> {
+        if !self.panels.contains_key(&from) {
+            return Err(WorkspaceError::UnknownPanel(from));
+        }
+        let before = self.active_panel();
+        let jumps = self.jumps.clone();
+        let mut parent = from;
+        let mut opened = None;
+        let mut refreshed = Vec::new();
+        for step in steps {
+            if let Some(state) = self.state_mut(parent) {
+                state.cursor = Some(step.clone());
+            }
+            let next = self.open_directory(parent, step, None, None)?;
+            refreshed.extend(next.refreshed.iter().copied());
+            parent = next.panel;
+            opened = Some(next);
+        }
+        let mut opened = match opened {
+            Some(opened) => opened,
+            None => {
+                self.activate_panel(from)?;
+                let branch = self.active;
+                Opened::existing(
+                    from,
+                    from,
+                    branch,
+                    Resolution::ContinueActiveBranch,
+                    Vec::new(),
+                )
+            }
+        };
+        // One jump for the whole walk, not one per folder.
+        self.jumps = jumps;
+        if self.active_panel() != before {
+            self.jumps.record(before);
+        }
+        refreshed.sort();
+        refreshed.dedup();
+        opened.refreshed = refreshed;
+        Ok(opened)
+    }
+
     /// Opens `location` from outside the tree (sidebar, address bar,
     /// devices). In order: the active branch's panel for it; an existing
     /// root panel for it, whose branch comes back where it was left

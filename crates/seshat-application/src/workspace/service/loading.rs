@@ -10,7 +10,7 @@ use seshat_domain::workspace::{PanelId, Unavailability};
 use super::{Effect, WorkspaceService};
 use crate::ports::{DirectoryChange, ListingError};
 use crate::view::arrange;
-use crate::workspace::listing::Content;
+use crate::workspace::listing::{Content, PendingCursor};
 
 impl WorkspaceService {
     /// The panels the presentation renders. They are loaded if needed and
@@ -130,11 +130,24 @@ impl WorkspaceService {
         panels.len()
     }
 
-    /// Selects `location` in `panel` as soon as it is listed.
+    /// Selects `location` in `panel` as soon as it is listed: the cursor goes
+    /// there and it becomes the panel's only selected item (after creating
+    /// or renaming it).
     pub fn select_when_listed(&mut self, panel: PanelId, location: Location) {
+        self.cursor_on_listed(panel, location, true);
+    }
+
+    /// Moves `panel`'s cursor to `location` as soon as it is listed,
+    /// leaving the selection as it is (revealing a Fuzzy Find result,
+    /// decision F9).
+    pub fn cursor_when_listed(&mut self, panel: PanelId, location: Location) {
+        self.cursor_on_listed(panel, location, false);
+    }
+
+    fn cursor_on_listed(&mut self, panel: PanelId, location: Location, select: bool) {
         if let Some(listing) = self.listings.get_mut(&panel) {
-            listing.pending_select = Some(location);
-            self.apply_pending_select(panel);
+            listing.pending = Some(PendingCursor { location, select });
+            self.apply_pending_cursor(panel);
         }
     }
 
@@ -200,23 +213,25 @@ impl WorkspaceService {
         {
             state.scroll = None;
         }
-        self.apply_pending_select(panel);
+        self.apply_pending_cursor(panel);
     }
 
-    fn apply_pending_select(&mut self, panel: PanelId) {
+    fn apply_pending_cursor(&mut self, panel: PanelId) {
         let Some(listing) = self.listings.get_mut(&panel) else {
             return;
         };
-        let Some(pending) = listing.pending_select.clone() else {
+        let Some(pending) = listing.pending.clone() else {
             return;
         };
-        if listing.position_of(&pending).is_none() {
+        if listing.position_of(&pending.location).is_none() {
             return; // not listed yet; wait for the next reload
         }
-        listing.pending_select = None;
+        listing.pending = None;
         if let Some(state) = self.workspace.state_mut(panel) {
-            state.cursor = Some(pending.clone());
-            state.selection.replace([pending]);
+            state.cursor = Some(pending.location.clone());
+            if pending.select {
+                state.selection.replace([pending.location]);
+            }
         }
     }
 }
