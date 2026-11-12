@@ -24,9 +24,10 @@ A folder result is opened **one folder at a time** from its origin panel: the pa
 - reaching a folder that another branch shows reactivates that branch, as `l` would;
 - a new branch starts only where continuing would replace an existing path, so at most one is created;
 - each parent's cursor is left on the folder opened below it, as if `l` had been pressed at every level;
+- the walk **ends on the folder asked for**. Where the last step brings back another branch, `l` would land on that branch's remembered panel when it lies deeper (C1); `open_path` activates the requested folder instead, and the deeper panels stay on the branch. Otherwise opening `Downloads` could leave `Downloads/Camera` active, and Reveal couldn't put the cursor in the folder it opened (§9.1, §9.4). Found by the UI test, 2026-11-12;
 - the whole action is **one** entry in the Back/Forward jump list (D2).
 
-The result is exactly what the user would get by pressing `l` on each folder in turn, which keeps it predictable and needs no new workspace rules.
+Apart from where it ends, the result is exactly what the user would get by pressing `l` on each folder in turn, which keeps it predictable and needs no new workspace rules.
 
 ### Files are launched; the workspace is unchanged (§9.2)
 

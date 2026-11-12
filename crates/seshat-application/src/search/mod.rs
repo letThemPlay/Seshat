@@ -1,7 +1,8 @@
 //! Fuzzy Find without its UI (Spec 4 Phases 1 and 2): which folders a
 //! scope covers ([`roots`]), how candidates are ranked, the engine that
 //! walks and ranks them ([`SearchEngine`]), and the session lifecycle that
-//! keeps stale results out ([`SearchSessions`]).
+//! keeps stale results out ([`SearchSessions`]). A query naming a folder
+//! is read by [`PathQuery`].
 //!
 //! Filesystem traversal and fuzzy matching come through the
 //! [`TreeWalker`](crate::ports::TreeWalker) and
@@ -10,6 +11,7 @@
 //! existing workspace navigation.
 
 mod engine;
+mod path_query;
 mod rank;
 mod scope;
 mod session;
@@ -18,6 +20,7 @@ mod tests;
 mod worker;
 
 pub use engine::{DEFAULT_RESULT_LIMIT, SearchEngine, SearchRequest, SearchSummary};
+pub use path_query::PathQuery;
 pub use scope::{ScopeError, SearchRoot, roots};
 pub use session::{SearchSessions, SearchTicket};
 pub use worker::{SearchEvent, SearchListener, SearchUpdate, SearchWorker};

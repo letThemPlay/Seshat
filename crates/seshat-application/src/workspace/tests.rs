@@ -1264,3 +1264,46 @@ fn results_without_a_usable_origin_open_like_a_typed_location() {
         );
     }
 }
+
+#[test]
+fn a_result_from_another_branch_reactivates_it_in_focus_mode() {
+    // Entire Workspace (§6.3): a result keeps the branch and panel whose
+    // folder produced it. Both branches share Home, so it is searched once.
+    let (mut s, [home, _, projects, downloads]) = scenario();
+    s.service.toggle_focus_mode();
+    assert_eq!(s.service.active_panel(), downloads);
+    let roots = crate::search::roots(
+        &seshat_domain::search::SearchScope::EntireWorkspace,
+        s.service.workspace(),
+    )
+    .unwrap();
+    assert_eq!(roots.len(), 1, "the shared Home is searched once");
+    let origin = roots[0].origin.unwrap();
+    assert_eq!(origin.panel, home);
+    let (panels, branches) = (
+        s.service.workspace().panel_count(),
+        s.service.workspace().branch_count(),
+    );
+
+    let result = SearchResult {
+        origin: Some(origin),
+        ..found("/h/Documents/Projects/x.rs", false, None)
+    };
+    s.service.reveal_result(&result);
+    s.run();
+    let ws = s.service.workspace();
+    ws.check_invariants().unwrap();
+    assert_eq!(
+        s.service.active_panel(),
+        projects,
+        "the other branch is back"
+    );
+    assert_eq!((ws.panel_count(), ws.branch_count()), (panels, branches));
+    assert!(ws.focus_mode(), "Focus Mode changes presentation only");
+    assert_eq!(
+        s.service.state(projects).unwrap().cursor,
+        Some(loc("/h/Documents/Projects/x.rs"))
+    );
+    s.service.go_back();
+    assert_eq!(s.service.active_panel(), downloads, "one step back");
+}

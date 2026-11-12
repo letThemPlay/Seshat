@@ -64,6 +64,35 @@ check "    Focus Mode is kept"                      state_has "focus_mode=true"
 check "    a new branch, nothing duplicated"        state_has "branches=2 panels=6 "
 type_text zz
 
+# Entire Workspace (Alt+3): a result found under the other branch
+# reactivates that branch; nothing is duplicated (§6.3, F5).
+chord ctrl p; chord alt 3; type_text src 1
+check "Alt+3 searches the entire workspace"         log_has "fuzzy find scope.*EntireWorkspace"
+shot workspace-scope
+press Return 1
+check "Enter reactivates the branch it was found in" active_is "$H/Documents/Projects/src"
+check "    nothing duplicated"                      state_has "branches=2 panels=6 "
+
+# The scope chosen is kept for the next search (F12). Alt+Enter reveals:
+# the other branch comes back with the cursor on the result (F7, F9).
+chord ctrl p
+check "the chosen scope is kept"                    log_has "fuzzy find opened.*EntireWorkspace"
+type_text camera 1; chord alt Return; sleep 1
+check "Alt+Enter reveals the result in its folder"  active_is "$H/Downloads"
+check "    with the cursor on it"                   log_has "cursor placed.*/Downloads/Camera\") select=false"
+check "    nothing duplicated"                      state_has "branches=2 panels=6 "
+chord ctrl p; chord alt 1; press Escape
+
+# A query starting with ~ or / searches in that folder (F10); Enter with
+# nothing after the folder opens it, as the address bar would (D3).
+chord ctrl p; type_text "~/Documents/" 1; press Return 1
+check "Enter on ~/Documents/ opens the folder"      active_is "$H/Documents"
+before=$(closed_count)
+chord ctrl p; type_text "/no/such/folder/" 1; press Return 1
+check "a folder that doesn't exist isn't opened"    is "$(closed_count)" "$before"
+shot missing-folder
+press Escape
+
 # Visual Mode: Ctrl+P is refused, and the selection is kept (F6).
 before=$(opened_count)
 type_text v; chord ctrl p
