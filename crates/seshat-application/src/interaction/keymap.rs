@@ -43,6 +43,8 @@ seshat_domain::stable_ids! {
         PruneBackSegment => "prune-back-segment",
         /// `u`: undo the last workspace change (a prune), not a file operation.
         UndoWorkspace => "undo-workspace",
+        /// Ctrl+P: open Fuzzy Find over the workspace (Spec 4 §4.1).
+        FuzzyFind => "fuzzy-find",
     }
 }
 
@@ -77,6 +79,7 @@ impl Action {
                 "Prune the branch back to where it meets another branch (files are not touched)"
             }
             Self::UndoWorkspace => "Undo the last prune (not file operations)",
+            Self::FuzzyFind => "Fuzzy Find: search for files and folders",
         }
     }
 
@@ -111,6 +114,8 @@ impl Action {
             Self::PruneBack => &["db"],
             Self::PruneBackSegment => &["dB"],
             Self::UndoWorkspace => &["u"],
+            // Spec 4 §4.1; nothing else uses Ctrl+P.
+            Self::FuzzyFind => &["<C-p>"],
         }
     }
 
@@ -121,7 +126,7 @@ impl Action {
     fn defaults_yield_to_overrides(self) -> bool {
         matches!(
             self,
-            Self::PruneBack | Self::PruneBackSegment | Self::UndoWorkspace
+            Self::PruneBack | Self::PruneBackSegment | Self::UndoWorkspace | Self::FuzzyFind
         )
     }
 
@@ -466,6 +471,18 @@ mod tests {
         assert_eq!(map.lookup(&keys("<C-b>")), Lookup::Bound(Action::PruneBack));
         assert_eq!(map.lookup(&keys("d")), Lookup::Bound(Action::Cut));
         assert_eq!(warnings.len(), 1, "only dB was dropped: {warnings:?}");
+    }
+
+    #[test]
+    fn a_user_binding_on_ctrl_p_wins_over_fuzzy_find() {
+        assert_eq!(
+            KeyMap::default().lookup(&keys("<C-p>")),
+            Lookup::Bound(Action::FuzzyFind)
+        );
+        let (map, warnings) = KeyMap::new(&[("paste".into(), vec!["<C-p>".into()])], false);
+        assert_eq!(map.lookup(&keys("<C-p>")), Lookup::Bound(Action::Paste));
+        assert!(map.keys_for(Action::FuzzyFind).is_empty());
+        assert_eq!(warnings.len(), 1, "the dropped default is reported");
     }
 
     #[test]

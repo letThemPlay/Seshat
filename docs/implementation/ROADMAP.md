@@ -40,6 +40,6 @@ See [STATUS.md](STATUS.md) for detail.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Core fuzzy matching | `nucleo-matcher` behind the `FuzzyMatcher` port; ranking; highlighting; tests | ✅ Done |
-| 2. Interactive search | Engine and background worker done: walking, scopes, cancellation, streaming, session lifecycle. UI not started: the overlay, the shortcut, keyboard navigation | 🟡 Engine and worker |
+| 2. Interactive search | Engine, background worker, the overlay (`Ctrl+P`), Current Directory search, incremental results, cancellation, keyboard and mouse, highlighting | ✅ Done |
 | 3. Spatial workspace integration | Scopes, origins and shared-ancestor handling in the engine; opening and revealing results through `WorkspaceService` (ADR 0008). Scope selector and reveal key come with the UI | 🟡 Services done |
 | 4. Refinement | Configuration, profiling, result actions, operations on results | ⏳ Not started |

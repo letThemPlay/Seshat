@@ -44,9 +44,10 @@ classic_keys = false
 # A binding that clashes with another (the same keys, or one sequence the
 # start of another, such as "g" and "gg") is ignored: the action keeps its
 # default, and the status bar and log say why. :help lists the bindings in
-# effect. One exception: the defaults of prune-back, prune-back-segment and
-# undo-workspace give way to your own bindings, so binding "d" or "u" to
-# something else still works (those defaults are then dropped).
+# effect. One exception: the defaults of prune-back, prune-back-segment,
+# undo-workspace and fuzzy-find give way to your own bindings, so binding
+# "d", "u" or "<C-p>" to something else still works (those defaults are
+# then dropped).
 #
 # These keys are not configurable: Ctrl+C / Ctrl+X / Ctrl+V (copy, cut,
 # paste), Ctrl+Shift+C (copy paths), Ctrl+H (hidden files), Ctrl+L (type a
@@ -74,6 +75,7 @@ prune-back = ["db"]             # remove the active panel; its parent becomes ac
 prune-back-segment = ["dB"]     # remove back to where the branch meets another one
                                 # (or to its first panel)
 undo-workspace = ["u"]          # undo the last prune (not file operations)
+fuzzy-find = ["<C-p>"]          # Fuzzy Find: search for files and folders
 
 # Moving in a panel
 cursor-down = ["j"]

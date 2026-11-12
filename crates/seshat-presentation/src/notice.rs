@@ -163,6 +163,7 @@ pub fn copied_paths(n: usize) -> Notice {
 pub fn not_in_mode(action: Action) -> Notice {
     let what = match action {
         Action::PruneBack | Action::PruneBackSegment => "Pruning",
+        Action::FuzzyFind => "Fuzzy Find",
         _ => "This",
     };
     Notice::error(format!(

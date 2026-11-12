@@ -8,8 +8,9 @@ use seshat_application::interaction::{Action, AppAction};
 use seshat_application::view::ViewMode;
 use seshat_domain::Direction;
 
-use super::{AddressMsg, App, CommandLineMsg, Msg, SearchMsg};
+use super::{AddressMsg, App, CommandLineMsg, FuzzyMsg, Msg, SearchMsg};
 use crate::actions;
+use crate::fuzzy_view::FuzzyView;
 use crate::operations_panel::OperationsPanel;
 use crate::pathbar::PathBar;
 use crate::workspace_view::WorkspaceView;
@@ -45,6 +46,8 @@ pub struct Handles {
     pub search_bar: gtk::SearchBar,
     pub search_entry: gtk::SearchEntry,
     pub context_menu: gtk::PopoverMenu,
+    /// The Fuzzy Find overlay, over the workspace.
+    pub fuzzy: FuzzyView,
     pub window: gtk::Window,
 }
 
@@ -286,7 +289,21 @@ pub fn build(
         .css_classes(["seshat-content"])
         .build();
     content.append(&search_bar);
-    content.append(&workspace.root);
+    // Fuzzy Find floats over the workspace (Spec 4 §4.2).
+    let fuzzy = FuzzyView::new({
+        let sender = sender.clone();
+        move |event| {
+            sender
+                .input_sender()
+                .emit(Msg::FuzzyFind(FuzzyMsg::View(event)))
+        }
+    });
+    let stage = gtk::Overlay::builder()
+        .child(&workspace.root)
+        .vexpand(true)
+        .build();
+    stage.add_overlay(&fuzzy.root);
+    content.append(&stage);
     // Popovers must hang off a container that unparents arbitrary children
     // on dispose (GtkBox does). GtkStack only removes its pages, so a
     // popover parented to it makes window destruction loop forever.
@@ -368,6 +385,7 @@ pub fn build(
             search_bar,
             search_entry,
             context_menu,
+            fuzzy,
             window: root.clone(),
         },
     )

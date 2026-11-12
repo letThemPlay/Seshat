@@ -156,6 +156,7 @@ impl App {
             Action::PruneBack => self.prune_back(PruneMotion::Step),
             Action::PruneBackSegment => self.prune_back(PruneMotion::Segment),
             Action::UndoWorkspace => self.undo_workspace(),
+            Action::FuzzyFind => self.open_fuzzy_find(sender),
             // Mode actions are resolved by the interaction layer.
             Action::CursorDown
             | Action::CursorUp

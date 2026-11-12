@@ -221,6 +221,38 @@ window.seshat {{
   border-radius: {radius}px;
 }}
 
+.seshat-fuzzy {{
+  padding: 8px;
+  background-color: @seshat_surface;
+  color: @seshat_text_primary;
+  border: 1px solid @seshat_border;
+  border-radius: {radius}px;
+  box-shadow: 0 4px 16px alpha(black, 0.25);
+}}
+
+.seshat-fuzzy entry {{
+  background-color: @seshat_app_background;
+  color: @seshat_text_primary;
+  border-radius: {radius}px;
+}}
+
+.seshat-fuzzy-scope,
+.seshat-fuzzy-status,
+.seshat-fuzzy-hints,
+.seshat-fuzzy-context {{
+  color: @seshat_text_secondary;
+}}
+
+.seshat-fuzzy-row {{
+  padding: 2px 4px;
+}}
+
+/* The highlighted result: the selection colour and a bar, not colour alone. */
+.seshat-fuzzy listview row:selected {{
+  background-color: @seshat_selected;
+  box-shadow: inset 3px 0 0 @seshat_accent;
+}}
+
 window.seshat popover > contents,
 window.seshat popover > arrow {{
   background-color: @seshat_surface;

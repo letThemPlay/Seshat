@@ -62,6 +62,8 @@ jobs:
         run: nix develop --command scripts/ui-session.sh scripts/ui/file-operations.sh "$RUNNER_TEMP/ui"
       - name: Sandboxed UI test of the spatial workspace (headless Sway)
         run: nix develop --command scripts/ui-session.sh scripts/ui/workspace.sh "$RUNNER_TEMP/ui-workspace"
+      - name: Sandboxed UI test of Fuzzy Find (headless Sway)
+        run: nix develop --command scripts/ui-session.sh scripts/ui/fuzzy-find.sh "$RUNNER_TEMP/ui-fuzzy"
       - name: Upload screenshots and logs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -76,6 +78,14 @@ jobs:
         with:
           name: ui-e2e-artifacts
           path: ${{ runner.temp }}/ui
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload screenshots and logs (Fuzzy Find)
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-e2e-fuzzy-artifacts
+          path: ${{ runner.temp }}/ui-fuzzy
           if-no-files-found: ignore
           retention-days: 7
 

@@ -1,11 +1,11 @@
-# Fuzzy Find: search engine
+# Fuzzy Find
 
-The engine behind [Fuzzy Find](../specifications/4-FUZZY-FIND.md). It has no UI yet: Phase 1 and the non-UI part of Phase 2 are built and tested, and the overlay will plug into the pieces below.
+[Fuzzy Find](../specifications/4-FUZZY-FIND.md): the engine, the worker thread that runs it, the overlay (`Ctrl+P`) and opening results in the workspace. The Current Directory scope is reachable from the app; the scope selector, reveal and configuration are still to come.
 
 ```text
- presentation (to come)     overlay: query input, results, scope selector
-                                 │ opens a session, starts a search per query,
-                                 │ runs the engine on a worker thread
+ presentation  FuzzyFindController (app/fuzzy_find.rs) + FuzzyView (overlay)
+                                 │ opens a session, starts a search per query on
+                                 │ the SearchWorker; Enter → WorkspaceService::open_result
  application  search::      roots(scope, &Workspace) ──► SearchRequest
                             SearchSessions (ids, generations, cancel tokens)
                             SearchEngine: walk once, rank per query, publish batches
@@ -89,6 +89,18 @@ Opening goes through the workspace's own navigation ([ADR 0008](../decisions/000
 - `reveal_result`: opens the folder the result is in, the same way, and moves the cursor to the result without changing the selection (F9).
 - Without a usable origin panel, both use the address bar's rule (D3).
 
-## Still to build (Spec 4 Phases 2–4)
+## The overlay (§4, §7, §8)
 
-The overlay and its key binding (F6, F7, F12), the scope selector and the absolute path form (F10), configuration (§15, F11), and operations on several results (§10, F13).
+`Ctrl+P` (the `fuzzy-find` action, which gives way to a user binding of the same keys, B8) opens a compact panel over the workspace. It is refused in Visual Mode (F6). The workspace doesn't change while it is open (F12).
+
+- **Opening** works out the folders to search (`roots`), starts a `SearchWorker` and runs an empty query at once, so the folder is walked while the user starts typing.
+- **Typing** starts a new search for every change (the search field waits 50 ms); the previous search is superseded through its ticket, and results that arrive for it are dropped.
+- **The highlight** follows the result, not its position: when results update, the same result stays highlighted if it is still there, otherwise the best one.
+- **Keys** stay in the search field: `Up`, `Down`, `Page Up` and `Page Down` move the highlight, `Enter` opens, `Esc` closes, and `Ctrl+Backspace` deletes a word as in any text field. A click highlights and a double-click opens; keyboard focus returns to the search field.
+- **Closing**, by `Esc`, by opening a result or by focus moving elsewhere, drops the worker, which cancels its search.
+- **Rows** show an icon and, for folders, a trailing `/`, so the kind is never shown by colour alone (§16). Matched characters are bold and underlined (`fuzzy_view::highlighted`, escaped Pango markup on character boundaries). The second line says which folder the result is in, or shows the path with its matches when only the path matched. The highlighted row has an accent bar as well as the selection colour. Screen readers hear "name, folder, in parent".
+- **The status line** says what the search is doing: "Type to search", "Searching…", "N results so far…", the result count or "No matches", folders that couldn't be read, and whether the walk stopped at its limit.
+
+## Still to build (Spec 4 Phases 3–4)
+
+The scope selector with Current Branch and Entire Workspace (branch badges), reveal with `Alt+Enter` (F7, F9), the absolute path form (F10), configuration (§15, F11), and operations on several results (§10, F13).

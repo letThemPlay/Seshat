@@ -15,5 +15,6 @@ step "wayland";       scripts/verify-wayland.sh
 if [[ "${1:-}" == "--ui" ]]; then
     step "ui";        scripts/ui-session.sh scripts/ui/file-operations.sh
     step "ui: workspace"; scripts/ui-session.sh scripts/ui/workspace.sh
+    step "ui: fuzzy find"; scripts/ui-session.sh scripts/ui/fuzzy-find.sh
 fi
 echo; echo "ALL CHECKS PASSED"
