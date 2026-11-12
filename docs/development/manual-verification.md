@@ -101,6 +101,7 @@ In `~/seshat-verify`, with a few nested folders and files.
 - [ ] Typing `~/` or `/` searches in that folder (the drop-down greys out); `~/Documents/` then `Enter` opens Documents; a folder that doesn't exist says so on the status line and `Enter` does nothing.
 - [ ] `Esc`, or clicking a panel, closes it and leaves the workspace as it was.
 - [ ] In Visual Mode (`v`), `Ctrl+P` does nothing and the status bar says "Fuzzy Find isn't available in Visual Mode; press Esc first."
+- [ ] With `[fuzzy_find]` in `settings.toml` (see `docs/examples/settings.toml`): `default_scope = "entire-workspace"` makes `Ctrl+P` start there; `include_hidden = true` finds names starting with a dot; a name added to `ignore` is skipped with everything inside it; `case = "smart"` makes a capital in the query count. An invalid value (for example `max_results = 0`) leaves the others working.
 - [ ] Readable with the light, dark and a custom theme: the highlighted characters, the folder and file icons, and the highlighted row.
 
 ## 6. Opening files and portals

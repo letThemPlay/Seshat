@@ -77,6 +77,21 @@ Highlights are byte ranges of whole graphemes in the displayed name, or in the r
 | Walk and rank 100,100 entries | 85 ms |
 | A new query on the cached entries | 32 ms |
 
+### With the overlay (release build, 2026-11-12)
+
+`SESHAT_RELEASE=1 SESHAT_STALL_MONITOR=1 scripts/ui-session.sh scripts/ui/fuzzy-perf.sh`, in the sandboxed headless session on an AMD Ryzen 7 7840U. The files were created by the script on btrfs just before, so they were in the page cache. Times run from starting a search to its results being on screen, so they leave out the search field's 50 ms typing delay. Three runs during this work gave similar numbers; the last is shown.
+
+| Step | Time |
+|---|---|
+| Small folder (200 files): results on screen (§11 target about 100 ms) | 2.0 ms median, 2.6 ms max |
+| 100,100 entries: the walk when the overlay opens | 31 ms |
+| 100,100 entries: first query ranked and shown | 24 ms |
+| 100,100 entries: further queries on the cached entries | 29 ms median, 42 ms max (500 results) |
+| Main-loop stalls over 100 ms during all of it | none |
+| Memory after walking 100,100 entries | 113 MiB (86 MiB at start) |
+
+The engine-only measurement above (85 ms for the same walk, 2026-11-11) was taken in a different run; both use freshly created files. A cold cache, a slow disk or a network mount will be slower; streaming and cancellation keep the overlay usable there, and these numbers don't cover it.
+
 ## Running in the background (§11)
 
 `SearchWorker` runs one session's searches on a thread of its own (`seshat-search`), owning that session's `SearchEngine` and its cache. It keeps at most one search waiting: a newer submission replaces one that hasn't started, and the caller cancels the running one through its ticket. Updates (`SearchEvent::Results`, then `SearchEvent::Finished`) go to a listener on the worker thread; the caller drops those its `SearchSessions` no longer accepts. Dropping the worker cancels its searches without waiting for the thread, so a walk stuck on a slow mount can't hold up closing Fuzzy Find or quitting. A panic in a search ends it as failed instead of taking the app down.
@@ -104,6 +119,20 @@ Opening goes through the workspace's own navigation ([ADR 0008](../decisions/000
 - **Rows** show an icon and, for folders, a trailing `/`, so the kind is never shown by colour alone (§16). Matched characters are bold and underlined (`fuzzy_view::highlighted`, escaped Pango markup on character boundaries). The second line says which folder the result is in, or shows the path with its matches when only the path matched. The highlighted row has an accent bar as well as the selection colour. Screen readers hear "name, folder, in parent".
 - **The status line** says what the search is doing: "Type to search", "Searching…", "N results so far…", the result count or "No matches", folders that couldn't be read, and whether the walk stopped at its limit.
 
-## Still to build (Spec 4 Phase 4)
+## Configuration (§15, F11)
 
-Configuration (§15, F11) and timings with the overlay in a release build. Operations on several results (§10, F13) come in a later phase.
+The `[fuzzy_find]` section of `settings.toml` (see `docs/examples/settings.toml`), read into `FuzzyFindPreferences` (application). It turns the settings into requests in one place: `walk_options()` and `query(text)`.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `default_scope` | `"current-directory"` | The scope the overlay starts with (`ScopeChoice`): also `"current-branch"`, `"entire-workspace"`. A scope picked in the overlay lasts until Seshat closes (F12). |
+| `include_hidden` | `false` | Also search names starting with a dot. |
+| `ignore` | `[".git", "node_modules"]` | Names skipped wherever they appear, with everything inside them. Exact names only (F3); `[]` skips nothing. |
+| `max_results` | `500` | Results shown at most, the best ones; 1 to 10,000. |
+| `case` | `"insensitive"` | Also `"smart"` (case matters when the query has a capital) and `"sensitive"`. |
+
+The shortcut is `fuzzy-find` in `[keybindings]`. Each value falls back to its default on its own when missing or invalid. Following symbolic links and a preview are not offered (F11): links are listed but never followed.
+
+## Still to build
+
+Operations on several results (§10, F13) come in a later phase.

@@ -15,16 +15,18 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use relm4::ComponentSender;
-use seshat_application::ports::{FuzzyMatcher, TreeWalker, WalkOptions};
+use seshat_application::ports::{FuzzyMatcher, TreeWalker};
+use seshat_application::preferences::{FuzzyFindPreferences, ScopeChoice};
 use seshat_application::search::{
-    DEFAULT_RESULT_LIMIT, PathQuery, SearchEngine, SearchEvent, SearchRequest, SearchRoot,
-    SearchSessions, SearchSummary, SearchUpdate, SearchWorker, roots,
+    PathQuery, SearchEngine, SearchEvent, SearchRequest, SearchRoot, SearchSessions, SearchSummary,
+    SearchUpdate, SearchWorker, roots,
 };
 use seshat_application::workspace::WorkspaceService;
 use seshat_domain::entities::Location;
-use seshat_domain::search::{SearchQuery, SearchResult, SearchScope, SearchStatus};
+use seshat_domain::search::{SearchResult, SearchScope, SearchStatus};
 use seshat_domain::workspace::BranchId;
 
 use super::{App, Msg};
@@ -58,7 +60,7 @@ pub(super) enum FuzzyOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Target {
     /// `None` while the text names a folder (F10).
-    scope: Option<SearchScope>,
+    scope: Option<ScopeChoice>,
     roots: Vec<SearchRoot>,
     /// The text to match: the query, or what follows a named folder.
     pattern: String,
@@ -72,9 +74,10 @@ pub(super) struct FuzzyFindController {
     sessions: SearchSessions,
     /// Present while the overlay is open.
     worker: Option<SearchWorker>,
-    /// The scope picked in the overlay. It lasts until Seshat closes and
-    /// isn't saved (F12).
-    scope: SearchScope,
+    /// The scope picked in the overlay, starting with the configured one.
+    /// It lasts until Seshat closes and isn't saved (F12).
+    scope: ScopeChoice,
+    settings: FuzzyFindPreferences,
     /// What is being searched, or why nothing can be (e.g. the Trash).
     target: Result<Target, String>,
     /// Branch numbers, as the branch bar shows them, for the badges.
@@ -86,6 +89,9 @@ pub(super) struct FuzzyFindController {
     highlighted: Option<Location>,
     /// How the latest finished search ended.
     summary: Option<SearchSummary>,
+    /// When the current search was started, and whether its first results
+    /// were shown yet: for the timings in the debug log (§11).
+    started: Option<(Instant, bool)>,
 }
 
 impl FuzzyFindController {
@@ -94,6 +100,7 @@ impl FuzzyFindController {
         walker: Arc<dyn TreeWalker>,
         matcher: Arc<dyn FuzzyMatcher>,
         home: PathBuf,
+        settings: FuzzyFindPreferences,
     ) -> Self {
         Self {
             view,
@@ -102,13 +109,15 @@ impl FuzzyFindController {
             home,
             sessions: SearchSessions::default(),
             worker: None,
-            scope: SearchScope::CurrentDirectory,
+            scope: settings.default_scope,
+            settings,
             target: Err(String::new()),
             branch_numbers: HashMap::new(),
             query: String::new(),
             results: Vec::new(),
             highlighted: None,
             summary: None,
+            started: None,
         }
     }
 
@@ -238,11 +247,7 @@ impl FuzzyFindController {
     fn target(&self, service: &WorkspaceService) -> Result<Target, String> {
         let (scope, chosen, pattern) = match PathQuery::parse(&self.query, &self.home) {
             Some(path) => (SearchScope::AbsolutePath(path.folder), None, path.pattern),
-            None => (
-                self.scope.clone(),
-                Some(self.scope.clone()),
-                self.query.clone(),
-            ),
+            None => (self.scope.scope(), Some(self.scope), self.query.clone()),
         };
         let roots = roots(&scope, service.workspace())
             .map_err(|err| Notice::from_error(&err).text().to_owned())?;
@@ -259,21 +264,22 @@ impl FuzzyFindController {
         self.target = self.target(service);
         // The drop-down is greyed out while the text names a folder.
         let (chosen, folders) = match &self.target {
-            Ok(target) => (target.scope.as_ref(), folders_text(&target.roots)),
-            Err(_) => (Some(&self.scope), String::new()),
+            Ok(target) => (target.scope, folders_text(&target.roots)),
+            Err(_) => (Some(self.scope), String::new()),
         };
         self.view.set_scope(chosen, &folders);
         let (Some(worker), Some(ticket)) = (self.worker.as_ref(), self.sessions.search()) else {
             return;
         };
+        self.started = Some((Instant::now(), false));
         match &self.target {
             Ok(target) => worker.submit(
                 ticket,
                 SearchRequest {
                     roots: target.roots.clone(),
-                    query: SearchQuery::new(target.pattern.clone()),
-                    options: WalkOptions::default(),
-                    limit: DEFAULT_RESULT_LIMIT,
+                    query: self.settings.query(target.pattern.clone()),
+                    options: self.settings.walk_options(),
+                    limit: self.settings.max_results,
                 },
             ),
             Err(_) => {
@@ -297,15 +303,38 @@ impl FuzzyFindController {
                 let index = self.highlight_index();
                 self.highlighted = index.map(|i| self.results[i].location.clone());
                 self.view.set_results(&self.rows(), index);
+                if let Some((started, first @ false)) = &mut self.started
+                    && !self.results.is_empty()
+                {
+                    *first = true;
+                    tracing::debug!(
+                        elapsed_us = started.elapsed().as_micros() as u64,
+                        results = self.results.len(),
+                        "fuzzy find first results shown"
+                    );
+                }
             }
             SearchEvent::Finished(summary) => {
                 if !self.sessions.finish(&update.ticket, summary.status.clone()) {
                     return;
                 }
-                if summary.status == SearchStatus::Completed && !self.pattern().trim().is_empty() {
+                let elapsed_us = self
+                    .started
+                    .map_or(0, |(started, _)| started.elapsed().as_micros() as u64);
+                if summary.status != SearchStatus::Completed {
+                    // Superseded, cancelled or failed: nothing to time.
+                } else if self.pattern().trim().is_empty() {
+                    // The walk when the overlay opens (or the scope changes).
+                    tracing::debug!(
+                        candidates = summary.candidates,
+                        elapsed_us,
+                        "fuzzy find walked"
+                    );
+                } else {
                     tracing::debug!(
                         results = self.results.len(),
                         candidates = summary.candidates,
+                        elapsed_us,
                         "fuzzy find results"
                     );
                 }
@@ -321,7 +350,7 @@ impl FuzzyFindController {
         let badges = matches!(
             &self.target,
             Ok(Target {
-                scope: Some(SearchScope::EntireWorkspace),
+                scope: Some(ScopeChoice::EntireWorkspace),
                 ..
             })
         );
@@ -349,6 +378,7 @@ impl FuzzyFindController {
                 target.scope.is_none(),
                 &self.sessions.status(),
                 self.results.len(),
+                self.settings.max_results,
                 self.summary.as_ref(),
             ),
         };
@@ -399,6 +429,7 @@ fn status_text(
     in_folder: bool,
     status: &SearchStatus,
     shown: usize,
+    limit: usize,
     summary: Option<&SearchSummary>,
 ) -> String {
     if pattern.trim().is_empty() {
@@ -413,7 +444,7 @@ fn status_text(
         SearchStatus::Searching if shown == 0 => "Searching…".to_owned(),
         SearchStatus::Searching => format!("{} so far…", notice::count(shown, "result", "results")),
         _ if shown == 0 => "No matches".to_owned(),
-        _ if shown >= DEFAULT_RESULT_LIMIT => format!("The best {shown} results"),
+        _ if shown >= limit => format!("The best {shown} results"),
         _ => notice::count(shown, "result", "results"),
     };
     if let Some(summary) = summary {
@@ -450,29 +481,29 @@ mod tests {
     fn the_status_line_says_what_the_search_is_doing() {
         let done = SearchStatus::Completed;
         assert_eq!(
-            status_text("", false, &SearchStatus::Searching, 0, None),
+            status_text("", false, &SearchStatus::Searching, 0, 500, None),
             "Type to search"
         );
         assert_eq!(
-            status_text("dcm", false, &SearchStatus::Searching, 0, None),
+            status_text("dcm", false, &SearchStatus::Searching, 0, 500, None),
             "Searching…"
         );
         assert_eq!(
-            status_text("dcm", false, &SearchStatus::Searching, 3, None),
+            status_text("dcm", false, &SearchStatus::Searching, 3, 500, None),
             "3 results so far…"
         );
-        assert_eq!(status_text("dcm", false, &done, 0, None), "No matches");
-        assert_eq!(status_text("dcm", false, &done, 1, None), "1 result");
+        assert_eq!(status_text("dcm", false, &done, 0, 500, None), "No matches");
+        assert_eq!(status_text("dcm", false, &done, 1, 500, None), "1 result");
         assert_eq!(
-            status_text("dcm", false, &done, DEFAULT_RESULT_LIMIT, None),
+            status_text("dcm", false, &done, 500, 500, None),
             "The best 500 results"
         );
         assert_eq!(
-            status_text("dcm", false, &done, 2, Some(&summary(1, true))),
+            status_text("dcm", false, &done, 2, 500, Some(&summary(1, true))),
             "2 results · 1 folder couldn't be read · only the first 200000 entries were searched"
         );
         assert_eq!(
-            status_text("", true, &SearchStatus::Completed, 0, None),
+            status_text("", true, &SearchStatus::Completed, 0, 500, None),
             "Enter opens this folder; type to search in it"
         );
         assert_eq!(
@@ -481,6 +512,7 @@ mod tests {
                 true,
                 &SearchStatus::Failed("“/gone” does not exist".into()),
                 0,
+                500,
                 None
             ),
             "“/gone” does not exist.",
@@ -492,6 +524,7 @@ mod tests {
                 false,
                 &SearchStatus::Failed("“/gone” does not exist".into()),
                 0,
+                500,
                 None
             ),
             "“/gone” does not exist."

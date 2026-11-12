@@ -1,8 +1,11 @@
 //! User preferences persisted between sessions.
 
+use seshat_domain::search::{CaseMode, SearchQuery, SearchScope};
 use seshat_domain::view::ViewOptions;
 use seshat_domain::workspace::PanelState;
 
+use crate::ports::WalkOptions;
+use crate::search::DEFAULT_RESULT_LIMIT;
 use crate::view::{SortOrder, ViewMode};
 
 /// Which theme to use: follow the system, a built-in theme, or a custom
@@ -48,6 +51,7 @@ pub struct Preferences {
     pub view_mode: ViewMode,
     pub sort: SortOrder,
     pub workspace: WorkspacePreferences,
+    pub fuzzy_find: FuzzyFindPreferences,
 }
 
 impl Preferences {
@@ -117,6 +121,86 @@ impl Default for WorkspacePreferences {
     }
 }
 
+seshat_domain::stable_ids! {
+    /// A Fuzzy Find scope the user can pick (Spec 4 §6.1–6.3): in the
+    /// overlay, and as the scope it starts with. A typed folder (§6.4) is
+    /// never a choice; it comes from the query.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+    pub enum ScopeChoice {
+        #[default]
+        CurrentDirectory => "current-directory",
+        CurrentBranch => "current-branch",
+        EntireWorkspace => "entire-workspace",
+    }
+}
+
+impl ScopeChoice {
+    pub fn scope(self) -> SearchScope {
+        match self {
+            Self::CurrentDirectory => SearchScope::CurrentDirectory,
+            Self::CurrentBranch => SearchScope::CurrentBranch,
+            Self::EntireWorkspace => SearchScope::EntireWorkspace,
+        }
+    }
+}
+
+/// Fuzzy Find settings (Spec 4 §15, decision F11). Following symbolic
+/// links and a preview are not offered (F11).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FuzzyFindPreferences {
+    /// The scope the overlay starts with; a scope picked in the overlay
+    /// lasts until Seshat closes (F12).
+    pub default_scope: ScopeChoice,
+    /// Search names starting with a dot.
+    pub include_hidden: bool,
+    /// Folder or file names skipped wherever they appear, with everything
+    /// below them. Exact names only (F3).
+    pub ignore: Vec<String>,
+    /// Results shown at most (the best ones).
+    pub max_results: usize,
+    pub case: CaseMode,
+}
+
+impl FuzzyFindPreferences {
+    /// The range accepted for `max_results`; anything else is invalid and
+    /// falls back to the default.
+    pub const MAX_RESULTS: std::ops::RangeInclusive<usize> = 1..=10_000;
+
+    /// How folders are walked with these settings.
+    pub fn walk_options(&self) -> WalkOptions {
+        WalkOptions {
+            include_hidden: self.include_hidden,
+            ignore_names: self.ignore.iter().map(Into::into).collect(),
+            ..WalkOptions::default()
+        }
+    }
+
+    /// `text` as a query with these settings.
+    pub fn query(&self, text: impl Into<String>) -> SearchQuery {
+        SearchQuery {
+            text: text.into(),
+            case: self.case,
+        }
+    }
+}
+
+impl Default for FuzzyFindPreferences {
+    fn default() -> Self {
+        let walk = WalkOptions::default();
+        Self {
+            default_scope: ScopeChoice::default(),
+            include_hidden: walk.include_hidden,
+            ignore: walk
+                .ignore_names
+                .iter()
+                .map(|name| name.to_string_lossy().into_owned())
+                .collect(),
+            max_results: DEFAULT_RESULT_LIMIT,
+            case: CaseMode::default(),
+        }
+    }
+}
+
 /// Loads and saves preferences.
 pub trait PreferencesStore {
     /// Returns stored preferences, falling back to defaults for anything
@@ -161,5 +245,28 @@ mod tests {
         assert_eq!(back.options.query, "", "a search is not a default");
         assert_eq!(back.mode, ViewMode::Grid);
         assert_eq!(back.options.sort, state.options.sort);
+    }
+
+    #[test]
+    fn fuzzy_find_settings_become_walk_options_and_queries() {
+        let defaults = FuzzyFindPreferences::default();
+        assert_eq!(defaults.walk_options(), WalkOptions::default());
+        assert_eq!(defaults.query("dcm"), SearchQuery::new("dcm"));
+        assert_eq!(
+            defaults.default_scope.scope(),
+            SearchScope::CurrentDirectory
+        );
+
+        let custom = FuzzyFindPreferences {
+            include_hidden: true,
+            ignore: vec!["target".into()],
+            case: CaseMode::Smart,
+            ..defaults
+        };
+        let walk = custom.walk_options();
+        assert!(walk.include_hidden);
+        assert_eq!(walk.ignore_names, ["target"]);
+        assert_eq!(walk.same_device, WalkOptions::default().same_device);
+        assert_eq!(custom.query("Doc").case, CaseMode::Smart);
     }
 }

@@ -42,7 +42,7 @@ The two scripts:
 
 - `file-operations.sh`: copy, paste, conflicts, create, rename, Trash, permanent delete, a large background copy after the window closes, and D-Bus publication.
 - `workspace.sh`: the spatial spec's definition of done (§19). It covers branches, the side-by-side layout (rows, columns, cards, connectors, and the single-row fallback in a short window), Focus Mode navigation and branch switching, a cross-branch copy with confirmation, and the workspace restored after a restart. It reads workspace state from the `workspace state` debug line, which lists locations, never file listings.
-- `fuzzy-find.sh`: Fuzzy Find (Spec 4 §17 UI tests). Ctrl+P opens the overlay without changing the workspace; typing shows results; Enter opens a folder along the path (one panel per level, one branch) and Back returns in one step; Esc closes and changes nothing; it works in Focus Mode and keeps it; Alt+3 searches the entire workspace and Enter reactivates the branch a result was found in, without duplicating anything; the chosen scope is kept for the next search; Alt+Enter reveals a result on another branch with the cursor on it; `~/Documents/` then Enter opens that folder, and a folder that doesn't exist isn't opened; Ctrl+P does nothing in Visual Mode; no file is changed. Opening a file is left to the service test and the manual checklist, since it would start the machine's own applications.
+- `fuzzy-find.sh`: Fuzzy Find (Spec 4 §17 UI tests). Ctrl+P opens the overlay without changing the workspace; typing shows results; Enter opens a folder along the path (one panel per level, one branch) and Back returns in one step; Esc closes and changes nothing; it works in Focus Mode and keeps it; Alt+3 searches the entire workspace and Enter reactivates the branch a result was found in, without duplicating anything; the chosen scope is kept for the next search; Alt+Enter reveals a result on another branch with the cursor on it; `~/Documents/` then Enter opens that folder, and a folder that doesn't exist isn't opened; with `include_hidden = true` and an extra ignored name in the session's settings, a hidden folder is found and the ignored folder's contents are not; Ctrl+P does nothing in Visual Mode; no file is changed. Opening a file is left to the service test and the manual checklist, since it would start the machine's own applications.
 
 Notes for writing scripts:
 
@@ -71,6 +71,8 @@ SESHAT_RELEASE=1 scripts/ui-session.sh <script>   # UI timings: "panel view upda
 cargo test --release -p seshat-application --test workspace_perf -- --ignored --nocapture   # workspace
 cargo test --release -p seshat-presentation layout_scaling -- --ignored --nocapture        # layout
 SESHAT_RELEASE=1 SESHAT_STALL_MONITOR=1 scripts/ui-session.sh scripts/ui/workspace-perf.sh   # end to end
+cargo test --release -p seshat-infrastructure --test search -- --ignored --nocapture        # Fuzzy Find engine
+SESHAT_RELEASE=1 SESHAT_STALL_MONITOR=1 scripts/ui-session.sh scripts/ui/fuzzy-perf.sh       # Fuzzy Find with the overlay
 ```
 
-Results and their interpretation are in [review/performance.md](../review/performance.md).
+Results and their interpretation are in [review/performance.md](../review/performance.md); Fuzzy Find's are in [search.md](../architecture/search.md#measured-release-build-2026-11-11).
