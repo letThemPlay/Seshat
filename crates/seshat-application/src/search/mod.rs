@@ -15,7 +15,9 @@ mod scope;
 mod session;
 #[cfg(test)]
 mod tests;
+mod worker;
 
 pub use engine::{DEFAULT_RESULT_LIMIT, SearchEngine, SearchRequest, SearchSummary};
 pub use scope::{ScopeError, SearchRoot, roots};
 pub use session::{SearchSessions, SearchTicket};
+pub use worker::{SearchEvent, SearchListener, SearchUpdate, SearchWorker};

@@ -3,6 +3,7 @@
 //! module adding methods to [`WorkspaceService`]; this module holds the
 //! state and the steps they share (loading, evicting, forgetting panels).
 
+mod found;
 mod loading;
 mod navigation;
 mod selection;

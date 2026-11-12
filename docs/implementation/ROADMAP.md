@@ -35,11 +35,11 @@ See [STATUS.md](STATUS.md) for detail.
 
 ## Fuzzy Find
 
-[Specification](../specifications/4-FUZZY-FIND.md) §18, [search.md](../architecture/search.md), decisions F1–F4.
+[Specification](../specifications/4-FUZZY-FIND.md) §18, [search.md](../architecture/search.md), decisions F1–F13, [ADR 0008](../decisions/0008-opening-search-results.md).
 
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Core fuzzy matching | `nucleo-matcher` behind the `FuzzyMatcher` port; ranking; highlighting; tests | ✅ Done |
-| 2. Interactive search | Engine done: walking, scopes, cancellation, streaming, session lifecycle. UI not started: the overlay, the shortcut, keyboard navigation, the worker thread | 🟡 Engine only |
-| 3. Spatial workspace integration | Scopes, origins and shared-ancestor handling done in the engine; opening and revealing results not started | 🟡 Partly |
+| 2. Interactive search | Engine and background worker done: walking, scopes, cancellation, streaming, session lifecycle. UI not started: the overlay, the shortcut, keyboard navigation | 🟡 Engine and worker |
+| 3. Spatial workspace integration | Scopes, origins and shared-ancestor handling in the engine; opening and revealing results through `WorkspaceService` (ADR 0008). Scope selector and reveal key come with the UI | 🟡 Services done |
 | 4. Refinement | Configuration, profiling, result actions, operations on results | ⏳ Not started |

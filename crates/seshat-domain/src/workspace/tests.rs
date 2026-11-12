@@ -491,7 +491,7 @@ fn invariants_hold_across_random_operation_sequences() {
             let ids: Vec<PanelId> = ws.panels().map(Panel::id).collect();
             let any = ids[rng.next(ids.len())];
             let name = format!("d{}", rng.next(4));
-            match rng.next(12) {
+            match rng.next(13) {
                 0 | 1 => {
                     let from = ws.active_panel();
                     let location = ws.panel(from).unwrap().location().child(name.as_ref());
@@ -537,6 +537,17 @@ fn invariants_hold_across_random_operation_sequences() {
                 }
                 10 => {
                     ws.set_focus_mode(rng.next(2) == 0);
+                }
+                11 => {
+                    // Fuzzy Find opening a result several levels below a
+                    // panel (F5).
+                    let mut location = ws.panel(any).unwrap().location().clone();
+                    let mut steps = Vec::new();
+                    for _ in 0..=rng.next(3) {
+                        location = location.child(format!("d{}", rng.next(4)).as_ref());
+                        steps.push(location.clone());
+                    }
+                    ws.open_path(any, steps).unwrap();
                 }
                 _ => {
                     ws.open_root(loc(&format!("/r{}", rng.next(3))), PanelState::default());
@@ -1150,4 +1161,144 @@ fn branches_are_numbered_from_one_in_spatial_order() {
     assert_eq!(ws.branch_number(0), None, "numbers start at 1");
     assert_eq!(ws.branch_number(3), None);
     ok(&ws);
+}
+
+// ── Opening a folder several levels down (Fuzzy Find, decision F5) ────
+
+#[test]
+fn open_path_reuses_existing_panels_and_extends_the_branch() {
+    let mut s = scenario();
+    let panels = s.ws.panel_count();
+    let branches = s.ws.branch_count();
+    let opened =
+        s.ws.open_path(
+            s.home,
+            vec![
+                loc("/home/u/Documents"),
+                loc("/home/u/Documents/Projects"),
+                loc("/home/u/Documents/Projects/src"),
+            ],
+        )
+        .unwrap();
+    ok(&s.ws);
+    assert_eq!(s.ws.panel_count(), panels + 1, "only src is new");
+    assert_eq!(
+        s.ws.branch_count(),
+        branches,
+        "Projects was a tip: no new branch"
+    );
+    assert_eq!(opened.branch, s.docs_branch);
+    assert!(!opened.new_branch);
+    assert_eq!(s.ws.active_panel(), opened.panel);
+    assert_eq!(
+        path_names(&s.ws, s.docs_branch),
+        [
+            "/home/u",
+            "/home/u/Documents",
+            "/home/u/Documents/Projects",
+            "/home/u/Documents/Projects/src"
+        ]
+    );
+    // Every parent's cursor points at the folder opened below it.
+    let cursor = |p: PanelId| s.ws.panel(p).unwrap().state.cursor.clone();
+    assert_eq!(cursor(s.documents), Some(loc("/home/u/Documents/Projects")));
+    assert_eq!(
+        cursor(s.projects),
+        Some(loc("/home/u/Documents/Projects/src"))
+    );
+}
+
+#[test]
+fn open_path_starts_one_new_branch_where_continuing_would_replace_a_path() {
+    let mut s = scenario();
+    let branches = s.ws.branch_count();
+    let opened =
+        s.ws.open_path(
+            s.home,
+            vec![loc("/home/u/Music"), loc("/home/u/Music/Jazz")],
+        )
+        .unwrap();
+    ok(&s.ws);
+    assert_eq!(s.ws.branch_count(), branches + 1, "exactly one new branch");
+    assert_eq!(
+        path_names(&s.ws, opened.branch),
+        ["/home/u", "/home/u/Music", "/home/u/Music/Jazz"]
+    );
+    // The other branches are untouched.
+    assert_eq!(
+        path_names(&s.ws, s.docs_branch),
+        ["/home/u", "/home/u/Documents", "/home/u/Documents/Projects"]
+    );
+    assert_eq!(
+        path_names(&s.ws, s.downloads_branch),
+        ["/home/u", "/home/u/Downloads"]
+    );
+}
+
+#[test]
+fn open_path_through_another_branch_reactivates_it() {
+    let mut s = scenario();
+    assert_eq!(s.ws.active_branch().id(), s.downloads_branch);
+    let panels = s.ws.panel_count();
+    let opened =
+        s.ws.open_path(
+            s.home,
+            vec![loc("/home/u/Documents"), loc("/home/u/Documents/Projects")],
+        )
+        .unwrap();
+    ok(&s.ws);
+    assert_eq!(
+        s.ws.panel_count(),
+        panels,
+        "nothing new, nothing duplicated"
+    );
+    assert_eq!(opened.branch, s.docs_branch);
+    assert_eq!(s.ws.active_panel(), s.projects);
+}
+
+#[test]
+fn open_path_is_one_step_back() {
+    let mut s = scenario();
+    let before = s.ws.active_panel();
+    s.ws.open_path(
+        s.home,
+        vec![
+            loc("/home/u/Music"),
+            loc("/home/u/Music/Jazz"),
+            loc("/home/u/Music/Jazz/Live"),
+        ],
+    )
+    .unwrap();
+    assert!(s.ws.go_back());
+    assert_eq!(
+        s.ws.active_panel(),
+        before,
+        "Back skips the folders in between"
+    );
+    assert!(s.ws.go_forward());
+    assert_eq!(
+        location_of(&s.ws, s.ws.active_panel()),
+        "/home/u/Music/Jazz/Live"
+    );
+}
+
+#[test]
+fn open_path_without_steps_activates_the_panel() {
+    let mut s = scenario();
+    let opened = s.ws.open_path(s.documents, Vec::new()).unwrap();
+    ok(&s.ws);
+    assert_eq!(opened.panel, s.documents);
+    assert_eq!(s.ws.active_panel(), s.documents);
+    assert_eq!(s.ws.active_branch().id(), s.docs_branch);
+}
+
+#[test]
+fn open_path_from_an_unknown_panel_changes_nothing() {
+    let mut s = scenario();
+    let before = s.ws.clone();
+    assert_eq!(
+        s.ws.open_path(PanelId::from_raw(999), vec![loc("/home/u/x")]),
+        Err(WorkspaceError::UnknownPanel(PanelId::from_raw(999)))
+    );
+    assert_eq!(s.ws, before);
 }

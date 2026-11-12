@@ -24,6 +24,15 @@ pub enum Content {
     Failed(ListingError),
 }
 
+/// Where the cursor goes once an entry is listed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct PendingCursor {
+    pub(super) location: Location,
+    /// Also make it the panel's only selected item (after create or
+    /// rename). A reveal only moves the cursor (decision F9).
+    pub(super) select: bool,
+}
+
 /// A panel's cached directory listing. Owned by the workspace service, not
 /// by any widget, so panels can be re-rendered without re-reading the disk.
 #[derive(Debug, Clone)]
@@ -38,8 +47,9 @@ pub struct PanelListing {
     pub(super) load_generation: u64,
     pub(super) watch_generation: u64,
     pub(super) last_used: u64,
-    /// Select this entry once it shows up (after create or rename).
-    pub(super) pending_select: Option<Location>,
+    /// Put the cursor on this entry once it shows up (after create,
+    /// rename or reveal), selecting it too if asked.
+    pub(super) pending: Option<PendingCursor>,
     /// A listing has arrived at least once.
     pub(super) loaded: bool,
 }
@@ -54,7 +64,7 @@ impl PanelListing {
             load_generation: 0,
             watch_generation,
             last_used,
-            pending_select: None,
+            pending: None,
             loaded: false,
         }
     }

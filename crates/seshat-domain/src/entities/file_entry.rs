@@ -19,6 +19,14 @@ pub enum EntryKind {
     Other,
 }
 
+impl EntryKind {
+    /// Whether activating an entry of this kind opens it as a folder: a
+    /// folder, or a link to one.
+    pub fn is_browsable(self) -> bool {
+        matches!(self, Self::Directory | Self::Symlink { to_directory: true })
+    }
+}
+
 /// Where a trashed item came from (freedesktop.org Trash `.trashinfo`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrashInfo {
@@ -67,10 +75,7 @@ impl FileEntry {
 
     /// Whether activating the entry should open it as a folder.
     pub fn is_browsable(&self) -> bool {
-        matches!(
-            self.kind,
-            EntryKind::Directory | EntryKind::Symlink { to_directory: true }
-        )
+        self.kind.is_browsable()
     }
 
     /// The local path, if the entry lives on a regular filesystem.

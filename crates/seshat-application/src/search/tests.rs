@@ -546,3 +546,140 @@ fn cancelling_and_closing_stop_the_running_search() {
     assert_eq!(sessions.status(), SearchStatus::Idle);
     assert_ne!(sessions.open(), first_id, "session ids are never reused");
 }
+
+// ── Running on the worker thread (§11, §14) ─────────────────────────────
+
+use std::sync::{Mutex, mpsc};
+use std::time::Duration;
+
+const WAIT: Duration = Duration::from_secs(10);
+
+fn listener() -> (SearchListener, mpsc::Receiver<SearchUpdate>) {
+    let (tx, rx) = mpsc::channel();
+    let tx = Mutex::new(tx);
+    (
+        Box::new(move |update| {
+            let _ = tx.lock().unwrap().send(update);
+        }),
+        rx,
+    )
+}
+
+/// Updates up to and including the end of the search with `generation`.
+fn until_finished(rx: &mpsc::Receiver<SearchUpdate>, generation: u64) -> Vec<SearchUpdate> {
+    let mut updates = Vec::new();
+    loop {
+        let update = rx.recv_timeout(WAIT).expect("the search ends");
+        let done = update.ticket.generation == generation
+            && matches!(update.event, SearchEvent::Finished(_));
+        updates.push(update);
+        if done {
+            return updates;
+        }
+    }
+}
+
+#[test]
+fn the_worker_runs_searches_off_the_calling_thread() {
+    let (engine, _) = engine(tree());
+    let (listen, rx) = listener();
+    let worker = SearchWorker::start(engine, listen);
+    let mut sessions = SearchSessions::default();
+    sessions.open();
+    let ticket = sessions.search().unwrap();
+    worker.submit(ticket.clone(), request(&["/r"], "dcm"));
+    let updates = until_finished(&rx, ticket.generation);
+    let SearchEvent::Results(results) = &updates[updates.len() - 2].event else {
+        panic!("final results come before the end: {updates:?}");
+    };
+    assert_eq!(names(results)[0], "Documents");
+    let SearchEvent::Finished(summary) = &updates.last().unwrap().event else {
+        unreachable!()
+    };
+    assert_eq!(summary.status, SearchStatus::Completed);
+    assert!(sessions.finish(&ticket, summary.status.clone()));
+}
+
+#[test]
+fn only_the_latest_search_of_the_worker_is_shown() {
+    let (engine, _) = engine(tree());
+    let (listen, rx) = listener();
+    let worker = SearchWorker::start(engine, listen);
+    let mut sessions = SearchSessions::default();
+    sessions.open();
+    let first = sessions.search().unwrap();
+    worker.submit(first.clone(), request(&["/r"], "dcm"));
+    let second = sessions.search().unwrap();
+    worker.submit(second.clone(), request(&["/r"], "notes"));
+    let updates = until_finished(&rx, second.generation);
+    let shown: Vec<&SearchUpdate> = updates
+        .iter()
+        .filter(|u| sessions.accepts(&u.ticket))
+        .collect();
+    assert!(
+        shown
+            .iter()
+            .all(|u| u.ticket.generation == second.generation),
+        "nothing from the superseded search is shown"
+    );
+    let last_results = shown
+        .iter()
+        .rev()
+        .find_map(|u| match &u.event {
+            SearchEvent::Results(results) => Some(results),
+            SearchEvent::Finished(_) => None,
+        })
+        .expect("the latest search published results");
+    assert_eq!(names(last_results), ["notes.txt"]);
+}
+
+/// Lists nothing, and only returns once cancelled; reports when it started
+/// and when it stopped.
+struct StuckWalker {
+    events: Mutex<mpsc::Sender<&'static str>>,
+}
+
+impl TreeWalker for StuckWalker {
+    fn walk(
+        &self,
+        _: &Path,
+        _: &WalkOptions,
+        cancel: &CancelToken,
+        _: &mut dyn FnMut(Candidate),
+    ) -> Result<WalkStats, WalkError> {
+        let _ = self.events.lock().unwrap().send("started");
+        while !cancel.is_cancelled() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let _ = self.events.lock().unwrap().send("stopped");
+        Ok(WalkStats::default())
+    }
+}
+
+#[test]
+fn dropping_the_worker_stops_its_search_without_waiting_for_it() {
+    let (events_tx, events) = mpsc::channel();
+    let walker = StuckWalker {
+        events: Mutex::new(events_tx),
+    };
+    let engine = SearchEngine::new(Arc::new(walker), Arc::new(Subsequence));
+    let (listen, rx) = listener();
+    let worker = SearchWorker::start(engine, listen);
+    let mut sessions = SearchSessions::default();
+    sessions.open();
+    let ticket = sessions.search().unwrap();
+    worker.submit(ticket.clone(), request(&["/r"], "x"));
+    assert_eq!(events.recv_timeout(WAIT), Ok("started"));
+    drop(worker); // returns at once; the walk is still running
+    assert_eq!(
+        events.recv_timeout(WAIT),
+        Ok("stopped"),
+        "and it is cancelled"
+    );
+    assert!(ticket.cancel.is_cancelled());
+    let updates = until_finished(&rx, ticket.generation);
+    let SearchEvent::Finished(summary) = &updates.last().unwrap().event else {
+        unreachable!()
+    };
+    assert_eq!(summary.status, SearchStatus::Cancelled);
+}
