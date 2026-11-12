@@ -3,7 +3,6 @@
 
 use std::time::Instant;
 
-use gtk::prelude::*;
 use relm4::{ComponentController, ComponentSender};
 use seshat_application::ports::DirectoryChange;
 use seshat_domain::entities::Location;
@@ -280,15 +279,6 @@ impl App {
         }
     }
 
-    /// `/` or Ctrl+F. Like Vim's `/`, this starts a new search: a panel's
-    /// remembered query (restored with the panel) is selected, so typing
-    /// replaces it and an arrow key keeps it for editing.
-    pub(super) fn start_search(&mut self) {
-        self.ui.search_bar.set_search_mode(true);
-        self.ui.search_entry.grab_focus();
-        self.ui.search_entry.select_region(0, -1);
-    }
-
     /// Shows the active panel's own search in the search bar.
     fn sync_search(&mut self) {
         let query = self
@@ -296,16 +286,6 @@ impl App {
             .state(self.service.active_panel())
             .map(|s| s.options.query.clone())
             .unwrap_or_default();
-        if self.ui.search_entry.text() != query {
-            self.search_echo = Some(query.clone());
-            self.ui.search_entry.set_text(&query);
-        }
-        let show = !query.is_empty();
-        if self.ui.search_bar.is_search_mode() != show {
-            if !show {
-                self.search_echo = Some(String::new());
-            }
-            self.ui.search_bar.set_search_mode(show);
-        }
+        self.search.sync(&query);
     }
 }

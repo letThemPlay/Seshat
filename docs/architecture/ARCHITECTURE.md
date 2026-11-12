@@ -64,6 +64,8 @@ The window (`seshat-presentation/src/app/`) is a Relm4 component, `App`, that co
 | `DeviceController` (`app/devices.rs`) | The device list, mounting and ejecting | `Msg::Device(DeviceMsg)` |
 | `OperationsController` (`app/operations.rs`) | The operations panel, conflict dialogs, staying alive while hidden; observes the `OperationManager` | `Msg::Operations(OperationsMsg)` |
 | `CommandLineController` (`app/command_line.rs`) | The command line's field, history and Tab completion | `Msg::CommandLine(CommandLineMsg)` |
+| `SearchController` (`app/search.rs`) | The panel search bar: starting and closing a search, filtering the active panel as the user types, showing each panel's own query | `Msg::Search(SearchMsg)` |
+| `AddressBarController` (`app/address_bar.rs`) | Whether a location is being typed, and resolving typed text (also for `:open`, `:copy` and `:move`) | `Msg::Address(AddressMsg)` |
 | `EffectRunner` (`app/effects.rs`) | The I/O ports the workspace service's effects need (listing, watching, launching, saving), the watch guards, pending live reloads and the batched save | Results come back as `Msg::PanelLoaded`, `PanelChanged`, `ReloadPanel`, `SaveWorkspace` and `OpenFailed` |
 
 Rules:

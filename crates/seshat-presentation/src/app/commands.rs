@@ -63,11 +63,7 @@ impl App {
             Intent::EndRange | Intent::LeaveVisual => {}
             Intent::ClearSelection => {
                 // Esc closes what is open first, then clears the selection.
-                if self.ui.search_bar.is_search_mode() {
-                    self.ui.search_bar.set_search_mode(false);
-                } else if self.editing_address {
-                    self.editing_address = false;
-                } else {
+                if !self.search.close() && !self.address.stop_editing() {
                     self.service.clear_selections();
                 }
             }
@@ -116,7 +112,7 @@ impl App {
             AppAction::Help => self.show_help(),
             AppAction::ReloadThemes => self.theme_message(ThemeMsg::Reload, sender),
             AppAction::OpenThemesFolder => self.theme_message(ThemeMsg::OpenFolder, sender),
-            AppAction::EditAddress => self.editing_address = true,
+            AppAction::EditAddress => self.address.edit(),
             AppAction::KeyboardContextMenu => self.keyboard_context_menu(sender),
         }
     }
@@ -150,7 +146,7 @@ impl App {
             Action::Forward => {
                 self.service.go_forward();
             }
-            Action::Search => self.start_search(),
+            Action::Search => self.search.start(),
             Action::FocusMode => {
                 self.service.toggle_focus_mode();
             }
