@@ -8,6 +8,7 @@
 mod command_line;
 mod commands;
 mod devices;
+mod effects;
 mod file_ops;
 mod operations;
 mod shortcuts;
@@ -19,12 +20,12 @@ use command_line::CommandLineController;
 pub use command_line::CommandLineMsg;
 use devices::DeviceController;
 pub use devices::DeviceMsg;
+use effects::EffectRunner;
 use operations::OperationsController;
 pub use operations::OperationsMsg;
 use theme::ThemeController;
 pub use theme::ThemeMsg;
 
-use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
@@ -38,7 +39,6 @@ use seshat_application::navigation::{AddressError, breadcrumbs, parse_address};
 use seshat_application::operations::{OperationManager, OperationRequest};
 use seshat_application::ports::{
     DeviceMonitor, DirectoryChange, DirectoryWatcher, Launcher, ListingError, ThemeRepository,
-    WatchGuard,
 };
 use seshat_application::preferences::{Preferences, PreferencesStore};
 use seshat_application::use_cases::ListDirectory;
@@ -66,12 +66,8 @@ use view::{AppWidgets, Handles};
 const THEME_PROVIDER_PRIORITY: u32 = gtk::STYLE_PROVIDER_PRIORITY_USER + 1;
 
 /// Bursts of filesystem events (e.g. extracting an archive) are coalesced
-/// into one reload.
+/// into one reload, of a panel or of the themes folder.
 const RELOAD_DEBOUNCE: Duration = Duration::from_millis(300);
-const MAX_RELOAD_DEBOUNCE: Duration = Duration::from_secs(3);
-
-/// Workspace changes are saved this long after the last one.
-const SAVE_DELAY: Duration = Duration::from_secs(1);
 
 /// Opening many files at once from one action is almost always a mistake.
 const MAX_FILES_TO_OPEN: usize = 20;
@@ -201,12 +197,9 @@ struct Staged {
 
 pub struct App {
     home: PathBuf,
-    list_directory: ListDirectory,
-    directory_watcher: Rc<dyn DirectoryWatcher>,
-
-    launcher: Rc<dyn Launcher>,
     preferences_store: Rc<dyn PreferencesStore>,
-    workspace_store: Rc<dyn WorkspaceStore>,
+    /// Carries out the service's I/O effects.
+    effects: EffectRunner,
     sidebar: Controller<Sidebar>,
     actions: Actions,
     ui: Handles,
@@ -214,9 +207,6 @@ pub struct App {
     service: WorkspaceService,
     keys: SharedKeys,
     command_line: CommandLineController,
-    watches: HashMap<PanelId, WatchGuard>,
-    /// Panels with a debounced reload scheduled.
-    reload_pending: HashSet<PanelId>,
     /// The panel that last had keyboard focus moved to it.
     focused_panel: Option<PanelId>,
     /// Whether that focus went to the file list (not a message page).
@@ -231,7 +221,6 @@ pub struct App {
     /// Transient message for the status bar (errors, device events).
     notice: Option<Notice>,
     editing_address: bool,
-    save_pending: bool,
 
     theme: ThemeController,
 
@@ -402,19 +391,19 @@ impl SimpleComponent for App {
         );
         let mut model = App {
             home: init.home,
-            list_directory: init.list_directory,
-            directory_watcher: init.directory_watcher,
-            launcher: init.launcher,
             preferences_store: init.preferences,
-            workspace_store: init.workspace_store,
+            effects: EffectRunner::new(
+                init.list_directory,
+                init.directory_watcher,
+                init.launcher,
+                init.workspace_store,
+            ),
             sidebar,
             actions,
             ui,
             service,
             keys,
             command_line,
-            watches: HashMap::new(),
-            reload_pending: HashSet::new(),
             focused_panel: None,
             focused_on_files: false,
             logged_shape: None,
@@ -430,10 +419,9 @@ impl SimpleComponent for App {
             staged: None,
             notice: key_warnings.first().map(notice::key_bindings),
             editing_address: false,
-            save_pending: false,
             operations,
         };
-        let watcher = model.directory_watcher.clone();
+        let watcher = model.effects.watcher();
         model
             .theme
             .start(watcher.as_ref(), &mut cx!(model, &sender));
@@ -505,7 +493,7 @@ impl SimpleComponent for App {
                 change,
             } => self.panel_changed(panel, generation, change, &sender),
             Msg::ReloadPanel { panel, generation } => {
-                self.reload_pending.remove(&panel);
+                self.effects.reload_done(panel);
                 self.service.reload_if_current(panel, generation);
             }
             Msg::Intent(intent) => self.intent(intent, &sender),
@@ -517,7 +505,7 @@ impl SimpleComponent for App {
             Msg::TransferTo(kind, destination) => self.plan_transfer(kind, &destination, &sender),
             Msg::SubmitTransfer(plan) => self.submit_transfer(plan),
             Msg::SaveWorkspace => {
-                self.save_pending = false;
+                self.effects.save_due();
                 self.save_workspace();
             }
 
@@ -636,7 +624,7 @@ impl SimpleComponent for App {
     fn shutdown(&mut self, _widgets: &mut AppWidgets, _output: relm4::Sender<()>) {
         self.save_workspace();
         // Saves are written in the background; wait for the last one.
-        self.workspace_store.flush();
+        self.effects.flush();
     }
 }
 
@@ -748,7 +736,7 @@ impl App {
             self.notice = Some(notice::too_many_files(MAX_FILES_TO_OPEN));
             return;
         }
-        self.launch(files);
+        self.effects.launch(files, &self.ui.input);
     }
 
     /// Copies the target items' paths (one per line) to the clipboard.
