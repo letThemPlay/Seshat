@@ -1,3 +1,33 @@
+# Rust
 /target
+**/*.rs.bk
+# cargo-mutants output
+/mutants.out*/
+# Profiling output (perf, cargo-flamegraph, coverage)
+perf.data*
+flamegraph.svg
+*.profraw
+*.profdata
+/lcov.info
+
+# Nix: `nix build` links (`result`, and `result-<output>` for other outputs)
 /result
+/result-*
+# direnv's cache of the flake's dev shell (`.envrc` itself is committed)
 .direnv/
+
+# Claude Code: personal settings, local memory and temporary worktrees.
+# Shared project settings (.claude/settings.json, commands, agents) stay
+# tracked if they are added.
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+
+# Editors and desktop files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.directory
+.DS_Store
