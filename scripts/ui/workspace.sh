@@ -29,6 +29,8 @@ active_in_view() {
     left=$(geometry_field active_left); right=$(geometry_field active_right); width=$(geometry_field viewport)
     [[ -n "$left" && -n "$right" && -n "$width" ]] && ((left >= 0 && right <= width))
 }
+# The workspace cannot scroll sideways: its content fits the visible area.
+no_overflow() { [[ "$(geometry_field overflow)" == 0 ]]; }
 # Every shown panel header has the same height (a fork button or branch
 # badge must not make one taller).
 headers_equal() {
@@ -87,6 +89,9 @@ check "    the rightmost panel is fully in view"    active_in_view
 # 9–11. Focus Mode, with spatial navigation and branch switching
 type_text zz
 check "9. zz enters Focus Mode"                     state_has "focus_mode=true"
+sleep 1   # let the reveal settle
+check "    the focused panel fits without scrolling" no_overflow
+check "    the focused panel is fully in view"      active_in_view
 shot focus-mode
 type_text h
 check "10. h moves to a neighbour while focused"    active_is "$H/Documents"
@@ -94,6 +99,8 @@ check "    Focus Mode is kept"                      state_has "focus_mode=true"
 type_text "]"
 check "11. ] switches branch while focused"         active_is "$H/Downloads"
 check "    Focus Mode is kept across branches"      state_has "focus_mode=true"
+sleep 1
+check "    the focused panel still fits"            no_overflow
 
 # 12. Back to the multi-panel workspace, nothing lost
 type_text zz
