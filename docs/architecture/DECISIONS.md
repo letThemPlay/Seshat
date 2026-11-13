@@ -135,7 +135,7 @@ From the design review (R1): the rules for file actions moved from the window to
 | F2 | "Current Branch" scope | The active branch's root folder, searched recursively. Every panel of a branch lies inside it. Bounded by `max_entries`, `same_device` and cancellation. Approved 2026-11-11. |
 | F3 | Ignore rules | Exact names (`.git` and `node_modules` by default) until configuration (Spec 4 Phase 4), so no glob dependency is added yet. |
 | F4 | Query syntax and case | Queries are plain text: fzf's operators (`^`, `$`, `'`, `!`) are not interpreted, so a name with those characters is found as typed. Matching ignores case by default (Spec 4 §4.3); `Smart` and `Sensitive` are ready for the setting in §15. |
-| F4a | One smart-case rule | **Awaiting review** (2026-11-13, comment audit). `SearchQuery::respects_case` is the one rule: with `Smart`, case matters for the whole query once it contains a capital letter, as `CaseMode::Smart` documents. The matcher and the exact-name ranking both use it. Before, the matcher used nucleo's per-word smart case, so with `Smart` a query such as `doc Notes` matched `doc` in any case; now the whole query is case-sensitive. The default (`Insensitive`) is unchanged. |
+| F4a | Smart case is word by word | Approved 2026-11-13. With `Smart`, the fuzzy matcher treats each word of the query separately: a word with a capital letter matches case-sensitively, the others ignore case (`doc Notes` finds `Doc Notes` but not `Doc notes`). Exact-name ranking compares the whole name with the whole query, so there one capital makes the comparison case-sensitive (`SearchQuery::respects_case`). A single whole-query rule was tried during the comment audit and not kept. |
 
 ## Fuzzy Find integration decisions (approved 2026-11-12)
 
