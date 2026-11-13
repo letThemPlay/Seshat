@@ -7,9 +7,10 @@
 //! carries it out through `WorkspaceService` (ADR 0008). Closing the
 //! overlay drops the worker, which cancels its search (§14).
 //!
-//! What is searched is the scope picked in the overlay (§6.1–6.3), or,
-//! when the query starts with `/` or `~`, the folder it names (§6.4,
-//! decision F10). The workspace can't change while the overlay is open
+//! What is searched is decided by [`SearchTarget`]: the scope picked in the
+//! overlay (§6.1–6.3), or, when the query starts with `/` or `~`, the
+//! folder it names (§6.4, decision F10). The results and the highlight are
+//! kept by [`ResultList`]. The workspace can't change while the overlay is open
 //! (F12), so the folders a scope covers and the branch numbers stay valid.
 
 use std::collections::HashMap;
@@ -21,12 +22,12 @@ use relm4::ComponentSender;
 use seshat_application::ports::{FuzzyMatcher, TreeWalker};
 use seshat_application::preferences::{FuzzyFindPreferences, ScopeChoice};
 use seshat_application::search::{
-    PathQuery, SearchEngine, SearchEvent, SearchRequest, SearchRoot, SearchSessions, SearchSummary,
-    SearchUpdate, SearchWorker, roots,
+    ResultList, SearchEngine, SearchEvent, SearchRequest, SearchRoot, SearchSessions,
+    SearchSummary, SearchTarget, SearchUpdate, SearchWorker,
 };
 use seshat_application::workspace::WorkspaceService;
 use seshat_domain::entities::Location;
-use seshat_domain::search::{SearchResult, SearchScope, SearchStatus};
+use seshat_domain::search::{SearchResult, SearchStatus};
 use seshat_domain::workspace::BranchId;
 
 use super::{App, Msg};
@@ -56,16 +57,6 @@ pub(super) enum FuzzyOutcome {
     Closed,
 }
 
-/// What the current text searches.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Target {
-    /// `None` while the text names a folder (F10).
-    scope: Option<ScopeChoice>,
-    roots: Vec<SearchRoot>,
-    /// The text to match: the query, or what follows a named folder.
-    pattern: String,
-}
-
 pub(super) struct FuzzyFindController {
     view: FuzzyView,
     walker: Arc<dyn TreeWalker>,
@@ -79,14 +70,11 @@ pub(super) struct FuzzyFindController {
     scope: ScopeChoice,
     settings: FuzzyFindPreferences,
     /// What is being searched, or why nothing can be (e.g. the Trash).
-    target: Result<Target, String>,
+    target: Result<SearchTarget, String>,
     /// Branch numbers, as the branch bar shows them, for the badges.
     branch_numbers: HashMap<BranchId, usize>,
     query: String,
-    results: Vec<SearchResult>,
-    /// The highlighted result, by identity, so it stays put while results
-    /// update (§4.3).
-    highlighted: Option<Location>,
+    results: ResultList,
     /// How the latest finished search ended.
     summary: Option<SearchSummary>,
     /// When the current search was started, and whether its first results
@@ -114,8 +102,7 @@ impl FuzzyFindController {
             target: Err(String::new()),
             branch_numbers: HashMap::new(),
             query: String::new(),
-            results: Vec::new(),
-            highlighted: None,
+            results: ResultList::default(),
             summary: None,
             started: None,
         }
@@ -168,7 +155,6 @@ impl FuzzyFindController {
         self.sessions.close();
         self.worker = None;
         self.results.clear();
-        self.highlighted = None;
         self.view.hide();
         tracing::debug!("fuzzy find closed");
     }
@@ -198,14 +184,11 @@ impl FuzzyFindController {
                 FuzzyOutcome::Stay
             }
             FuzzyMsg::View(FuzzyViewEvent::Highlight(position)) => {
-                self.highlighted = self
-                    .results
-                    .get(position as usize)
-                    .map(|r| r.location.clone());
+                self.results.select(position as usize);
                 FuzzyOutcome::Stay
             }
             FuzzyMsg::View(FuzzyViewEvent::Activate) => self.activate(),
-            FuzzyMsg::View(FuzzyViewEvent::Reveal) => match self.highlighted_result() {
+            FuzzyMsg::View(FuzzyViewEvent::Reveal) => match self.results.highlighted() {
                 Some(result) => FuzzyOutcome::Reveal(Box::new(result.clone())),
                 None => FuzzyOutcome::Stay,
             },
@@ -224,7 +207,7 @@ impl FuzzyFindController {
     /// Switches to `scope` and searches it, unless the query names a
     /// folder (F10): scopes don't apply then, and the status line says so.
     fn choose_scope(&mut self, scope: ScopeChoice, service: &WorkspaceService) {
-        if matches!(&self.target, Ok(Target { scope: None, .. })) {
+        if self.target.as_ref().is_ok_and(|t| !t.accepts_scope()) {
             let reason = "A typed folder is being searched; delete it to choose a scope.";
             self.view.set_status(reason);
             self.view.announce(reason);
@@ -244,44 +227,26 @@ impl FuzzyFindController {
     /// match yet, the folder it names, unless that folder couldn't be read.
     fn activate(&self) -> FuzzyOutcome {
         if let Ok(target) = &self.target
-            && target.scope.is_none()
-            && target.pattern.trim().is_empty()
+            && let Some(folder) = target.folder_to_open()
         {
             if matches!(self.sessions.status(), SearchStatus::Failed(_)) {
                 return FuzzyOutcome::Stay; // the reason is on the status line
             }
-            return match target.roots.first() {
-                Some(root) => FuzzyOutcome::OpenFolder(Location::Path(root.path.clone())),
-                None => FuzzyOutcome::Stay,
-            };
+            return FuzzyOutcome::OpenFolder(Location::Path(folder.to_path_buf()));
         }
-        match self.highlighted_result() {
+        match self.results.highlighted() {
             Some(result) => FuzzyOutcome::Open(Box::new(result.clone())),
             None => FuzzyOutcome::Stay,
         }
     }
 
-    /// What the current text searches: the folder it names (F10), or the
-    /// chosen scope's folders.
-    fn target(&self, service: &WorkspaceService) -> Result<Target, String> {
-        let (scope, chosen, pattern) = match PathQuery::parse(&self.query, &self.home) {
-            Some(path) => (SearchScope::AbsolutePath(path.folder), None, path.pattern),
-            None => (self.scope.scope(), Some(self.scope), self.query.clone()),
-        };
-        let roots = roots(&scope, service.workspace())
-            .map_err(|err| Notice::from_error(&err).text().to_owned())?;
-        Ok(Target {
-            scope: chosen,
-            roots,
-            pattern,
-        })
-    }
-
     /// Starts a search for the current text; the previous one is
     /// superseded and can no longer show anything (§14).
     fn search(&mut self, service: &WorkspaceService) {
-        self.target = self.target(service);
-        // The drop-down is greyed out while the text names a folder.
+        self.target =
+            SearchTarget::resolve(&self.query, self.scope, service.workspace(), &self.home)
+                .map_err(|err| Notice::from_error(&err).text().to_owned());
+        // The scope buttons are greyed out while the text names a folder.
         let (chosen, folders) = match &self.target {
             Ok(target) => (target.scope, folders_text(&target.roots)),
             Err(_) => (Some(self.scope), String::new()),
@@ -304,7 +269,6 @@ impl FuzzyFindController {
             Err(_) => {
                 // Nothing to search: no results, and the reason is shown.
                 self.results.clear();
-                self.highlighted = None;
                 self.summary = None;
                 self.view.set_results(&[], None);
             }
@@ -318,9 +282,7 @@ impl FuzzyFindController {
                 if !self.sessions.accepts(&update.ticket) {
                     return; // superseded: never shown
                 }
-                self.results = results;
-                let index = self.highlight_index();
-                self.highlighted = index.map(|i| self.results[i].location.clone());
+                let index = self.results.replace(results);
                 self.view.set_results(&self.rows(), index);
                 if let Some((started, first @ false)) = &mut self.started
                     && !self.results.is_empty()
@@ -366,14 +328,9 @@ impl FuzzyFindController {
     /// The results as listed, with branch badges when every branch is
     /// searched (§6.3).
     fn rows(&self) -> Vec<ResultRow> {
-        let badges = matches!(
-            &self.target,
-            Ok(Target {
-                scope: Some(ScopeChoice::EntireWorkspace),
-                ..
-            })
-        );
+        let badges = self.target.as_ref().is_ok_and(SearchTarget::shows_branches);
         self.results
+            .results()
             .iter()
             .map(|result| ResultRow {
                 result: result.clone(),
@@ -394,7 +351,7 @@ impl FuzzyFindController {
             Err(reason) => reason.clone(),
             Ok(target) => status_text(
                 &target.pattern,
-                target.scope.is_none(),
+                !target.accepts_scope(),
                 &self.sessions.status(),
                 self.results.len(),
                 self.settings.max_results,
@@ -404,30 +361,10 @@ impl FuzzyFindController {
         self.view.set_status(&text);
     }
 
-    /// Where the highlight goes after the results changed: the same
-    /// result if it is still there, otherwise the best one.
-    fn highlight_index(&self) -> Option<usize> {
-        if self.results.is_empty() {
-            return None;
-        }
-        self.highlighted
-            .as_ref()
-            .and_then(|h| self.results.iter().position(|r| &r.location == h))
-            .or(Some(0))
-    }
-
-    fn highlighted_result(&self) -> Option<&SearchResult> {
-        self.highlight_index().map(|i| &self.results[i])
-    }
-
     fn move_highlight(&mut self, step: isize) {
-        let Some(current) = self.highlight_index() else {
-            return;
-        };
-        let last = self.results.len() - 1;
-        let next = current.saturating_add_signed(step).min(last);
-        self.highlighted = Some(self.results[next].location.clone());
-        self.view.set_highlight(Some(next));
+        if let Some(next) = self.results.move_by(step) {
+            self.view.set_highlight(Some(next));
+        }
     }
 }
 

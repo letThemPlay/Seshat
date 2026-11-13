@@ -1,13 +1,14 @@
 # Fuzzy Find
 
-[Fuzzy Find](../specifications/4-FUZZY-FIND.md): the engine, the worker thread that runs it, the overlay (`Ctrl+P`) and opening results in the workspace. The Current Directory scope is reachable from the app; the scope selector, reveal and configuration are still to come.
+[Fuzzy Find](../specifications/4-FUZZY-FIND.md): the engine, the worker thread that runs it, the overlay (`Ctrl+P`) with its scopes, opening and revealing results in the workspace, and its settings. Only operations on several results (§10) are left for a later phase (F13).
 
 ```text
  presentation  FuzzyFindController (app/fuzzy_find.rs) + FuzzyView (overlay)
                                  │ opens a session, starts a search per query on
                                  │ the SearchWorker; Enter → WorkspaceService::open_result
- application  search::      roots(scope, &Workspace) ──► SearchRequest
+ application  search::      SearchTarget::resolve(query, scope) → roots ──► SearchRequest
                             SearchSessions (ids, generations, cancel tokens)
+                            ResultList (results shown, highlight by identity)
                             SearchEngine: walk once, rank per query, publish batches
                                  │ ports
                             TreeWalker            FuzzyMatcher / QueryMatcher
@@ -21,7 +22,7 @@
 |---|---|
 | Domain (`seshat_domain::search`) | `SearchQuery` and `CaseMode`, `SearchScope`, `SearchSessionId`, `SearchStatus`, `SearchOrigin`, `SearchResult`, `SearchMatch` (matched byte ranges). No matching library, no I/O. |
 | Application ports | `FuzzyMatcher` → `QueryMatcher`, so the library can be replaced (§13); `TreeWalker` with `WalkOptions`, `Candidate`, `WalkStats`, `WalkError`. |
-| Application (`seshat_application::search`) | Scopes (`roots`), ranking, `SearchEngine`, `SearchSessions`. |
+| Application (`seshat_application::search`) | Scopes (`roots`), what a query searches (`SearchTarget`: a typed folder overrides the scope, which scopes apply, when Enter opens the folder, when results name their branch), ranking, `SearchEngine`, `SearchSessions`, `ResultList` (the results shown and the highlight). |
 | Infrastructure (`seshat_infrastructure::search`) | `NucleoMatcher`, `LocalTreeWalker`. `nucleo-matcher` is forbidden in every other layer by `scripts/check-architecture.sh`. |
 
 ## Scopes (§6)
@@ -111,10 +112,10 @@ Opening goes through the workspace's own navigation ([ADR 0008](../decisions/000
 - **Opening** starts a `SearchWorker` and runs an empty query at once for the chosen scope, so its folders are walked while the user starts typing.
 - **Scopes** (§6, F14): three buttons, `1 Directory`, `2 Branch` and `3 Workspace`, show every scope and which one is searched (pressed, with an accent bar). From the search field, `Tab` and `Shift+Tab` cycle through them and `Alt+1`, `Alt+2`, `Alt+3` jump to one; each change is announced to screen readers ("Searching Current Branch") from the status label, because announcing from the focused search field hung the main loop under test. The line beside the buttons names the folders searched (`roots`). The choice lasts until Seshat closes and isn't saved (F12); the saved default comes with configuration. The buttons never take keyboard focus, so the window's key bindings can't act on the workspace while the overlay is open. With Entire Workspace, each result shows a badge with the number of the branch it was found in, as the branch bar numbers them (§6.3); a folder shared by several branches is searched once and its results carry the first of them.
 - **Typing** starts a new search for every change (the search field waits 50 ms); the previous search is superseded through its ticket, and results that arrive for it are dropped.
-- **The highlight** follows the result, not its position: when results update, the same result stays highlighted if it is still there, otherwise the best one.
+- **The highlight** follows the result, not its position (`ResultList`): when results update, the same result stays highlighted if it is still there, otherwise the best one.
 - **Keys** stay in the search field: `Up`, `Down`, `Page Up` and `Page Down` move the highlight, `Enter` opens, `Alt+Enter` reveals (F7), `Tab` and `Shift+Tab` change scope (F14), `Esc` closes, and `Ctrl+Backspace` deletes a word as in any text field. A click highlights and a double-click opens; keyboard focus returns to the search field.
 - **Reveal** (`Alt+Enter`, §9.4) returns the result for `WorkspaceService::reveal_result`: its folder opens along the path, bringing back its branch if needed, and the cursor moves to the result once listed; the selection is left alone (F9).
-- **A typed folder** (§6.4, F10): a query starting with `/`, `~/` or exactly `~` is read by `PathQuery` (application): the text up to the last `/` is the folder, with the address bar's rules (`parse_address`), and the rest is the pattern. The folder is searched as the `AbsolutePath` scope and the scope buttons are greyed out; `Tab` changes nothing and the status line says why. With nothing after the folder, `Enter` opens it as the address bar would (D3); a folder that doesn't exist or can't be read is reported on the status line and `Enter` does nothing. Results from a typed folder have no origin panel, so they open through `open_location` too (ADR 0008).
+- **A typed folder** (§6.4, F10): a query starting with `/`, `~/` or exactly `~` is read by `PathQuery` and resolved by `SearchTarget` (application): the text up to the last `/` is the folder, with the address bar's rules (`parse_address`), and the rest is the pattern. The folder is searched as the `AbsolutePath` scope and the scope buttons are greyed out; `Tab` changes nothing and the status line says why. With nothing after the folder, `Enter` opens it as the address bar would (D3); a folder that doesn't exist or can't be read is reported on the status line and `Enter` does nothing. Results from a typed folder have no origin panel, so they open through `open_location` too (ADR 0008).
 - **Closing**, by `Esc`, by opening a result or by focus moving elsewhere, drops the worker, which cancels its search.
 - **Rows** show an icon and, for folders, a trailing `/`, so the kind is never shown by colour alone (§16). Matched characters are bold and underlined (`fuzzy_view::highlighted`, escaped Pango markup on character boundaries). The second line says which folder the result is in, or shows the path with its matches when only the path matched. The highlighted row has an accent bar as well as the selection colour. Screen readers hear "name, folder, in parent".
 - **The status line** says what the search is doing: "Type to search", "Searching…", "N results so far…", the result count or "No matches", folders that couldn't be read, and whether the walk stopped at its limit.
