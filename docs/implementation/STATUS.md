@@ -106,3 +106,10 @@ Status as of 2026-11-13, branch `main`.
 2. **Manual verification on GNOME and KDE Plasma, and with Orca.** The full checklist passed on Hyprland and Niri ([2026-11-10](../development/verification-results/2026-11-10-hyprland-niri.md)), including drag and drop, scaling, touchpad scrolling, devices and the Trash. The Orca check now also covers error messages being announced (decision N2) and confirmations not being announced.
 3. **D12 panel features** (columns, expanded metadata, preview), if they are wanted later.
 4. **Patterns and principles review: complete.** All ten recommendations (DR1 to DR10) from the [review](../review/architecture.md#patterns-and-principles-review-2026-11-11) were delivered as separate pull requests with no change in behaviour (2026-11-11 to 2026-11-12). Remaining test gaps they noted: the effect runner, the search bar and Open Themes Folder are covered by the UI tests or by hand, not by unit tests, because they drive GTK.
+5. **Comment audit (2026-11-13), in progress.** An audit of the code comments found four bugs where the code did not do what its comment said. They are fixed in `fix-audit-bugs`:
+   - Live reloads were debounced by the size of the active panel's folder, not the folder being reloaded.
+   - `scripts/verify-wayland.sh` ran the full UI with the real `HOME` and state directory, so it could rewrite the user's saved workspace.
+   - `open_path_ends_on_the_folder_asked_for_not_deeper` never reached the C1 override it is named for.
+   - A dead `.seshat-path` CSS rule and an overridden `.seshat-status` padding rule.
+
+   Comment cleanup, enforcing documented constraints in code, and type refactors follow as separate pull requests.

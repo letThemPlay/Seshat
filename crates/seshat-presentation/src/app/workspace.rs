@@ -255,10 +255,7 @@ impl App {
         if reload {
             // Large folders wait longer, so constant changes can't keep the
             // UI busy.
-            let entries = self
-                .service
-                .listing(self.service.active_panel())
-                .map_or(0, |l| l.total());
+            let entries = self.service.listing(panel).map_or(0, |l| l.total());
             self.effects
                 .schedule_reload(panel, generation, reload_delay(entries), sender);
         }

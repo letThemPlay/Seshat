@@ -1258,10 +1258,12 @@ fn open_path_through_another_branch_reactivates_it() {
 
 #[test]
 fn open_path_ends_on_the_folder_asked_for_not_deeper() {
-    // Documents is on another branch whose remembered panel is Projects,
-    // below it. `l` would land there (C1); a search result is the folder
-    // itself, so the walk ends on Documents, with Projects kept.
+    // Leave the Documents branch at Projects, below Documents. `l` would
+    // land there (C1); a search result is the folder itself, so the walk
+    // ends on Documents, with Projects kept.
     let mut s = scenario();
+    s.ws.activate_panel(s.projects).unwrap();
+    s.ws.activate_branch(s.downloads_branch).unwrap();
     let panels = s.ws.panel_count();
     let opened =
         s.ws.open_path(s.home, vec![loc("/home/u/Documents")])
