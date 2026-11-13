@@ -30,7 +30,7 @@ use seshat_domain::search::{SearchResult, SearchScope, SearchStatus};
 use seshat_domain::workspace::BranchId;
 
 use super::{App, Msg};
-use crate::fuzzy_view::{FuzzyView, FuzzyViewEvent, ResultRow};
+use crate::fuzzy_view::{FuzzyView, FuzzyViewEvent, ResultRow, scope_name};
 use crate::notice::{self, Notice};
 
 #[derive(Debug)]
@@ -186,11 +186,11 @@ impl FuzzyFindController {
                 FuzzyOutcome::Stay
             }
             FuzzyMsg::View(FuzzyViewEvent::Scope(scope)) => {
-                if scope != self.scope {
-                    self.scope = scope;
-                    tracing::debug!(scope = ?self.scope, "fuzzy find scope");
-                    self.search(service);
-                }
+                self.choose_scope(scope, service);
+                FuzzyOutcome::Stay
+            }
+            FuzzyMsg::View(FuzzyViewEvent::CycleScope(step)) => {
+                self.choose_scope(self.scope.cycled(step), service);
                 FuzzyOutcome::Stay
             }
             FuzzyMsg::View(FuzzyViewEvent::Move(step)) => {
@@ -219,6 +219,25 @@ impl FuzzyFindController {
             self.close();
         }
         outcome
+    }
+
+    /// Switches to `scope` and searches it, unless the query names a
+    /// folder (F10): scopes don't apply then, and the status line says so.
+    fn choose_scope(&mut self, scope: ScopeChoice, service: &WorkspaceService) {
+        if matches!(&self.target, Ok(Target { scope: None, .. })) {
+            let reason = "A typed folder is being searched; delete it to choose a scope.";
+            self.view.set_status(reason);
+            self.view.announce(reason);
+            return;
+        }
+        if scope == self.scope {
+            return;
+        }
+        self.scope = scope;
+        tracing::debug!(scope = ?self.scope, "fuzzy find scope");
+        self.view
+            .announce(&format!("Searching {}", scope_name(scope)));
+        self.search(service);
     }
 
     /// Enter: the highlighted result, or with a path query and nothing to

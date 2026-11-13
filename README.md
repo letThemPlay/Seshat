@@ -13,7 +13,7 @@ Opening a folder adds a **panel** to the right instead of replacing the view. Pa
 
 ## Fuzzy Find
 
-`Ctrl+P` opens a search over the workspace that finds files and folders as you type, fzf-style: `prj` finds `Projects`. Pick where it looks with the drop-down or `Alt+1`, `Alt+2`, `Alt+3`: the current folder, the current branch or every branch (results then show their branch number). Start the search with `/` or `~/` to look inside a folder you type. `Enter` opens a result: a folder opens as panels along the path, reusing those already open, and one Back returns; a file opens in its application. `Alt+Enter` shows a result in its folder with the cursor on it. `Esc` closes without changing anything. The `[fuzzy_find]` settings choose the starting scope, hidden files, ignored names (`.git` and `node_modules` by default), the number of results and letter case. See [search.md](docs/architecture/search.md).
+`Ctrl+P` opens a search over the workspace that finds files and folders as you type, fzf-style: `prj` finds `Projects`. Pick where it looks with `Tab` and `Shift+Tab`, `Alt+1`, `Alt+2`, `Alt+3`, or the buttons shown with their numbers: the current folder, the current branch or every branch (results then show their branch number). Start the search with `/` or `~/` to look inside a folder you type. `Enter` opens a result: a folder opens as panels along the path, reusing those already open, and one Back returns; a file opens in its application. `Alt+Enter` shows a result in its folder with the cursor on it. `Esc` closes without changing anything. The `[fuzzy_find]` settings choose the starting scope, hidden files, ignored names (`.git` and `node_modules` by default), the number of results and letter case. See [search.md](docs/architecture/search.md).
 
 Keys follow Vim. `:help` lists every key and command. Bindings can be changed in `~/.config/seshat/settings.toml`; [docs/examples/settings.toml](docs/examples/settings.toml) lists every setting and every configurable key binding with its default. For example:
 
@@ -41,7 +41,7 @@ restore = true
 | `zz` | Focus Mode |
 | `db` / `dB` | Remove the active panel from the end of its branch / remove back to where the branch meets another (no files are touched) |
 | `u` | Undo the last removal of panels (not file operations) |
-| Ctrl+P | Fuzzy Find: search for files and folders (`Alt+Enter` in it: show in folder) |
+| Ctrl+P | Fuzzy Find: search for files and folders (in it: `Tab` changes scope, `Alt+Enter` shows in folder) |
 | `/` | Search this panel |
 | `:` | Command line: `:copy`, `:move [path \| bN]`, `:delete`, `:rename`, `:mkdir`, `:touch`, `:sort`, `:view`, `:hidden`, `:branch [N \| next \| prev \| close]`, `:focus`, `:open`, `:help`. Tab completes commands, folders and `bN`; Tab / Shift+Tab again cycles through matches |
 | Alt+Left / Alt+Right, Ctrl+O / Ctrl+I, mouse back/forward | Back / Forward (previously active panels) |

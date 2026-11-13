@@ -81,10 +81,29 @@ check "    Focus Mode is kept"                      state_has "focus_mode=true"
 check "    a new branch, nothing duplicated"        state_has "branches=2 panels=6 "
 type_text zz
 
+# Tab and Shift+Tab cycle the scope; the overlay stays open with the query
+# (F14).
+before=$(closed_count)
+chord ctrl p; type_text src 1
+searched=$(log_count "fuzzy find results")
+press Tab 1
+check "Tab keeps Fuzzy Find open"                   is "$(closed_count)" "$before"
+check "    and moves to Current Branch"             log_has "fuzzy find scope scope=CurrentBranch"
+press Tab 1
+check "Tab again: Entire Workspace"                 log_has "fuzzy find scope scope=EntireWorkspace"
+press Tab 1
+check "    and round to Current Directory"          is "$(log_count "fuzzy find scope scope=CurrentDirectory")" 1
+chord shift Tab; sleep 1
+check "Shift+Tab goes back to Entire Workspace"     is "$(log_count "fuzzy find scope scope=EntireWorkspace")" 2
+check "    each switch searches the query again"    is "$(log_count "fuzzy find results")" $((searched + 4))
+shot scope-keys
+press Tab 1; press Escape
+check "    (back to Current Directory)"             is "$(log_count "fuzzy find scope scope=CurrentDirectory")" 2
+
 # Entire Workspace (Alt+3): a result found under the other branch
 # reactivates that branch; nothing is duplicated (§6.3, F5).
 chord ctrl p; chord alt 3; type_text src 1
-check "Alt+3 searches the entire workspace"         log_has "fuzzy find scope.*EntireWorkspace"
+check "Alt+3 searches the entire workspace"         is "$(log_count "fuzzy find scope scope=EntireWorkspace")" 3
 shot workspace-scope
 press Return 1
 check "Enter reactivates the branch it was found in" active_is "$H/Documents/Projects/src"
@@ -102,7 +121,10 @@ chord ctrl p; chord alt 1; press Escape
 
 # A query starting with ~ or / searches in that folder (F10); Enter with
 # nothing after the folder opens it, as the address bar would (D3).
-chord ctrl p; type_text "~/Documents/" 1; press Return 1
+scopes=$(log_count "fuzzy find scope scope=")
+chord ctrl p; type_text "~/Documents/" 1; press Tab 1
+check "Tab does nothing while a folder is typed"    is "$(log_count "fuzzy find scope scope=")" "$scopes"
+press Return 1
 check "Enter on ~/Documents/ opens the folder"      active_is "$H/Documents"
 before=$(closed_count)
 chord ctrl p; type_text "/no/such/folder/" 1; press Return 1

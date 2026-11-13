@@ -247,6 +247,14 @@ window.seshat {{
   padding: 2px 4px;
 }}
 
+/* The scope searched: pressed, in the selection colour and with an accent
+   bar beneath, not colour alone. */
+.seshat-fuzzy-scopes button:checked {{
+  background-color: @seshat_selected;
+  color: @seshat_text_primary;
+  box-shadow: inset 0 -3px 0 @seshat_accent;
+}}
+
 /* The highlighted result: the selection colour and a bar, not colour alone. */
 .seshat-fuzzy listview row:selected {{
   background-color: @seshat_selected;

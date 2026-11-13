@@ -142,6 +142,14 @@ impl ScopeChoice {
             Self::EntireWorkspace => SearchScope::EntireWorkspace,
         }
     }
+
+    /// The scope `step` places after this one in [`Self::ALL`], wrapping
+    /// round at either end: Tab and Shift+Tab in the overlay (F14).
+    pub fn cycled(self, step: isize) -> Self {
+        let all = Self::ALL;
+        let at = all.iter().position(|&s| s == self).unwrap_or(0) as isize;
+        all[(at + step).rem_euclid(all.len() as isize) as usize]
+    }
 }
 
 /// Fuzzy Find settings (Spec 4 §15, decision F11). Following symbolic
@@ -245,6 +253,17 @@ mod tests {
         assert_eq!(back.options.query, "", "a search is not a default");
         assert_eq!(back.mode, ViewMode::Grid);
         assert_eq!(back.options.sort, state.options.sort);
+    }
+
+    #[test]
+    fn scopes_cycle_round_both_ways() {
+        use ScopeChoice::*;
+        assert_eq!(CurrentDirectory.cycled(1), CurrentBranch);
+        assert_eq!(CurrentBranch.cycled(1), EntireWorkspace);
+        assert_eq!(EntireWorkspace.cycled(1), CurrentDirectory);
+        assert_eq!(CurrentDirectory.cycled(-1), EntireWorkspace);
+        assert_eq!(EntireWorkspace.cycled(-1), CurrentBranch);
+        assert_eq!(CurrentBranch.cycled(3), CurrentBranch);
     }
 
     #[test]
