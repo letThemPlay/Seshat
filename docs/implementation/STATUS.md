@@ -1,10 +1,10 @@
 # Implementation status
 
-Status as of 2026-11-12, branch `feature-fuzzy-find-settings`.
+Status as of 2026-11-13, branch `feature-fuzzy-scope-keys`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 439 Rust tests (165 originally), native Wayland verification, and three sandboxed UI tests: file operations (21 checks), the spatial workspace (63 checks, including backward pruning) and Fuzzy Find (30 checks).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 441 Rust tests (165 originally), native Wayland verification, and three sandboxed UI tests: file operations (21 checks), the spatial workspace (63 checks, including backward pruning) and Fuzzy Find (38 checks).
 
 ## Spatial file manager specification
 
@@ -80,11 +80,11 @@ Status as of 2026-11-12, branch `feature-fuzzy-find-settings`.
 
 ## Fuzzy Find specification
 
-[4-FUZZY-FIND.md](../specifications/4-FUZZY-FIND.md), [search.md](../architecture/search.md), decisions F1–F13, [ADR 0008](../decisions/0008-opening-search-results.md). **Fuzzy Find is complete except operations on several results** (§10, F13, a later phase): `Ctrl+P` with every scope, reveal (`Alt+Enter`), typed folders and the `[fuzzy_find]` settings.
+[4-FUZZY-FIND.md](../specifications/4-FUZZY-FIND.md), [search.md](../architecture/search.md), decisions F1–F14, [ADR 0008](../decisions/0008-opening-search-results.md). **Fuzzy Find is complete except operations on several results** (§10, F13, a later phase): `Ctrl+P` with every scope, reveal (`Alt+Enter`), typed folders and the `[fuzzy_find]` settings.
 
 | § | Requirement | Status | Evidence / notes |
 |---|---|---|---|
-| 4.1, 4.2, 7, 8, 16 | Overlay, shortcut, result list, keyboard and mouse, theming | ✅ Verified | `Ctrl+P` (`fuzzy-find`, configurable, gives way to user bindings: `a_user_binding_on_ctrl_p_wins_over_fuzzy_find`); a compact overlay with the search field focused, the searched folder, a virtualised result list, a status line and key hints; the workspace is unchanged while it is open. Rows: icon and trailing `/` for folders, matches bold and underlined (`matches_are_marked_and_everything_is_escaped`, `highlights_keep_whole_characters`, `folders_and_files_differ_by_more_than_colour`); status line (`the_status_line_says_what_the_search_is_doing`). UI test `fuzzy-find.sh`. The scope selector (§4.2): a drop-down and `Alt+1`…`Alt+3`, which never takes the keyboard from the search field (`the_overlay_keys_leave_text_editing_alone`). Orca and theme readability: *manual*, checklist §5a and §9 |
+| 4.1, 4.2, 7, 8, 16 | Overlay, shortcut, result list, keyboard and mouse, theming | ✅ Verified | `Ctrl+P` (`fuzzy-find`, configurable, gives way to user bindings: `a_user_binding_on_ctrl_p_wins_over_fuzzy_find`); a compact overlay with the search field focused, the searched folder, a virtualised result list, a status line and key hints; the workspace is unchanged while it is open. Rows: icon and trailing `/` for folders, matches bold and underlined (`matches_are_marked_and_everything_is_escaped`, `highlights_keep_whole_characters`, `folders_and_files_differ_by_more_than_colour`); status line (`the_status_line_says_what_the_search_is_doing`). UI test `fuzzy-find.sh`. The scope selector (§4.2, F14): three numbered buttons; `Tab` and `Shift+Tab` cycle and `Alt+1`…`Alt+3` jump, without the keyboard leaving the search field (`the_overlay_keys_leave_text_editing_alone`, `scopes_cycle_round_both_ways`, `scope_buttons_show_their_alt_number`; UI test). Orca and theme readability: *manual*, checklist §5a and §9 |
 | 4.1 | Visual Mode: selection suspended or shortcut unavailable | ✅ Verified (F6) | Unavailable, with a message, and the selection is kept: `fuzzy_find_is_not_available_in_visual_mode`; UI test |
 | 4.3 | Incremental search; empty query shows nothing; Unicode; case-insensitive; non-contiguous | ✅ Verified (engine) | `an_empty_query_shows_nothing_but_prepares_the_candidates`, `matches_subsequences_case_insensitively`, `finds_the_specs_example_with_the_real_matcher` (`dcm`) |
 | 5, 5.1 | Established library; bonuses; deterministic ranking, documented | ✅ Verified | `nucleo-matcher` (F1); `rewards_consecutive_and_boundary_matches`, `exact_names_come_first_then_name_matches_then_path_matches`, `ties_break_deterministically`; rules in search.md |

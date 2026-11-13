@@ -29,7 +29,7 @@ classic_keys = false
 
 [fuzzy_find]
 # The scope Fuzzy Find (Ctrl+P) starts with: "current-directory",
-# "current-branch" or "entire-workspace". Alt+1, Alt+2 and Alt+3 switch scope
+# "current-branch" or "entire-workspace". Tab, Shift+Tab and Alt+1..3 switch scope
 # in the overlay until Seshat closes.
 default_scope = "current-directory"
 include_hidden = false    # also search names starting with a dot

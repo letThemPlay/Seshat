@@ -35,7 +35,7 @@ See [STATUS.md](STATUS.md) for detail.
 
 ## Fuzzy Find
 
-[Specification](../specifications/4-FUZZY-FIND.md) §18, [search.md](../architecture/search.md), decisions F1–F13, [ADR 0008](../decisions/0008-opening-search-results.md).
+[Specification](../specifications/4-FUZZY-FIND.md) §18, [search.md](../architecture/search.md), decisions F1–F14, [ADR 0008](../decisions/0008-opening-search-results.md).
 
 | Phase | Scope | Status |
 |---|---|---|

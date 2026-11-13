@@ -15,14 +15,30 @@ use seshat_domain::search::SearchResult;
 /// Rows moved by Page Up and Page Down.
 const PAGE: isize = 10;
 
-/// A scope's name in the drop-down, which lists them in the order of
-/// [`ScopeChoice::ALL`]; Alt+1… pick them in that order too.
-fn scope_name(scope: ScopeChoice) -> &'static str {
+/// A scope's full name, as screen readers and announcements say it.
+/// The buttons follow the order of [`ScopeChoice::ALL`], and Alt+1… pick
+/// them in that order too.
+pub fn scope_name(scope: ScopeChoice) -> &'static str {
     match scope {
         ScopeChoice::CurrentDirectory => "Current Directory",
         ScopeChoice::CurrentBranch => "Current Branch",
         ScopeChoice::EntireWorkspace => "Entire Workspace",
     }
+}
+
+/// A scope's button: its Alt+ number and a short name.
+fn scope_button_label(scope: ScopeChoice) -> String {
+    let number = ScopeChoice::ALL
+        .iter()
+        .position(|&s| s == scope)
+        .unwrap_or(0)
+        + 1;
+    let name = match scope {
+        ScopeChoice::CurrentDirectory => "Directory",
+        ScopeChoice::CurrentBranch => "Branch",
+        ScopeChoice::EntireWorkspace => "Workspace",
+    };
+    format!("{number} {name}")
 }
 
 /// What the user did in the overlay.
@@ -38,8 +54,10 @@ pub enum FuzzyViewEvent {
     Activate,
     /// Alt+Enter: show the highlighted result in its folder.
     Reveal,
-    /// A scope was picked in the drop-down or with Alt+1…3.
+    /// A scope was picked with its button or Alt+1…3.
     Scope(ScopeChoice),
+    /// Tab (1) or Shift+Tab (-1): the next or previous scope (F14).
+    CycleScope(isize),
     /// Esc.
     Close,
 }
@@ -56,7 +74,9 @@ pub struct ResultRow {
 pub struct FuzzyView {
     pub root: gtk::Box,
     entry: gtk::SearchEntry,
-    scopes: gtk::DropDown,
+    /// The scope buttons, in the order of [`ScopeChoice::ALL`].
+    scopes: gtk::Box,
+    scope_buttons: Vec<gtk::ToggleButton>,
     /// The folders the scope covers.
     scope: gtk::Label,
     status: gtk::Label,
@@ -80,15 +100,38 @@ impl FuzzyView {
             .search_delay(50)
             .build();
         entry.update_property(&[gtk::accessible::Property::Label("Fuzzy Find")]);
-        let names: Vec<&str> = ScopeChoice::ALL.into_iter().map(scope_name).collect();
-        let scopes = gtk::DropDown::from_strings(&names);
-        scopes.set_tooltip_text(Some("Where to search (Alt+1, Alt+2, Alt+3)"));
+        // Every scope is shown with its key. Like the list, the buttons
+        // never take the keyboard from the search field: Tab, Shift+Tab and
+        // Alt+1…3 pick a scope from there, and the window's key bindings
+        // can't act on the workspace while the overlay is open.
+        let scopes = gtk::Box::builder()
+            .css_classes(["linked", "seshat-fuzzy-scopes"])
+            .accessible_role(gtk::AccessibleRole::Group)
+            .build();
         scopes.update_property(&[gtk::accessible::Property::Label("Search in")]);
-        // Like the list, it never takes the keyboard from the search
-        // field: Alt+1…3 pick a scope from there, and the window's key
-        // bindings can't act on the workspace while the overlay is open.
-        scopes.set_focusable(false);
-        scopes.set_can_focus(false);
+        let mut scope_buttons: Vec<gtk::ToggleButton> = Vec::new();
+        for (i, choice) in ScopeChoice::ALL.into_iter().enumerate() {
+            let button = gtk::ToggleButton::builder()
+                .label(scope_button_label(choice))
+                .focusable(false)
+                .can_focus(false)
+                .tooltip_text(format!(
+                    "{} (Alt+{}, or Tab to cycle)",
+                    scope_name(choice),
+                    i + 1
+                ))
+                .build();
+            button.update_property(&[gtk::accessible::Property::Label(&format!(
+                "{}, Alt+{}",
+                scope_name(choice),
+                i + 1
+            ))]);
+            if let Some(first) = scope_buttons.first() {
+                button.set_group(Some(first));
+            }
+            scopes.append(&button);
+            scope_buttons.push(button);
+        }
         let scope = gtk::Label::builder()
             .xalign(0.0)
             .hexpand(true)
@@ -123,7 +166,7 @@ impl FuzzyView {
             .build();
 
         let hints = gtk::Label::builder()
-            .label("Enter open · Alt+Enter reveal · Esc close")
+            .label("Enter open · Alt+Enter reveal · Tab scope · Esc close")
             .xalign(1.0)
             .css_classes(["seshat-fuzzy-hints", "dim-label"])
             .build();
@@ -173,22 +216,23 @@ impl FuzzyView {
             }
         });
         entry.add_controller(keys);
-        scopes.connect_selected_notify({
-            let on_event = on_event.clone();
-            let updating = updating.clone();
-            let entry = entry.clone();
-            move |scopes| {
-                let Some(&scope) = ScopeChoice::ALL.get(scopes.selected() as usize) else {
-                    return;
-                };
-                if updating.get() {
-                    return;
+        for (button, choice) in scope_buttons.iter().zip(ScopeChoice::ALL) {
+            button.connect_toggled({
+                let on_event = on_event.clone();
+                let updating = updating.clone();
+                let entry = entry.clone();
+                move |button| {
+                    if updating.get() || !button.is_active() {
+                        return;
+                    }
+                    on_event(FuzzyViewEvent::Scope(choice));
+                    // Back to typing, without selecting the query text.
+                    let caret = entry.position();
+                    entry.grab_focus();
+                    entry.set_position(caret);
                 }
-                on_event(FuzzyViewEvent::Scope(scope));
-                entry.grab_focus();
-                entry.set_position(-1);
-            }
-        });
+            });
+        }
         selection.connect_selected_notify({
             let on_event = on_event.clone();
             let updating = updating.clone();
@@ -217,6 +261,7 @@ impl FuzzyView {
             root,
             entry,
             scopes,
+            scope_buttons,
             scope,
             status,
             store,
@@ -242,17 +287,18 @@ impl FuzzyView {
     }
 
     /// Whether `widget` belongs to the overlay (to tell when focus left).
-    /// The drop-down's list is a popover inside it.
     pub fn contains(&self, widget: &gtk::Widget) -> bool {
         widget == self.root.upcast_ref::<gtk::Widget>() || widget.is_ancestor(&self.root)
     }
 
     /// Shows the chosen scope and the folders searched. `chosen` is `None`
-    /// while the query names a folder (F10): the drop-down doesn't apply.
+    /// while the query names a folder (F10): the scopes don't apply.
     pub fn set_scope(&self, chosen: Option<ScopeChoice>, folders: &str) {
         self.updating.set(true);
-        if let Some(index) = chosen.and_then(|c| ScopeChoice::ALL.iter().position(|&s| s == c)) {
-            self.scopes.set_selected(index as u32);
+        if let Some(chosen) = chosen {
+            for (button, choice) in self.scope_buttons.iter().zip(ScopeChoice::ALL) {
+                button.set_active(choice == chosen);
+            }
         }
         self.updating.set(false);
         self.scopes.set_sensitive(chosen.is_some());
@@ -262,6 +308,14 @@ impl FuzzyView {
 
     pub fn set_status(&self, text: &str) {
         self.status.set_label(text);
+    }
+
+    /// Says `text` to screen readers, without taking the keyboard away.
+    /// Announced from the status label: announcing from the focused search
+    /// field hung the main loop under the UI test (GTK 4.22, 2026-11-13).
+    pub fn announce(&self, text: &str) {
+        self.status
+            .announce(text, gtk::AccessibleAnnouncementPriority::Medium);
     }
 
     /// Replaces the results, highlighting `highlight`.
@@ -312,6 +366,14 @@ fn overlay_key(key: gtk::gdk::Key, state: gtk::gdk::ModifierType) -> Option<Fuzz
     }
     if !modifiers.is_empty() {
         return None;
+    }
+    // Shift+Tab arrives as ISO_Left_Tab on most keymaps, as Tab with Shift
+    // on others.
+    let shift = state.contains(ModifierType::SHIFT_MASK);
+    match key {
+        Key::Tab if !shift => return Some(FuzzyViewEvent::CycleScope(1)),
+        Key::Tab | Key::ISO_Left_Tab => return Some(FuzzyViewEvent::CycleScope(-1)),
+        _ => {}
     }
     let step = match key {
         Key::Down => 1,
@@ -573,6 +635,15 @@ mod tests {
     }
 
     #[test]
+    fn scope_buttons_show_their_alt_number() {
+        let labels: Vec<String> = ScopeChoice::ALL
+            .into_iter()
+            .map(scope_button_label)
+            .collect();
+        assert_eq!(labels, ["1 Directory", "2 Branch", "3 Workspace"]);
+    }
+
+    #[test]
     fn the_overlay_keys_leave_text_editing_alone() {
         use gtk::gdk::{Key, ModifierType as M};
         let none = M::empty();
@@ -599,5 +670,22 @@ mod tests {
         assert_eq!(overlay_key(Key::BackSpace, M::CONTROL_MASK), None);
         assert_eq!(overlay_key(Key::Down, M::CONTROL_MASK), None);
         assert_eq!(overlay_key(Key::a, none), None);
+        assert_eq!(
+            overlay_key(Key::Tab, none),
+            Some(FuzzyViewEvent::CycleScope(1))
+        );
+        assert_eq!(
+            overlay_key(Key::ISO_Left_Tab, M::SHIFT_MASK),
+            Some(FuzzyViewEvent::CycleScope(-1))
+        );
+        assert_eq!(
+            overlay_key(Key::Tab, M::SHIFT_MASK),
+            Some(FuzzyViewEvent::CycleScope(-1))
+        );
+        assert_eq!(
+            overlay_key(Key::Tab, M::CONTROL_MASK),
+            None,
+            "Ctrl+Tab is GTK's"
+        );
     }
 }

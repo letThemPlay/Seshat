@@ -138,7 +138,7 @@ From the design review (R1): the rules for file actions moved from the window to
 
 ## Fuzzy Find integration decisions (approved 2026-11-12)
 
-[ADR 0008](../decisions/0008-opening-search-results.md) and the [specification](../specifications/4-FUZZY-FIND.md). F5–F8 were chosen by the maintainer; F9–F13 were proposed in the plan and approved with it.
+[ADR 0008](../decisions/0008-opening-search-results.md) and the [specification](../specifications/4-FUZZY-FIND.md). F5–F8 were chosen by the maintainer; F9–F13 were proposed in the plan and approved with it. F14 (scope keys) was chosen by the maintainer on 2026-11-13.
 
 | # | Topic | Decision |
 |---|---|---|
@@ -151,6 +151,7 @@ From the design review (R1): the rules for file actions moved from the window to
 | F11 | Configuration (§15) | Now: the shortcut (`fuzzy-find` in `[keybindings]`), default scope, hidden files, ignored names (exact, F3), maximum results, case. Deferred and recorded as open: following symbolic links (stays off) and preview visibility (there is no preview). Delivered 2026-11-12 as the `[fuzzy_find]` section; `max_results` accepts 1 to 10,000. |
 | F12 | Overlay lifetime | Closes on Esc or when it loses focus; the workspace doesn't change until a result is opened. The scope chosen in the overlay lasts for the app session and isn't saved; the saved default comes from settings. |
 | F13 | Operations on results (§10) | Several results at once: a later phase, as §10 allows. A single result reaches every file action through Reveal and the usual actions. |
+| F14 | Changing scope from the keyboard (§4.2, §8) | Approved 2026-11-13. `Tab` and `Shift+Tab` in the search field cycle Current Directory → Current Branch → Entire Workspace, the same gesture as command-line completion (P1); `Alt+1`…`Alt+3` jump to one. The scopes are shown as three buttons labelled with their numbers (`1 Directory`, `2 Branch`, `3 Workspace`) instead of a drop-down; like the result list they never take keyboard focus, so the window's key bindings can't act on the workspace while the overlay is open. Spec §8 suggests `Tab` for an *optional* preview; there is no preview (F11), and a future one would take another key. While the query names a folder (F10) the scope doesn't apply: `Tab` changes nothing and the status line says why. Scope changes are announced to screen readers. |
 
 ## Status messages (approved 2026-11-11)
 

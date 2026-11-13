@@ -24,8 +24,8 @@ The workspace adds only standard GTK widgets: a horizontal `ScrolledWindow`, box
 
 Fuzzy Find also adds no protocol requirements.
 
-- **The overlay** is a `gtk::Overlay` child inside the main window, not a separate surface, so it needs no layer-shell or positioning protocol. Its scope drop-down uses a standard GTK popover (an `xdg_popup`).
-- **Its keys** (`Ctrl+P`, and `Alt+Enter` and `Alt+1`…`Alt+3` inside it) go through the same toplevel key handling, with no global shortcuts.
+- **The overlay** is a `gtk::Overlay` child inside the main window, not a separate surface, so it needs no layer-shell or positioning protocol. Its scope buttons are ordinary toggle buttons.
+- **Its keys** (`Ctrl+P`, and `Tab`, `Shift+Tab`, `Alt+Enter` and `Alt+1`…`Alt+3` inside it) go through the same toplevel key handling, with no global shortcuts.
 - **Opening a file result** uses the existing launcher, and so the OpenURI portal when sandboxed.
 - **Searching** reads folders on a background thread with ordinary filesystem calls; it doesn't follow symbolic links or cross onto other mounts, and it needs no portal or extra permission beyond those the file manager already has.
 
