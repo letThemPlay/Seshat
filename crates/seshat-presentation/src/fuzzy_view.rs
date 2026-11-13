@@ -15,8 +15,7 @@ use seshat_domain::search::SearchResult;
 /// Rows moved by Page Up and Page Down.
 const PAGE: isize = 10;
 
-/// A scope's full name, as screen readers and announcements say it, and
-/// the short one on its button.
+/// A scope's full name and the short one on its button.
 fn scope_names(scope: ScopeChoice) -> (&'static str, &'static str) {
     match scope {
         ScopeChoice::CurrentDirectory => ("Current Directory", "Directory"),
@@ -69,8 +68,8 @@ pub struct ResultRow {
 pub struct FuzzyView {
     pub root: gtk::Box,
     entry: gtk::SearchEntry,
-    /// The scope buttons, in the order of [`ScopeChoice::ALL`].
     scopes: gtk::Box,
+    /// In the order of [`ScopeChoice::ALL`].
     scope_buttons: Vec<gtk::ToggleButton>,
     /// The folders the scope covers.
     scope: gtk::Label,

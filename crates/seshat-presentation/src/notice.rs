@@ -1,5 +1,4 @@
-//! Status-bar messages. This is the only place their text is formatted:
-//! every message is a sentence, has a severity that decides how it looks
+//! Status-bar messages. Every message is a sentence, has a severity that decides how it looks
 //! (and whether screen readers announce it), and counts are worded by one
 //! helper.
 
@@ -413,8 +412,7 @@ mod tests {
         assert!(!Notice::verbatim("a/  b/").announce());
     }
 
-    /// The named constructors keep the wording and severity the call sites
-    /// had before they moved here.
+    /// Pins the wording and severity of every named message.
     #[test]
     fn named_messages_keep_their_wording_and_severity() {
         use Severity::{Error, Info};

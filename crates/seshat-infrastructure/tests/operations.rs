@@ -173,7 +173,7 @@ fn cancelling_a_large_copy_leaves_no_partial_file() {
     let dir = tempfile::tempdir().unwrap();
     let big = dir.path().join("big.bin");
     let file = fs::File::create(&big).unwrap();
-    file.set_len(256 * 1024 * 1024).unwrap(); // sparse; copied in 8 MiB chunks
+    file.set_len(256 * 1024 * 1024).unwrap(); // sparse; large enough to cancel mid-copy
     let dst = dir.path().join("dst");
     fs::create_dir(&dst).unwrap();
 

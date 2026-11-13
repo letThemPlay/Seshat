@@ -55,9 +55,10 @@ impl SearchQuery {
         }
     }
 
-    /// `folded` is the lowercased name.
-    fn matches(&self, folded: &str) -> bool {
-        self.terms.iter().all(|t| folded.contains(t.as_str()))
+    fn matches(&self, lowercased_name: &str) -> bool {
+        self.terms
+            .iter()
+            .all(|t| lowercased_name.contains(t.as_str()))
     }
 }
 

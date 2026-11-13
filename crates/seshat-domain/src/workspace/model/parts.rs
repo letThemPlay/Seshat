@@ -27,7 +27,7 @@ pub struct PanelParts {
     pub location: Location,
     pub parent: Option<PanelId>,
     pub children: Vec<PanelId>,
-    /// The folder's identity when last opened, if known (format version 2).
+    /// The folder's identity when last opened, if known.
     pub identity: Option<DirectoryIdentity>,
     pub state: PanelState,
 }

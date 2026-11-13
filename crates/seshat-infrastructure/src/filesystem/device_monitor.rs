@@ -159,7 +159,8 @@ fn kind(mount: Option<&gio::Mount>, drive: Option<&gio::Drive>, can_eject: bool)
     }
 }
 
-/// GVfs exposes network mounts through FUSE under `$XDG_RUNTIME_DIR/gvfs`.
+/// GVfs exposes network mounts through FUSE under `$XDG_RUNTIME_DIR/gvfs`;
+/// any path with a `gvfs` component is treated as one.
 fn is_gvfs_fuse(path: &Path) -> bool {
     path.components().any(|c| c.as_os_str() == "gvfs")
 }

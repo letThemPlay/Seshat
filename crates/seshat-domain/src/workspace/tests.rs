@@ -64,7 +64,7 @@ fn scenario() -> Scenario {
     }
 }
 
-// ── Spec §16.1 Branching ────────────────────────────────────────────────
+// Spec §16.1 Branching
 
 #[test]
 fn spec_16_1_opening_children_extends_the_branch() {
@@ -179,7 +179,7 @@ fn closing_an_inactive_branch_keeps_the_active_one() {
     assert_eq!(s.ws.active_panel(), s.downloads);
 }
 
-// ── Spec §16.2 Navigation ───────────────────────────────────────────────
+// Spec §16.2 Navigation
 
 #[test]
 fn spec_16_2_horizontal_movement_stays_within_the_branch() {
@@ -341,7 +341,7 @@ fn back_skips_closed_panels() {
     ok(&s.ws);
 }
 
-// ── Spec §16.4 Focus Mode (model side) ──────────────────────────────────
+// Spec §16.4 Focus Mode (model side)
 
 #[test]
 fn spec_16_4_focus_mode_changes_nothing_but_presentation() {
@@ -386,7 +386,7 @@ fn closing_the_active_branch_in_focus_mode_keeps_focus_mode() {
     assert!(s.ws.panel(s.ws.active_panel()).is_some());
 }
 
-// ── Availability ────────────────────────────────────────────────────────
+// Availability
 
 #[test]
 fn unavailable_panels_and_their_descendants_are_kept() {
@@ -414,7 +414,7 @@ fn panels_within_finds_panels_on_a_device() {
     assert_eq!(within, vec![r, c]);
 }
 
-// ── Selection ───────────────────────────────────────────────────────────
+// Selection
 
 #[test]
 fn selection_toggles_replaces_and_prunes() {
@@ -432,7 +432,7 @@ fn selection_toggles_replaces_and_prunes() {
     assert!(sel.is_empty());
 }
 
-// ── Persistence round trip ──────────────────────────────────────────────
+// Persistence round trip
 
 #[test]
 fn parts_round_trip_and_reject_corruption() {
@@ -467,7 +467,7 @@ fn restored_workspaces_issue_fresh_ids() {
     ok(&restored);
 }
 
-// ── Randomised sequences ────────────────────────────────────────────────
+// Randomised sequences
 
 /// Small deterministic generator, so failures reproduce exactly.
 struct Lcg(u64);
@@ -560,7 +560,7 @@ fn invariants_hold_across_random_operation_sequences() {
     }
 }
 
-// ── Context-aware navigation (2-CONTEXT-AWARE-NAVIGATION.md) ────────────
+// Context-aware navigation (2-CONTEXT-AWARE-NAVIGATION.md)
 
 fn id(inode: u64) -> Option<DirectoryIdentity> {
     Some(DirectoryIdentity { device: 1, inode })
@@ -798,7 +798,7 @@ fn nav_identities_survive_persistence() {
     assert_eq!(restored.panel(docs).unwrap().identity(), id(77));
 }
 
-// ── Backward branch pruning (3-BACKWARD-BRANCH-PRUNING.md) ──────────────
+// Backward branch pruning (3-BACKWARD-BRANCH-PRUNING.md)
 
 /// Home → Documents → Projects → Rust → Cargo, active on Cargo (spec 3 §4).
 fn cargo_chain() -> (Workspace, Vec<PanelId>) {
@@ -1163,7 +1163,7 @@ fn branches_are_numbered_from_one_in_spatial_order() {
     ok(&ws);
 }
 
-// ── Opening a folder several levels down (Fuzzy Find, decision F5) ────
+// Opening a folder several levels down (Fuzzy Find, decision F5)
 
 #[test]
 fn open_path_reuses_existing_panels_and_extends_the_branch() {

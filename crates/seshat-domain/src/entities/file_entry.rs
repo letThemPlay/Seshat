@@ -55,7 +55,7 @@ pub struct FileEntry {
     pub display_name: String,
     pub location: Location,
     pub kind: EntryKind,
-    /// Size in bytes; `None` for directories or when unavailable.
+    /// Size in bytes; `None` for directories, symlinks, or when unavailable.
     pub size: Option<u64>,
     pub modified: Option<SystemTime>,
     pub hidden: bool,

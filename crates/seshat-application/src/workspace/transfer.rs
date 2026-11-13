@@ -113,7 +113,7 @@ impl TransferPlan {
         })
     }
 
-    /// Whether the items come from more than one panel (D7: confirm first).
+    /// Whether the items come from more than one folder (D7: confirm first).
     pub fn spans_panels(&self) -> bool {
         self.origins.len() > 1
     }

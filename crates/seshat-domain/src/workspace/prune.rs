@@ -112,7 +112,7 @@ impl Workspace {
     /// anything. Both must be the active branch and panel.
     ///
     /// Only the active branch's tip can be pruned (decision B2), so every
-    /// removed panel has exactly one child: no other branch can pass
+    /// removed panel has at most one child: no other branch can pass
     /// through them, and shared ancestors are never removed.
     pub fn resolve_prune(
         &self,

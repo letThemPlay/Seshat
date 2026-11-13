@@ -6,7 +6,7 @@ use super::{Action, AppAction};
 /// Where `:copy` and `:move` put things (decision D10).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Destination {
-    /// A typed folder path (`~/…` or absolute).
+    /// A typed folder path.
     Path(String),
     /// The active panel of branch number N (1-based, spatial order).
     Branch(usize),
@@ -110,7 +110,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("help", "Show commands and key bindings"),
 ];
 
-/// Parses command-line input (without the leading `:`).
+/// Parses command-line input, with or without the leading `:`.
 pub fn parse(input: &str) -> Result<Command, CommandError> {
     let input = input.trim().trim_start_matches(':').trim_start();
     let (name, rest) = match input.find(char::is_whitespace) {

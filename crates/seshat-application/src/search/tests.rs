@@ -16,7 +16,7 @@ use crate::ports::{
     Candidate, FuzzyMatcher, QueryMatcher, TreeWalker, WalkError, WalkOptions, WalkStats,
 };
 
-// ── Fakes ───────────────────────────────────────────────────────────────
+// Fakes
 
 /// Case-insensitive subsequence match of the whole query (spaces removed).
 /// Score: 1000 minus the gaps between matched characters.
@@ -191,7 +191,7 @@ fn tree() -> FakeWalker {
     ])
 }
 
-// ── Matching and ranking (§4.3, §5) ─────────────────────────────────────
+// Matching and ranking (§4.3, §5)
 
 #[test]
 fn non_contiguous_queries_match_names_and_paths() {
@@ -293,7 +293,7 @@ fn an_empty_query_shows_nothing_but_prepares_the_candidates() {
     assert_eq!(walker.walks.load(Ordering::SeqCst), 1);
 }
 
-// ── Engine lifecycle (§11, §14) ─────────────────────────────────────────
+// Engine lifecycle (§11, §14)
 
 #[test]
 fn new_queries_reuse_the_walk_until_roots_or_options_change() {
@@ -392,7 +392,7 @@ fn a_missing_root_fails_only_when_nothing_else_could_be_searched() {
     assert!(!batches.last().unwrap().is_empty());
 }
 
-// ── Scopes (§6) ─────────────────────────────────────────────────────────
+// Scopes (§6)
 
 fn path(p: &str) -> Location {
     Location::Path(p.into())
@@ -503,7 +503,7 @@ fn the_trash_and_relative_paths_cannot_be_searched() {
     );
 }
 
-// ── Sessions (§14) ──────────────────────────────────────────────────────
+// Sessions (§14)
 
 #[test]
 fn a_new_query_supersedes_the_previous_search() {
@@ -547,7 +547,7 @@ fn cancelling_and_closing_stop_the_running_search() {
     assert_ne!(sessions.open(), first_id, "session ids are never reused");
 }
 
-// ── Running on the worker thread (§11, §14) ─────────────────────────────
+// Running on the worker thread (§11, §14)
 
 use std::sync::{Mutex, mpsc};
 use std::time::Duration;

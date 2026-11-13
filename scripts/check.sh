@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs every automated check. Run inside `nix develop`.
 #   scripts/check.sh          static checks, tests, Wayland verification
-#   scripts/check.sh --ui     ...plus the sandboxed UI end-to-end test
+#   scripts/check.sh --ui     ...plus the sandboxed UI end-to-end tests
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -25,7 +25,7 @@ pub(super) enum ThemeOutcome {
 
 #[derive(Debug)]
 pub enum ThemeMsg {
-    /// A theme was picked (its action id is parsed where it arrives).
+    /// A theme was picked from the theme menu.
     Set(ThemeChoice),
     /// Read the themes folder again.
     Reload,

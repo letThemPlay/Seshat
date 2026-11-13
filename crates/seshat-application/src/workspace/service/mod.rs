@@ -145,8 +145,6 @@ impl WorkspaceService {
         std::mem::take(&mut self.effects)
     }
 
-    // ── Internals ───────────────────────────────────────────────────────
-
     fn next_generation(&mut self) -> u64 {
         self.listings.next_generation()
     }

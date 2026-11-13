@@ -312,7 +312,7 @@ fn item_factory(
     factory
 }
 
-// ── Rows (list view) ────────────────────────────────────────────────────────
+// Rows (list view)
 
 fn dim_label(xalign: f32, width_chars: i32) -> gtk::Label {
     let label = gtk::Label::builder()
@@ -406,7 +406,7 @@ fn bind_row(widget: &gtk::Widget, entry: &FileEntry) {
     }
 }
 
-// ── Cells (grid view) ───────────────────────────────────────────────────────
+// Cells (grid view)
 
 /// Children, in order: icon, name.
 fn build_cell() -> gtk::Widget {
@@ -444,7 +444,7 @@ fn bind_cell(widget: &gtk::Widget, entry: &FileEntry) {
     widget.set_tooltip_text(Some(&entry.display_name));
 }
 
-// ── Interaction ─────────────────────────────────────────────────────────────
+// Interaction
 
 fn point_in(widget: &gtk::Widget, target: &impl IsA<gtk::Widget>, x: f64, y: f64) -> (f64, f64) {
     widget
@@ -552,7 +552,7 @@ fn add_drag_source(widget: &gtk::Widget, item: &gtk::ListItem, selection: &gtk::
     widget.add_controller(source);
 }
 
-// ── Formatting ──────────────────────────────────────────────────────────────
+// Formatting
 
 fn entry_icon(entry: &FileEntry, symbolic: bool) -> gio::Icon {
     let themed = |name: &str| -> gio::Icon {
@@ -594,7 +594,7 @@ fn format_time(time: Option<SystemTime>) -> String {
         .unwrap_or_default()
 }
 
-// ── Dropping files in ───────────────────────────────────────────────────────
+// Dropping files in
 
 /// Ctrl copies, Shift moves; otherwise drags from inside Seshat move and
 /// drags from other applications copy (they may expect to keep the files).

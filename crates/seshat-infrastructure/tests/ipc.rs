@@ -20,7 +20,7 @@ use seshat_infrastructure::ipc::{INTERFACE, IpcConfig, IpcService, OperationInfo
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-// ── Private bus ─────────────────────────────────────────────────────────────
+// Private bus
 
 struct Bus {
     daemon: Child,
@@ -97,7 +97,7 @@ macro_rules! bus_or_skip {
     };
 }
 
-// ── A filesystem whose copies wait at a gate ────────────────────────────────
+// A filesystem whose copies wait at a gate
 
 #[derive(Default)]
 struct Gate {
@@ -238,7 +238,7 @@ fn config(address: &str) -> IpcConfig {
     }
 }
 
-// ── An independent client ───────────────────────────────────────────────────
+// An independent client
 
 #[zbus::proxy(
     interface = "dev.kdmorris.Seshat.Operations",
@@ -329,8 +329,6 @@ fn error_name(err: zbus::Error) -> String {
         other => format!("unexpected: {other}"),
     }
 }
-
-// ── Tests ───────────────────────────────────────────────────────────────────
 
 #[test]
 fn discovery_snapshot_and_ordered_signals() {

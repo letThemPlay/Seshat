@@ -12,7 +12,7 @@ pub struct BranchId(u64);
 macro_rules! raw_id {
     ($ty:ident, $prefix:literal) => {
         impl $ty {
-            /// Rebuilds an id from its raw value (persistence only).
+            /// Rebuilds an id from its raw value.
             pub fn from_raw(raw: u64) -> Self {
                 Self(raw)
             }

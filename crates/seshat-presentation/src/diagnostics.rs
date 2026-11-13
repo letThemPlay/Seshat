@@ -123,9 +123,10 @@ const STALL_THRESHOLD: std::time::Duration = std::time::Duration::from_millis(10
 const STALL_TICK: std::time::Duration = std::time::Duration::from_millis(20);
 
 /// With `SESHAT_STALL_MONITOR=1`, logs every main-loop stall longer than
-/// 100 ms: a timer that should fire every 20 ms reports how late it was.
-/// Performance runs use it to check the UI stays responsive (input is
-/// handled on the same loop). Off by default; it costs a wakeup every 20 ms.
+/// `STALL_THRESHOLD`: a timer that should fire every `STALL_TICK`
+/// reports how late it was. Performance runs use it to check the UI stays
+/// responsive (input is handled on the same loop). Off by default, since
+/// it costs a wakeup every tick.
 pub fn start_stall_monitor() {
     if std::env::var_os("SESHAT_STALL_MONITOR").is_none_or(|v| v != "1") {
         return;

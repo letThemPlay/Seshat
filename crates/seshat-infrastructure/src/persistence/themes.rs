@@ -34,7 +34,7 @@ impl ThemeRepository for FileThemeRepository {
 
     fn load_all(&self) -> Vec<ThemeSource> {
         let Ok(dir) = std::fs::read_dir(&self.directory) else {
-            return Vec::new(); // no themes directory yet
+            return Vec::new(); // missing or unreadable themes directory
         };
         let mut sources: Vec<ThemeSource> = dir
             .filter_map(Result::ok)

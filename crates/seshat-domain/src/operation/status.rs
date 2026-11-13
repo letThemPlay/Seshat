@@ -4,6 +4,7 @@ use crate::DomainError;
 ///
 /// ```text
 /// Queued -> Started -> InProgress -> Completed | Failed | Cancelling
+/// Started -> Failed
 /// Cancelling -> Cancelled | Completed | Failed
 /// ```
 ///

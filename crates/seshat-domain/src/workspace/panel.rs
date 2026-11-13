@@ -98,7 +98,6 @@ pub struct PanelState {
     /// The navigation cursor (the "selected file"), if any.
     pub cursor: Option<Location>,
     pub scroll: Option<ScrollAnchor>,
-    /// Hidden files, sort order and the panel's own search filter.
     pub options: ViewOptions,
     pub mode: ViewMode,
     pub selection: Selection,
@@ -186,7 +185,7 @@ pub struct Branch {
     /// The panel this branch is "at": its active panel when it is the
     /// active branch. Always on the branch's path.
     pub(super) cursor: PanelId,
-    /// Logical times (workspace clock ticks), not wall-clock times.
+    // Logical times (workspace clock ticks), not wall-clock times.
     pub(super) created: u64,
     pub(super) last_active: u64,
 }

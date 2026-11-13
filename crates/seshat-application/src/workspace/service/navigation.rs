@@ -169,7 +169,8 @@ impl WorkspaceService {
     }
 
     /// Opens a location from outside the tree (sidebar, address bar,
-    /// devices): the active branch's panel for it, or a new root branch.
+    /// devices): the active branch's panel for it, an existing root panel
+    /// for it (C5), or a new root branch.
     pub fn open_location(&mut self, location: Location) {
         self.workspace.open_root(location, self.defaults.inherit());
         self.after_navigation();

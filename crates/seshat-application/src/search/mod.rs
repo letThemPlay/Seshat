@@ -1,4 +1,4 @@
-//! Fuzzy Find without its UI (Spec 4 Phases 1 and 2): which folders a
+//! Fuzzy Find without its UI (Spec 4): which folders a
 //! scope covers ([`roots`]), how candidates are ranked, the engine that
 //! walks and ranks them ([`SearchEngine`]), and the session lifecycle that
 //! keeps stale results out ([`SearchSessions`]). A query naming a folder

@@ -101,7 +101,7 @@ press Tab 1; press Escape
 check "    (back to Current Directory)"             is "$(log_count "fuzzy find scope scope=CurrentDirectory")" 2
 
 # Entire Workspace (Alt+3): a result found under the other branch
-# reactivates that branch; nothing is duplicated (§6.3, F5).
+# reactivates that branch; nothing is duplicated (Spec 4 §6.3, F5).
 chord ctrl p; chord alt 3; type_text src 1
 check "Alt+3 searches the entire workspace"         is "$(log_count "fuzzy find scope scope=EntireWorkspace")" 3
 shot workspace-scope
