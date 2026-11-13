@@ -20,6 +20,7 @@ Rules that would otherwise live only in comments are checked automatically (`scr
 | The D-Bus interface (methods, signals, argument types) and the `kind`/`status` strings don't change without a `PROTOCOL_VERSION` bump | `the_interface_is_unchanged` (`seshat-infrastructure/tests/ipc.rs`), `kind_and_status_strings_are_stable` |
 | The example client's copy of the protocol matches the service | `matches_the_service` (`seshat-progress`) |
 | No libadwaita (ADR 0001) | `deny.toml` `[bans]` |
+| Every `.seshat-*` class the stylesheet styles is used by a widget | `scripts/check-css-classes.sh` |
 | Lint exceptions say why | `clippy::allow_attributes_without_reason`; use `#[expect(…, reason = "…")]` |
 
 ## The spatial workspace

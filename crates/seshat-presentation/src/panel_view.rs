@@ -60,8 +60,9 @@ pub struct PanelView {
     stack: gtk::Stack,
     status_title: gtk::Label,
     actions: gtk::Box,
-    /// Listing revision currently shown, to skip redundant model swaps.
-    revision: Cell<u64>,
+    /// Listing revision currently shown, to skip redundant model swaps;
+    /// `None` until the first listing is shown.
+    revision: Cell<Option<u64>>,
     shown_cursor: RefCell<Option<Location>>,
     shown_selection: RefCell<Option<Vec<Location>>>,
     shown_forks: RefCell<Vec<(PanelId, String)>>,
@@ -207,7 +208,7 @@ impl PanelView {
             stack,
             status_title,
             actions,
-            revision: Cell::new(u64::MAX),
+            revision: Cell::new(None),
             shown_cursor: RefCell::new(None),
             shown_selection: RefCell::new(None),
             shown_forks: RefCell::default(),
@@ -251,10 +252,9 @@ impl PanelView {
 
         self.files.set_mode(state.mode);
         if let Some(listing) = listing
-            && listing.revision() != self.revision.get()
+            && Some(listing.revision()) != self.revision.get()
         {
-            let first = self.revision.get() == u64::MAX;
-            self.revision.set(listing.revision());
+            let first = self.revision.replace(Some(listing.revision())).is_none();
             let started = std::time::Instant::now();
             self.files.replace(listing.shown().to_vec(), !first);
             tracing::debug!(

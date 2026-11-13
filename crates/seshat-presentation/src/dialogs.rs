@@ -2,7 +2,7 @@
 //!
 //! Dialogs carry the `seshat` class so the active theme styles them.
 
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
@@ -61,13 +61,15 @@ fn content_box() -> gtk::Box {
         .build()
 }
 
-/// Asks how to resolve a conflict. `on_answer` is called exactly once
-/// (Cancel if the window is closed). Returns the window so the caller can
+type Answer = Rc<RefCell<Option<Box<dyn FnOnce(ConflictDecision)>>>>;
+
+/// Asks how to resolve a conflict. `on_answer` is called once (Cancel if
+/// the window is closed). Returns the window so the caller can
 /// close it if the operation ends first.
 pub fn conflict(
     parent: &gtk::Window,
     conflict: &Conflict,
-    on_answer: impl Fn(ConflictDecision) + 'static,
+    on_answer: impl FnOnce(ConflictDecision) + 'static,
 ) -> gtk::Window {
     let window = dialog_window(parent, "Item already exists");
     let content = content_box();
@@ -118,16 +120,16 @@ pub fn conflict(
     window.set_child(Some(&content));
     window.set_default_widget(Some(&skip));
 
-    let answered = Rc::new(Cell::new(false));
-    let on_answer = Rc::new(on_answer);
+    // Taken by the first answer, so later clicks or the close request
+    // find it gone.
+    let on_answer: Answer = Rc::new(RefCell::new(Some(Box::new(on_answer))));
     let respond = {
         let window = window.clone();
-        let answered = answered.clone();
         let on_answer = on_answer.clone();
         move |resolution| {
-            if answered.replace(true) {
+            let Some(on_answer) = on_answer.take() else {
                 return;
-            }
+            };
             on_answer(ConflictDecision {
                 resolution,
                 apply_to_all: apply_all.is_active(),
@@ -145,7 +147,7 @@ pub fn conflict(
         button.connect_clicked(move |_| respond(resolution));
     }
     window.connect_close_request(move |_| {
-        if !answered.replace(true) {
+        if let Some(on_answer) = on_answer.take() {
             on_answer(ConflictDecision {
                 resolution: ConflictResolution::Cancel,
                 apply_to_all: false,

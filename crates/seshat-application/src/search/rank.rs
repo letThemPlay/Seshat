@@ -18,7 +18,7 @@ use std::collections::BinaryHeap;
 use std::path::{Path, PathBuf};
 
 use seshat_domain::entities::Location;
-use seshat_domain::search::{CaseMode, SearchMatch, SearchQuery, SearchResult};
+use seshat_domain::search::{SearchMatch, SearchQuery, SearchResult};
 
 use super::scope::SearchRoot;
 use crate::ports::{Candidate, QueryMatcher};
@@ -71,15 +71,13 @@ fn relative_of(path: &Path, root: &Path) -> String {
         .into_owned()
 }
 
-/// Whether `name` is exactly the query. Case follows `query.case` with the
-/// same smart-case rule the matcher applies (`NucleoMatcher`: case matters
-/// once the query has a capital letter); keep the two in step.
+/// Whether `name` is exactly the query, with case as the query says.
 fn is_exact(name: &str, query: &SearchQuery) -> bool {
     let wanted = query.text.trim();
-    match query.case {
-        CaseMode::Sensitive => name == wanted,
-        CaseMode::Smart if wanted.chars().any(char::is_uppercase) => name == wanted,
-        _ => name.to_lowercase() == wanted.to_lowercase(),
+    if query.respects_case() {
+        name == wanted
+    } else {
+        name.to_lowercase() == wanted.to_lowercase()
     }
 }
 

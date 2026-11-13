@@ -16,6 +16,15 @@ use crate::panel_view::PanelEvent;
 use crate::sidebar::SidebarInput;
 use crate::workspace_view::WorkspaceEvent;
 
+/// What the "workspace state" log line reports; a change logs a new line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct WorkspaceShape {
+    active: PanelId,
+    branches: usize,
+    panels: usize,
+    focus_mode: bool,
+}
+
 impl App {
     /// Brings the screen up to date with the service: runs pending
     /// effects, renders the workspace and moves keyboard focus to the
@@ -55,16 +64,21 @@ impl App {
         // One line per structural change, for diagnostics and the UI tests.
         // Locations only; never listings.
         let ws = self.service.workspace();
-        let shape = (active, ws.branch_count(), ws.panel_count(), ws.focus_mode());
+        let shape = WorkspaceShape {
+            active,
+            branches: ws.branch_count(),
+            panels: ws.panel_count(),
+            focus_mode: ws.focus_mode(),
+        };
         if self.logged_shape != Some(shape) {
             self.logged_shape = Some(shape);
             tracing::debug!(
                 panel = %active,
                 location = ?self.service.active_location(),
                 branch = ws.active_branch().id().raw(),
-                branches = shape.1,
-                panels = shape.2,
-                focus_mode = shape.3,
+                branches = shape.branches,
+                panels = shape.panels,
+                focus_mode = shape.focus_mode,
                 "workspace state"
             );
         }

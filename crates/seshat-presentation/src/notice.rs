@@ -302,6 +302,14 @@ pub fn staged(count_staged: usize, kind: TransferKind) -> String {
 
 /// The status line's item count: "12 items", or "3 of 12 items" when a
 /// search filters the panel.
+/// The selection, for the status bar.
+pub fn selected(items: usize, panels: usize) -> String {
+    match panels {
+        1 => format!("{items} selected"),
+        n => format!("{items} selected in {n} panels"),
+    }
+}
+
 pub fn item_count(shown: usize, total: usize) -> String {
     if shown == total {
         count(total, "item", "items")
@@ -362,6 +370,8 @@ mod tests {
         assert_eq!(item_count(12, 12), "12 items");
         assert_eq!(item_count(3, 12), "3 of 12 items");
         assert_eq!(item_count(1, 1), "1 item");
+        assert_eq!(selected(3, 1), "3 selected");
+        assert_eq!(selected(3, 2), "3 selected in 2 panels");
         assert_eq!(
             staged(1, TransferKind::Move),
             "1 item ready to move: paste (p or Ctrl+V) into a panel"

@@ -18,6 +18,7 @@ mod shortcuts;
 mod theme;
 mod view;
 mod workspace;
+use workspace::WorkspaceShape;
 
 use address_bar::AddressBarController;
 pub use address_bar::AddressMsg;
@@ -240,8 +241,8 @@ pub struct App {
     focused_panel: Option<PanelId>,
     /// Whether that focus went to the file list (not a message page).
     focused_on_files: bool,
-    /// Last workspace shape logged (active panel, branches, panels, focus).
-    logged_shape: Option<(PanelId, usize, usize, bool)>,
+    /// Last workspace shape logged.
+    logged_shape: Option<WorkspaceShape>,
     search: SearchController,
     address: AddressBarController,
     devices: DeviceController,
@@ -680,11 +681,7 @@ impl App {
         let selection = self.service.selection();
         if !selection.is_empty() {
             let items: usize = selection.iter().map(|g| g.items.len()).sum();
-            let panels = selection.len();
-            return match panels {
-                1 => format!("{items} selected"),
-                n => format!("{items} selected in {n} panels"),
-            };
+            return notice::selected(items, selection.len());
         }
         if let Some(staged) = self.staged {
             return notice::staged(staged.count, staged.kind);

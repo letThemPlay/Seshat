@@ -89,7 +89,7 @@ pub fn compute(
 
     // Depth and leaf range of every panel, in the same depth-first order
     // as `Workspace::branches`.
-    let mut placed: Vec<(PanelId, usize, usize, usize)> = Vec::new(); // panel, depth, lo, hi
+    let mut placed: Vec<Placed> = Vec::new();
     let mut next_leaf = 0;
     for &root in ws.roots() {
         place(ws, root, 0, &mut next_leaf, &mut placed);
@@ -99,14 +99,19 @@ pub fn compute(
     let active = ws.active_panel();
     let active_depth = path.iter().position(|&p| p == active).unwrap_or(0);
     let mut cells = Vec::new();
-    for &(panel, depth, lo, hi) in &placed {
-        let from = lo.max(window.start);
-        let to = hi.min(window.end);
+    for &Placed {
+        panel,
+        depth,
+        ref leaves,
+    } in &placed
+    {
+        let from = leaves.start.max(window.start);
+        let to = leaves.end.min(window.end);
         if from >= to {
             continue;
         }
         let on_active_path = path.contains(&panel);
-        let is_tip = hi - lo == 1 && ws.panel(panel).is_some_and(|p| p.is_leaf());
+        let is_tip = leaves.len() == 1 && ws.panel(panel).is_some_and(|p| p.is_leaf());
         cells.push(Cell {
             panel,
             column: depth,
@@ -115,7 +120,7 @@ pub fn compute(
             on_active_path,
             active: panel == active,
             full: on_active_path && depth.abs_diff(active_depth) <= options.radius,
-            branch_number: is_tip.then_some(lo + 1),
+            branch_number: is_tip.then_some(leaves.start + 1),
         });
     }
 
@@ -148,26 +153,36 @@ pub fn compute(
     }
 }
 
+/// A panel's column and the rows (leaves below it) it spans.
+struct Placed {
+    panel: PanelId,
+    depth: usize,
+    leaves: std::ops::Range<usize>,
+}
+
 fn place(
     ws: &Workspace,
     panel: PanelId,
     depth: usize,
     next_leaf: &mut usize,
-    out: &mut Vec<(PanelId, usize, usize, usize)>,
+    out: &mut Vec<Placed>,
 ) {
     let Some(p) = ws.panel(panel) else {
         return;
     };
-    let lo = *next_leaf;
     let index = out.len();
-    out.push((panel, depth, lo, lo));
+    out.push(Placed {
+        panel,
+        depth,
+        leaves: *next_leaf..*next_leaf,
+    });
     if p.children().is_empty() {
         *next_leaf += 1;
     }
     for &child in p.children() {
         place(ws, child, depth + 1, next_leaf, out);
     }
-    out[index].3 = *next_leaf;
+    out[index].leaves.end = *next_leaf;
 }
 
 #[cfg(test)]

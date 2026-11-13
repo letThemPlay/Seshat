@@ -1,5 +1,6 @@
 //! Progress panel for file operations, driven purely by manager events.
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::Path;
 use std::rc::Rc;
@@ -20,7 +21,9 @@ struct Row {
     title: gtk::Label,
     detail: gtk::Label,
     bar: gtk::ProgressBar,
+    /// Cancels the operation, or dismisses it once it ended with problems.
     button: gtk::Button,
+    dismissable: Rc<Cell<bool>>,
 }
 
 #[derive(Clone)]
@@ -69,6 +72,7 @@ impl OperationsPanel {
             None => row.bar.set_fraction(1.0),
         }
         row.root.remove_css_class("seshat-error");
+        row.dismissable.set(false);
 
         match event.kind {
             OperationEventKind::Completed | OperationEventKind::Cancelled
@@ -81,6 +85,7 @@ impl OperationsPanel {
             | OperationEventKind::Cancelled
             | OperationEventKind::Failed => {
                 // Keep problems visible until dismissed.
+                row.dismissable.set(true);
                 row.root.add_css_class("seshat-error");
                 row.button.set_icon_name("window-close-symbolic");
                 row.button.set_tooltip_text(Some("Dismiss"));
@@ -130,15 +135,15 @@ impl OperationsPanel {
         let list = self.list.clone();
         let revealer = self.root.clone();
         let on_cancel = self.on_cancel.clone();
-        button.connect_clicked(move |_| {
-            let finished = rows
-                .borrow()
-                .get(&id)
-                .is_some_and(|r| r.root.has_css_class("seshat-error"));
-            if finished {
-                remove_row(&rows, &list, &revealer, id);
-            } else {
-                on_cancel(id);
+        let dismissable = Rc::new(Cell::new(false));
+        button.connect_clicked({
+            let dismissable = dismissable.clone();
+            move |_| {
+                if dismissable.get() {
+                    remove_row(&rows, &list, &revealer, id);
+                } else {
+                    on_cancel(id);
+                }
             }
         });
 
@@ -149,6 +154,7 @@ impl OperationsPanel {
             detail,
             bar,
             button,
+            dismissable,
         };
         self.rows.borrow_mut().insert(id, row.clone());
         row
@@ -229,8 +235,8 @@ pub fn describe(op: &Operation) -> (String, String) {
 
 fn problems(n: usize) -> String {
     format!(
-        "Done with {n} problem{} (hover for details)",
-        if n == 1 { "" } else { "s" }
+        "Done with {} (hover for details)",
+        crate::notice::count(n, "problem", "problems")
     )
 }
 
@@ -290,6 +296,12 @@ mod tests {
             destination.map(Into::into),
             SystemTime::UNIX_EPOCH,
         )
+    }
+
+    #[test]
+    fn problem_counts_use_the_right_word() {
+        assert_eq!(problems(1), "Done with 1 problem (hover for details)");
+        assert_eq!(problems(2), "Done with 2 problems (hover for details)");
     }
 
     #[test]
