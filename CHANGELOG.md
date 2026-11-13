@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased: Fuzzy Find
+
+Implements the [Fuzzy Find specification](docs/specifications/4-FUZZY-FIND.md), except operations on several results at once (§10), which wait for a later phase (F13). Design: [search.md](docs/architecture/search.md); decisions F1–F13 in [DECISIONS.md](docs/architecture/DECISIONS.md); opening results: [ADR 0008](docs/decisions/0008-opening-search-results.md).
+
+- **Fuzzy Find (`Ctrl+P`):** a compact overlay over the workspace that finds files and folders as you type, fzf-style (`prj` finds `Projects`). Matched characters are bold and underlined; folders have an icon and a trailing `/`. `Up`, `Down`, `Page Up` and `Page Down` move the highlight, `Enter` opens, `Esc` or clicking elsewhere closes. The workspace doesn't change until you open something. It isn't available in Visual Mode, and the status bar says why. The shortcut is the `fuzzy-find` binding; your own binding for `Ctrl+P` wins.
+- **Scopes:** Current Directory, Current Branch or Entire Workspace, from a drop-down or `Alt+1`, `Alt+2`, `Alt+3`. With Entire Workspace, each result shows the number of the branch it was found in, and folders shared by several branches are searched once. The scope you pick lasts until Seshat closes.
+- **Opening results:** a folder opens one panel per level from the panel that was searched, reusing panels already open, bringing back a branch that already has it, and starting at most one new branch. One Back returns to where you were. A file opens in its default application and the workspace stays as it was.
+- **Reveal (`Alt+Enter`):** opens the folder a result is in and puts the cursor on it, without changing that folder's selection.
+- **Typed folders:** a search starting with `/`, `~/` or `~` looks inside that folder (`~/Projects/main` finds `main` in `~/Projects`). With nothing after the folder, `Enter` opens it, as the address bar would. A folder that doesn't exist is reported, not opened.
+- **Settings:** a new `[fuzzy_find]` section in `settings.toml` with `default_scope`, `include_hidden`, `ignore` (exact names; `.git` and `node_modules` by default), `max_results` (500) and `case` (`insensitive`, `smart` or `sensitive`). See [docs/examples/settings.toml](docs/examples/settings.toml).
+- **Fast and safe:** searches run on a background thread, and each new query cancels the previous one. The folders are walked once and reused for every query while the overlay is open. In a release build a 200-file folder shows results in about 2 ms, and 100,100 entries are walked in about 31 ms and ranked in 24–42 ms, with no pauses in the window ([measurements](docs/architecture/search.md#with-the-overlay-release-build-2026-11-12)). Symbolic links are never followed, unreadable folders are skipped and counted, and files are never changed.
+- **Status messages:** every status-bar message is now a sentence, errors are drawn in the theme's error colour, and errors are announced to screen readers (decisions N1–N3).
+- **Internal:** the design review's recommendations DR1–DR10 were carried out with no change in behaviour ([review](docs/review/architecture.md#patterns-and-principles-review-2026-11-11)).
+- **Tests:** 439 Rust tests and a third sandboxed UI test, `scripts/ui/fuzzy-find.sh` (30 checks). `scripts/ui/fuzzy-perf.sh` measures Fuzzy Find with the overlay in a release build.
+
 ## Unreleased: spatial workspace
 
 - **Backward branch pruning** ([ADR 0007](docs/decisions/0007-backward-branch-pruning.md)): `db` removes the active panel from the end of its branch and goes back to its parent; `dB` goes back to where the branch meets another one (or to its first panel). Only panels no other branch uses are removed, and files are never touched. `u` undoes the last prune with every panel's state. Neither works in Focus Mode or Visual Mode; the status bar says why. Your own bindings for `d` or `u` keep working: the new defaults give way.

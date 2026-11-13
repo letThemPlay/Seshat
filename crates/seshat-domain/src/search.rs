@@ -8,16 +8,18 @@ use std::path::PathBuf;
 use crate::entities::{EntryKind, Location};
 use crate::workspace::{BranchId, PanelId};
 
-/// How letter case is treated when matching.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum CaseMode {
-    /// Case never matters (the default, Spec 4 §4.3).
-    #[default]
-    Insensitive,
-    /// Case matters only if the query contains a capital letter.
-    Smart,
-    /// Case always matters.
-    Sensitive,
+crate::stable_ids! {
+    /// How letter case is treated when matching.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+    pub enum CaseMode {
+        /// Case never matters (the default, Spec 4 §4.3).
+        #[default]
+        Insensitive => "insensitive",
+        /// Case matters only if the query contains a capital letter.
+        Smart => "smart",
+        /// Case always matters.
+        Sensitive => "sensitive",
+    }
 }
 
 /// What the user typed.

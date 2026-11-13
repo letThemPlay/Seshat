@@ -9,6 +9,16 @@ H="$HOME_DIR"
 mkdir -p "$H/Documents/Projects/src" "$H/Downloads/Camera"
 echo notes > "$H/notes.txt"
 echo code > "$H/Documents/Projects/src/main.rs"
+mkdir -p "$H/.secret-stash" "$H/build-cache"
+echo x > "$H/build-cache/artifact.bin"
+# Settings (Spec 4 §15): hidden names are searched, and one more name is
+# ignored besides the defaults.
+mkdir -p "$SESSION/config/seshat"
+cat > "$SESSION/config/seshat/settings.toml" <<'TOML'
+[fuzzy_find]
+include_hidden = true
+ignore = [".git", "node_modules", "build-cache"]
+TOML
 
 log_text() { sed 's/\x1b\[[0-9;]*m//g' "$SESSION/seshat.log"; }
 # grep -c reads all its input (see workspace.sh).
@@ -18,6 +28,7 @@ state() { log_text | grep "workspace state" | tail -1; }
 state_has() { state | grep -q -- "$1"; }
 active_is() { state_has "location=Path(\"$1\")"; }
 opened_count() { log_count "fuzzy find opened"; }
+last_results() { log_text | grep "fuzzy find results" | tail -1; }
 closed_count() { log_count "fuzzy find closed"; }
 is() { (($1 == $2)); }
 # Search never changes files (Spec 4 §12).
@@ -49,6 +60,12 @@ chord ctrl p; type_text notes; press Escape
 check "Esc closes Fuzzy Find"                       is "$(closed_count)" 2
 check "    and leaves the workspace as it was"      state_has "branches=1 panels=4 "
 check "    with Home still active"                  active_is "$H"
+
+# The settings are used: a hidden folder is found, an ignored one is not.
+chord ctrl p; type_text stash 1; press Escape
+check "include_hidden: hidden folders are searched"  grep -q "results=1 " <<<"$(last_results)"
+chord ctrl p; type_text artifact 1; press Escape
+check "ignore: ignored folders are skipped"          grep -q "results=0 " <<<"$(last_results)"
 
 # Enter on a file is not tried here: it would start whatever application
 # the machine has for the file type. The service test

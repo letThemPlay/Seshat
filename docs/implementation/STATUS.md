@@ -1,10 +1,10 @@
 # Implementation status
 
-Status as of 2026-11-12, branch `feature-fuzzy-find-scopes`.
+Status as of 2026-11-12, branch `feature-fuzzy-find-settings`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 437 Rust tests (165 originally), native Wayland verification, and three sandboxed UI tests: file operations (21 checks), the spatial workspace (63 checks, including backward pruning) and Fuzzy Find (28 checks).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 439 Rust tests (165 originally), native Wayland verification, and three sandboxed UI tests: file operations (21 checks), the spatial workspace (63 checks, including backward pruning) and Fuzzy Find (30 checks).
 
 ## Spatial file manager specification
 
@@ -80,7 +80,7 @@ Status as of 2026-11-12, branch `feature-fuzzy-find-scopes`.
 
 ## Fuzzy Find specification
 
-[4-FUZZY-FIND.md](../specifications/4-FUZZY-FIND.md), [search.md](../architecture/search.md), decisions F1–F13, [ADR 0008](../decisions/0008-opening-search-results.md). **Fuzzy Find is usable** (`Ctrl+P`) with every scope, reveal (`Alt+Enter`) and typed folders. Configuration comes next (Phase 4).
+[4-FUZZY-FIND.md](../specifications/4-FUZZY-FIND.md), [search.md](../architecture/search.md), decisions F1–F13, [ADR 0008](../decisions/0008-opening-search-results.md). **Fuzzy Find is complete except operations on several results** (§10, F13, a later phase): `Ctrl+P` with every scope, reveal (`Alt+Enter`), typed folders and the `[fuzzy_find]` settings.
 
 | § | Requirement | Status | Evidence / notes |
 |---|---|---|---|
@@ -94,11 +94,11 @@ Status as of 2026-11-12, branch `feature-fuzzy-find-scopes`.
 | 9.1, 9.2, 9.4 | Opening and revealing results through the workspace | ✅ Verified | `WorkspaceService::open_result` and `reveal_result` (ADR 0008): `a_folder_result_opens_along_the_path_from_its_origin`, `a_folder_result_reuses_open_panels_and_branches`, `a_file_result_is_launched_and_the_workspace_is_untouched`, `revealing_a_result_moves_the_cursor_and_keeps_the_selection` (F9), `results_without_a_usable_origin_open_like_a_typed_location`; domain `open_path_*` tests and the randomised invariant test. Enter opens a result from the overlay (UI test: one panel per level, one branch, Back in one step); opening a file is checked by the service test and the manual checklist (the UI test would start the machine's own applications). Reveal (`Alt+Enter`) from the overlay: UI test (another branch comes back, cursor on the result, nothing duplicated). The walk ends on the folder asked for, even when the branch it brings back remembers a deeper panel (`open_path_ends_on_the_folder_asked_for_not_deeper`, ADR 0008) |
 | 9.3 | Open in a new branch | ⛔ Not supported (F8) | Optional in the spec; would break the branch invariants from a branch's last panel. Enter already starts a new branch wherever continuing would replace a path |
 | 10 | Operations on results | ⏳ Later phase (F13) | Several results at once come later, as §10 allows; a single result reaches every file action through Reveal |
-| 11 | Off the UI thread; superseded searches cancelled; streaming; bounded memory; no index | ✅ Verified (engine) | `results_stream_while_walking_large_trees`, `results_are_bounded_to_the_best`, `a_cancelled_search_publishes_nothing_and_caches_nothing`; `SearchWorker` runs it on a thread of its own and stops without waiting (`the_worker_runs_searches_off_the_calling_thread`, `only_the_latest_search_of_the_worker_is_shown`, `dropping_the_worker_stops_its_search_without_waiting_for_it`). 100,100 entries: first results 2.5 ms, full walk 85 ms, a new query 32 ms (release) |
+| 11 | Off the UI thread; superseded searches cancelled; streaming; bounded memory; no index | ✅ Verified (engine) | `results_stream_while_walking_large_trees`, `results_are_bounded_to_the_best`, `a_cancelled_search_publishes_nothing_and_caches_nothing`; `SearchWorker` runs it on a thread of its own and stops without waiting (`the_worker_runs_searches_off_the_calling_thread`, `only_the_latest_search_of_the_worker_is_shown`, `dropping_the_worker_stops_its_search_without_waiting_for_it`). 100,100 entries: first results 2.5 ms, full walk 85 ms, a new query 32 ms (release). With the overlay (release, `fuzzy-perf.sh`): a 200-file folder shows results in 2 ms (target about 100 ms); 100,100 entries are walked in 31 ms and each query is ranked and shown in 24–42 ms; no main-loop stall over 100 ms |
 | 12 | No link following, no loops, permissions, vanishing files, non-UTF-8, mount boundaries, never modifies files | ✅ Verified | `symbolic_links_are_listed_but_never_followed`, `unreadable_folders_are_skipped_and_counted`, `folders_removed_during_a_walk_are_skipped`, `non_utf8_and_unicode_names_keep_their_bytes`; `same_device` on by default |
 | 13 | Clean Architecture; matcher behind an adapter | ✅ Verified | Ports `FuzzyMatcher`, `TreeWalker`; `scripts/check-architecture.sh` forbids matcher crates outside infrastructure |
 | 14 | Session ids; late results never shown; statuses | ✅ Verified | `a_new_query_supersedes_the_previous_search`, `cancelling_and_closing_stop_the_running_search` |
-| 15 | Configuration | ⏳ Not started | Phase 4; `CaseMode`, `WalkOptions` and the result limit are ready for it |
+| 15 | Configuration | ✅ Verified (F11) | `[fuzzy_find]`: `default_scope`, `include_hidden`, `ignore`, `max_results`, `case`, and the `fuzzy-find` key binding. `FuzzyFindPreferences` turns them into walk options and queries (`fuzzy_find_settings_become_walk_options_and_queries`); saved and loaded, each invalid value falling back on its own (`round_trip_creates_parent_dirs`, `invalid_fuzzy_find_values_fall_back_individually`); the example file lists them with their defaults (`the_example_settings_list_every_binding_with_its_default`); the UI test runs with hidden names included and an extra ignored name. Following symbolic links and a preview are not offered (F11) |
 
 ## Known gaps and follow-ups
 

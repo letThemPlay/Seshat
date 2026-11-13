@@ -42,4 +42,4 @@ See [STATUS.md](STATUS.md) for detail.
 | 1. Core fuzzy matching | `nucleo-matcher` behind the `FuzzyMatcher` port; ranking; highlighting; tests | ✅ Done |
 | 2. Interactive search | Engine, background worker, the overlay (`Ctrl+P`), Current Directory search, incremental results, cancellation, keyboard and mouse, highlighting | ✅ Done |
 | 3. Spatial workspace integration | Scopes, origins and shared-ancestor handling; opening and revealing results through `WorkspaceService` (ADR 0008); the scope selector with branch badges, reveal with `Alt+Enter`, and the absolute path form (F10) | ✅ Done |
-| 4. Refinement | Configuration, profiling, result actions, operations on results | ⏳ Not started |
+| 4. Refinement | Configuration (`[fuzzy_find]`, F11) and timings with the overlay (`fuzzy-perf.sh`) are done; operations on several results (§10) wait for a later phase (F13) | 🟡 Mostly done |

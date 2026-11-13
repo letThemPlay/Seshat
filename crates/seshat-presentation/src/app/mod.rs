@@ -429,6 +429,7 @@ impl SimpleComponent for App {
             init.search_walker.clone(),
             init.search_matcher.clone(),
             init.home.clone(),
+            prefs.fuzzy_find.clone(),
         );
         let mut model = App {
             home: init.home,

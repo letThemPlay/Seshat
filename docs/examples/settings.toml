@@ -27,6 +27,18 @@ layout = "tree"           # "tree": branches side by side; "strip": only the act
 # l, v, :, …) is turned off. Bindings with Ctrl, Alt or a named key stay.
 classic_keys = false
 
+[fuzzy_find]
+# The scope Fuzzy Find (Ctrl+P) starts with: "current-directory",
+# "current-branch" or "entire-workspace". Alt+1, Alt+2 and Alt+3 switch scope
+# in the overlay until Seshat closes.
+default_scope = "current-directory"
+include_hidden = false    # also search names starting with a dot
+# Names skipped wherever they appear, with everything inside them. Exact
+# names only (no wildcards); [] skips nothing.
+ignore = [".git", "node_modules"]
+max_results = 500         # results shown at most, the best ones (1 to 10000)
+case = "insensitive"      # "insensitive", "smart" (capitals in the query count) or "sensitive"
+
 # ── Key bindings ────────────────────────────────────────────────────────
 #
 # One line per action: action = [key sequences]. Every action and its

@@ -23,7 +23,7 @@ On NixOS, add the flake as an input and put `inputs.seshat.packages.${system}.de
 | `share/icons/hicolor/scalable/apps/dev.kdmorris.Seshat.svg` | application icon |
 | `share/metainfo/dev.kdmorris.Seshat.metainfo.xml` | AppStream metadata (`appstreamcli validate --pedantic` passes; one pedantic note: the app id contains capitals) |
 | `share/licenses/seshat/LICENSE` | the licence (GPL-3.0-or-later) |
-| `share/doc/seshat/examples/settings.toml` | example settings with every configurable key binding and its default; copy to `~/.config/seshat/settings.toml` |
+| `share/doc/seshat/examples/settings.toml` | example settings: every setting (including `[fuzzy_find]`) and every configurable key binding, with their defaults; copy to `~/.config/seshat/settings.toml` |
 | `share/doc/seshat/examples/themes/catppuccin-mocha.toml` | example theme (Catppuccin Mocha); copy to `~/.config/seshat/themes/` and pick it from the theme menu |
 
 The build runs the whole workspace test suite in the Nix sandbox, including the D-Bus tests on a private bus.

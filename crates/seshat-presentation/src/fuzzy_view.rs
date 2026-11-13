@@ -9,17 +9,21 @@ use std::rc::Rc;
 
 use gtk::prelude::*;
 use gtk::{gio, glib};
-use seshat_domain::search::{SearchResult, SearchScope};
+use seshat_application::preferences::ScopeChoice;
+use seshat_domain::search::SearchResult;
 
 /// Rows moved by Page Up and Page Down.
 const PAGE: isize = 10;
 
-/// The scopes offered, in the drop-down's order; Alt+1… picks them.
-const SCOPES: [(SearchScope, &str); 3] = [
-    (SearchScope::CurrentDirectory, "Current Directory"),
-    (SearchScope::CurrentBranch, "Current Branch"),
-    (SearchScope::EntireWorkspace, "Entire Workspace"),
-];
+/// A scope's name in the drop-down, which lists them in the order of
+/// [`ScopeChoice::ALL`]; Alt+1… pick them in that order too.
+fn scope_name(scope: ScopeChoice) -> &'static str {
+    match scope {
+        ScopeChoice::CurrentDirectory => "Current Directory",
+        ScopeChoice::CurrentBranch => "Current Branch",
+        ScopeChoice::EntireWorkspace => "Entire Workspace",
+    }
+}
 
 /// What the user did in the overlay.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,7 +39,7 @@ pub enum FuzzyViewEvent {
     /// Alt+Enter: show the highlighted result in its folder.
     Reveal,
     /// A scope was picked in the drop-down or with Alt+1…3.
-    Scope(SearchScope),
+    Scope(ScopeChoice),
     /// Esc.
     Close,
 }
@@ -76,7 +80,7 @@ impl FuzzyView {
             .search_delay(50)
             .build();
         entry.update_property(&[gtk::accessible::Property::Label("Fuzzy Find")]);
-        let names: Vec<&str> = SCOPES.iter().map(|(_, name)| *name).collect();
+        let names: Vec<&str> = ScopeChoice::ALL.into_iter().map(scope_name).collect();
         let scopes = gtk::DropDown::from_strings(&names);
         scopes.set_tooltip_text(Some("Where to search (Alt+1, Alt+2, Alt+3)"));
         scopes.update_property(&[gtk::accessible::Property::Label("Search in")]);
@@ -174,13 +178,13 @@ impl FuzzyView {
             let updating = updating.clone();
             let entry = entry.clone();
             move |scopes| {
-                let Some((scope, _)) = SCOPES.get(scopes.selected() as usize) else {
+                let Some(&scope) = ScopeChoice::ALL.get(scopes.selected() as usize) else {
                     return;
                 };
                 if updating.get() {
                     return;
                 }
-                on_event(FuzzyViewEvent::Scope(scope.clone()));
+                on_event(FuzzyViewEvent::Scope(scope));
                 entry.grab_focus();
                 entry.set_position(-1);
             }
@@ -245,9 +249,9 @@ impl FuzzyView {
 
     /// Shows the chosen scope and the folders searched. `chosen` is `None`
     /// while the query names a folder (F10): the drop-down doesn't apply.
-    pub fn set_scope(&self, chosen: Option<&SearchScope>, folders: &str) {
+    pub fn set_scope(&self, chosen: Option<ScopeChoice>, folders: &str) {
         self.updating.set(true);
-        if let Some(index) = chosen.and_then(|c| SCOPES.iter().position(|(s, _)| s == c)) {
+        if let Some(index) = chosen.and_then(|c| ScopeChoice::ALL.iter().position(|&s| s == c)) {
             self.scopes.set_selected(index as u32);
         }
         self.updating.set(false);
@@ -301,8 +305,8 @@ fn overlay_key(key: gtk::gdk::Key, state: gtk::gdk::ModifierType) -> Option<Fuzz
             Key::Return | Key::KP_Enter | Key::ISO_Enter => Some(FuzzyViewEvent::Reveal),
             _ => {
                 let digit = key.to_unicode()?.to_digit(10)? as usize;
-                let (scope, _) = SCOPES.get(digit.checked_sub(1)?)?;
-                Some(FuzzyViewEvent::Scope(scope.clone()))
+                let scope = ScopeChoice::ALL.get(digit.checked_sub(1)?)?;
+                Some(FuzzyViewEvent::Scope(*scope))
             }
         };
     }
@@ -583,7 +587,7 @@ mod tests {
         );
         assert_eq!(
             overlay_key(Key::_3, M::ALT_MASK),
-            Some(FuzzyViewEvent::Scope(SearchScope::EntireWorkspace))
+            Some(FuzzyViewEvent::Scope(ScopeChoice::EntireWorkspace))
         );
         assert_eq!(overlay_key(Key::_4, M::ALT_MASK), None);
         assert_eq!(overlay_key(Key::_0, M::ALT_MASK), None);

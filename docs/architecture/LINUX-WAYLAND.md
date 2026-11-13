@@ -20,6 +20,15 @@ The workspace adds only standard GTK widgets: a horizontal `ScrolledWindow`, box
 - **Keyboard handling** is a capture-phase `EventControllerKey` on the toplevel. It works with the compositor's keymap through GDK and needs no global shortcuts or other compositor-specific protocols.
 - **The saved workspace** lives in `$XDG_STATE_HOME/seshat` (XDG Base Directory), next to the configuration in `$XDG_CONFIG_HOME/seshat`.
 
+## Fuzzy Find
+
+Fuzzy Find also adds no protocol requirements.
+
+- **The overlay** is a `gtk::Overlay` child inside the main window, not a separate surface, so it needs no layer-shell or positioning protocol. Its scope drop-down uses a standard GTK popover (an `xdg_popup`).
+- **Its keys** (`Ctrl+P`, and `Alt+Enter` and `Alt+1`…`Alt+3` inside it) go through the same toplevel key handling, with no global shortcuts.
+- **Opening a file result** uses the existing launcher, and so the OpenURI portal when sandboxed.
+- **Searching** reads folders on a background thread with ordinary filesystem calls; it doesn't follow symbolic links or cross onto other mounts, and it needs no portal or extra permission beyond those the file manager already has.
+
 ## Verification
 
 - **Automated:** `scripts/verify-wayland.sh` (headless Weston, no X server) passes with the spatial workspace. The UI end-to-end tests run on a headless Sway compositor.
