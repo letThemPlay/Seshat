@@ -113,7 +113,7 @@ Status as of 2026-11-13, branch `main`.
    - A dead `.seshat-path` CSS rule and an overridden `.seshat-status` padding rule.
 
    `docs-comment-audit` removed divider and redundant comments and corrected about 35 outdated ones (no change in behaviour). `enforce-comment-constraints` turned constraints stated in comments into checks (see [ARCHITECTURE.md](../architecture/ARCHITECTURE.md#rules-enforced-by-checks)): a D-Bus interface test, IPC string and client-constant tests, command-name tests, a sticky-bit copy test, debug assertions, a libadwaita ban, the `allow_attributes_without_reason` lint and stricter architecture checks. Invalid window-action shortcuts are now logged, as other shortcuts already were. `refactor-comment-types` replaced conventions described in comments with types:
-   - One smart-case rule, `SearchQuery::respects_case` (F4a, awaiting review).
+   - The exact-name case rule in one place, `SearchQuery::respects_case`; the matcher keeps word-by-word smart case (F4a).
    - Named structs instead of tuples in the layout and log state.
    - `Option` instead of a `u64::MAX` sentinel.
    - Scope buttons paired with their scope.

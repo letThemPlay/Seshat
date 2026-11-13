@@ -15,7 +15,8 @@ crate::stable_ids! {
         /// Case never matters (the default, Spec 4 §4.3).
         #[default]
         Insensitive => "insensitive",
-        /// Case matters only if the query contains a capital letter.
+        /// Case matters only where the query has a capital letter: per word
+        /// when matching (decision F4a).
         Smart => "smart",
         /// Case always matters.
         Sensitive => "sensitive",
@@ -42,8 +43,9 @@ impl SearchQuery {
         self.text.trim().is_empty()
     }
 
-    /// Whether letter case matters for this query: the one rule both the
-    /// matcher and the exact-name ranking follow.
+    /// Whether letter case matters when comparing a whole name with the
+    /// whole query (exact-name ranking). The fuzzy matcher applies `Smart`
+    /// word by word instead (decision F4a).
     pub fn respects_case(&self) -> bool {
         match self.case {
             CaseMode::Insensitive => false,
