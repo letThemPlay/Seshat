@@ -7,7 +7,7 @@ use std::ops::Range;
 use nucleo_matcher::pattern::{AtomKind, CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 use seshat_application::ports::{FuzzyMatcher, QueryMatcher};
-use seshat_domain::search::{CaseMode, SearchQuery};
+use seshat_domain::search::SearchQuery;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Fuzzy matching with path-aware bonuses: consecutive characters, word
@@ -26,10 +26,10 @@ impl NucleoMatcher {
 
 impl FuzzyMatcher for NucleoMatcher {
     fn compile(&self, query: &SearchQuery) -> Box<dyn QueryMatcher> {
-        let case = match query.case {
-            CaseMode::Insensitive => CaseMatching::Ignore,
-            CaseMode::Smart => CaseMatching::Smart,
-            CaseMode::Sensitive => CaseMatching::Respect,
+        let case = if query.respects_case() {
+            CaseMatching::Respect
+        } else {
+            CaseMatching::Ignore
         };
         let pattern = Pattern::new(
             query.text.trim(),
@@ -119,6 +119,7 @@ fn byte_ranges(haystack: &str, indices: &[u32]) -> Vec<Range<usize>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use seshat_domain::search::CaseMode;
 
     fn matched(query: &str, haystack: &str) -> Option<(u32, Vec<String>)> {
         let mut compiled = NucleoMatcher.compile(&SearchQuery::new(query));
@@ -183,6 +184,9 @@ mod tests {
         };
         assert!(smart("doc", "Doc"));
         assert!(!smart("Doc", "doc"));
+        // One capital makes the whole query case-sensitive, as for exact
+        // names (`SearchQuery::respects_case`).
+        assert!(!smart("doc Notes", "Doc Notes"));
     }
 
     #[test]

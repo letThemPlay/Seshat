@@ -10,6 +10,7 @@ step() { echo; echo "── $*"; }
 step "format";        cargo fmt --check
 step "clippy";        cargo clippy --all-targets --all-features -- -D warnings
 step "architecture";  scripts/check-architecture.sh
+step "css classes";   scripts/check-css-classes.sh
 step "tests";         cargo test --workspace
 step "wayland";       scripts/verify-wayland.sh
 if [[ "${1:-}" == "--ui" ]]; then

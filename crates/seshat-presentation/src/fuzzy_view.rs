@@ -69,8 +69,7 @@ pub struct FuzzyView {
     pub root: gtk::Box,
     entry: gtk::SearchEntry,
     scopes: gtk::Box,
-    /// In the order of [`ScopeChoice::ALL`].
-    scope_buttons: Vec<gtk::ToggleButton>,
+    scope_buttons: Vec<(ScopeChoice, gtk::ToggleButton)>,
     /// The folders the scope covers.
     scope: gtk::Label,
     status: gtk::Label,
@@ -103,7 +102,7 @@ impl FuzzyView {
             .accessible_role(gtk::AccessibleRole::Group)
             .build();
         scopes.update_property(&[gtk::accessible::Property::Label("Search in")]);
-        let mut scope_buttons: Vec<gtk::ToggleButton> = Vec::new();
+        let mut scope_buttons: Vec<(ScopeChoice, gtk::ToggleButton)> = Vec::new();
         for choice in ScopeChoice::ALL {
             let (name, number) = (scope_name(choice), choice.number());
             let button = gtk::ToggleButton::builder()
@@ -115,11 +114,11 @@ impl FuzzyView {
             button.update_property(&[gtk::accessible::Property::Label(&format!(
                 "{name}, Alt+{number}"
             ))]);
-            if let Some(first) = scope_buttons.first() {
+            if let Some((_, first)) = scope_buttons.first() {
                 button.set_group(Some(first));
             }
             scopes.append(&button);
-            scope_buttons.push(button);
+            scope_buttons.push((choice, button));
         }
         let scope = gtk::Label::builder()
             .xalign(0.0)
@@ -205,7 +204,7 @@ impl FuzzyView {
             }
         });
         entry.add_controller(keys);
-        for (button, choice) in scope_buttons.iter().zip(ScopeChoice::ALL) {
+        for &(choice, ref button) in &scope_buttons {
             button.connect_toggled({
                 let on_event = on_event.clone();
                 let updating = updating.clone();
@@ -279,8 +278,8 @@ impl FuzzyView {
     pub fn set_scope(&self, chosen: Option<ScopeChoice>, folders: &str) {
         self.updating.set(true);
         if let Some(chosen) = chosen {
-            for (button, choice) in self.scope_buttons.iter().zip(ScopeChoice::ALL) {
-                button.set_active(choice == chosen);
+            for (choice, button) in &self.scope_buttons {
+                button.set_active(*choice == chosen);
             }
         }
         self.updating.set(false);

@@ -26,6 +26,7 @@ use seshat_domain::workspace::{BranchId, PanelId, Workspace};
 
 use crate::branch_card::{BranchCard, CardContent, LANE_HEIGHT};
 use crate::connectors::ConnectorLane;
+use crate::notice;
 use crate::panel_view::{HeaderInfo, PanelEvent, PanelView};
 use crate::pathbar::address_text;
 use crate::workspace_layout::{self, Layout, LayoutOptions};
@@ -67,6 +68,15 @@ pub struct RenderOutcome {
 
 type Placement = (i32, i32, i32, i32);
 
+/// What the "workspace layout" log line reports; a change logs a new line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LayoutShape {
+    rows: usize,
+    columns: usize,
+    hidden: usize,
+    cards: usize,
+}
+
 pub struct WorkspaceView {
     pub root: gtk::Box,
     branch_bar: gtk::Box,
@@ -83,7 +93,7 @@ pub struct WorkspaceView {
     /// Identifies the latest reveal animation; older ones stop.
     reveal_generation: Rc<Cell<u64>>,
     first_row: Cell<Option<usize>>,
-    last_logged: RefCell<Option<(usize, usize, usize, usize)>>,
+    last_logged: Cell<Option<LayoutShape>>,
     /// Branches side by side or a single strip (decision L2).
     layout: WorkspaceLayout,
     on_event: Rc<dyn Fn(WorkspaceEvent)>,
@@ -175,7 +185,7 @@ impl WorkspaceView {
             last_reveal: Cell::new(None),
             reveal_generation: Rc::default(),
             first_row: Cell::new(None),
-            last_logged: RefCell::new(None),
+            last_logged: Cell::new(None),
             layout,
             on_event,
         }
@@ -372,8 +382,8 @@ impl WorkspaceView {
         ] {
             if hidden > 0 && !focus {
                 stub.set_label(&format!(
-                    "+{hidden} branch{} {side}",
-                    if hidden == 1 { "" } else { "es" }
+                    "+{} {side}",
+                    notice::count(hidden, "branch", "branches")
                 ));
                 desired.push((stub.clone().upcast(), (0, row, width, 1)));
             }
@@ -427,18 +437,18 @@ impl WorkspaceView {
     /// One debug line per layout change, for diagnostics and the UI tests.
     fn log_layout(&self, layout: &Layout) {
         let cards = layout.cells.iter().filter(|c| !c.full).count();
-        let shape = (
-            layout.rows,
-            layout.columns,
-            layout.hidden_above + layout.hidden_below,
+        let shape = LayoutShape {
+            rows: layout.rows,
+            columns: layout.columns,
+            hidden: layout.hidden_above + layout.hidden_below,
             cards,
-        );
+        };
         if self.last_logged.replace(Some(shape)) != Some(shape) {
             tracing::debug!(
-                rows = shape.0,
-                columns = shape.1,
-                hidden = shape.2,
-                cards = shape.3,
+                rows = shape.rows,
+                columns = shape.columns,
+                hidden = shape.hidden,
+                cards = shape.cards,
                 connectors = layout.edges.len(),
                 "workspace layout"
             );

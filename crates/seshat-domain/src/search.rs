@@ -41,6 +41,16 @@ impl SearchQuery {
     pub fn is_empty(&self) -> bool {
         self.text.trim().is_empty()
     }
+
+    /// Whether letter case matters for this query: the one rule both the
+    /// matcher and the exact-name ranking follow.
+    pub fn respects_case(&self) -> bool {
+        match self.case {
+            CaseMode::Insensitive => false,
+            CaseMode::Smart => self.text.chars().any(char::is_uppercase),
+            CaseMode::Sensitive => true,
+        }
+    }
 }
 
 /// Where a search looks (§6).
