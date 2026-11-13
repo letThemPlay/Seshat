@@ -42,6 +42,22 @@ jobs:
       - name: Native Wayland verification (headless Weston)
         run: nix develop --command scripts/verify-wayland.sh
 
+  commits:
+    name: Commit messages
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Conventional Commits (docs/development/commits.md)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check-commits.sh "$BASE_SHA" "$HEAD_SHA"
+
   ui-e2e:
     name: UI end-to-end
     runs-on: ubuntu-24.04
