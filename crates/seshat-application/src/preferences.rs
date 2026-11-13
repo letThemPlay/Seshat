@@ -143,12 +143,23 @@ impl ScopeChoice {
         }
     }
 
+    /// Its place in [`Self::ALL`], from 1: the number shown on its button
+    /// and its `Alt+` key in the overlay (F14).
+    pub fn number(self) -> usize {
+        Self::ALL.iter().position(|&s| s == self).unwrap_or(0) + 1
+    }
+
+    /// The scope numbered `number` (from 1), if there is one.
+    pub fn from_number(number: usize) -> Option<Self> {
+        Self::ALL.get(number.checked_sub(1)?).copied()
+    }
+
     /// The scope `step` places after this one in [`Self::ALL`], wrapping
     /// round at either end: Tab and Shift+Tab in the overlay (F14).
     pub fn cycled(self, step: isize) -> Self {
-        let all = Self::ALL;
-        let at = all.iter().position(|&s| s == self).unwrap_or(0) as isize;
-        all[(at + step).rem_euclid(all.len() as isize) as usize]
+        let len = Self::ALL.len() as isize;
+        let at = self.number() as isize - 1;
+        Self::ALL[(at + step).rem_euclid(len) as usize]
     }
 }
 
@@ -264,6 +275,16 @@ mod tests {
         assert_eq!(CurrentDirectory.cycled(-1), EntireWorkspace);
         assert_eq!(EntireWorkspace.cycled(-1), CurrentBranch);
         assert_eq!(CurrentBranch.cycled(3), CurrentBranch);
+    }
+
+    #[test]
+    fn scopes_are_numbered_from_one() {
+        for (i, scope) in ScopeChoice::ALL.into_iter().enumerate() {
+            assert_eq!(scope.number(), i + 1);
+            assert_eq!(ScopeChoice::from_number(i + 1), Some(scope));
+        }
+        assert_eq!(ScopeChoice::from_number(0), None);
+        assert_eq!(ScopeChoice::from_number(4), None);
     }
 
     #[test]

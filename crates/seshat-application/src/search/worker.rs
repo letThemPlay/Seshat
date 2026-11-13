@@ -18,7 +18,7 @@
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use seshat_domain::search::{SearchResult, SearchStatus};
+use seshat_domain::search::SearchResult;
 
 use super::engine::{SearchEngine, SearchRequest, SearchSummary};
 use super::session::SearchTicket;
@@ -142,12 +142,7 @@ fn run(shared: &Shared, mut engine: SearchEngine, listener: &SearchListener) {
             // built, so it is dropped.
             engine.invalidate();
             tracing::error!("the search failed unexpectedly");
-            SearchSummary {
-                status: SearchStatus::Failed("the search failed unexpectedly".into()),
-                candidates: 0,
-                unreadable: 0,
-                truncated: false,
-            }
+            SearchSummary::failed("the search failed unexpectedly")
         });
         lock(&shared.slot).running = None;
         listener(SearchUpdate {

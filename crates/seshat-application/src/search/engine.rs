@@ -44,6 +44,18 @@ pub struct SearchSummary {
     pub truncated: bool,
 }
 
+impl SearchSummary {
+    /// A search that failed before it had any candidates.
+    pub fn failed(message: impl Into<String>) -> Self {
+        Self {
+            status: SearchStatus::Failed(message.into()),
+            candidates: 0,
+            unreadable: 0,
+            truncated: false,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Found {
     root: usize,
@@ -59,6 +71,18 @@ struct Cache {
     found: Vec<Found>,
     unreadable: usize,
     truncated: bool,
+}
+
+impl Cache {
+    /// How a search over these candidates ended.
+    fn summary(&self, status: SearchStatus) -> SearchSummary {
+        SearchSummary {
+            status,
+            candidates: self.found.len(),
+            unreadable: self.unreadable,
+            truncated: self.truncated,
+        }
+    }
 }
 
 /// The search engine of one Fuzzy Find session.
@@ -85,7 +109,9 @@ impl SearchEngine {
         }
     }
 
-    /// Forgets the walked candidates, e.g. after the filesystem changed.
+    /// Forgets the walked candidates, so the next search walks again. Used
+    /// after a search panicked, when the cache may be half built; the
+    /// overlay doesn't watch the filesystem, so a new session walks afresh.
     pub fn invalidate(&mut self) {
         self.cache = None;
     }
@@ -109,12 +135,7 @@ impl SearchEngine {
             return summary;
         }
         let cache = self.cache.as_ref().expect("walked above");
-        let summary = |status| SearchSummary {
-            status,
-            candidates: cache.found.len(),
-            unreadable: cache.unreadable,
-            truncated: cache.truncated,
-        };
+        let summary = |status| cache.summary(status);
         let mut top = TopRanks::new(request.limit);
         if !request.query.is_empty() {
             for (index, found) in cache.found.iter().enumerate() {
@@ -199,27 +220,22 @@ impl SearchEngine {
                 break;
             }
         }
-        let summary = |status| SearchSummary {
-            status,
-            candidates: found.len(),
-            unreadable,
-            truncated,
-        };
-        if cancel.is_cancelled() {
-            return Err(summary(SearchStatus::Cancelled));
-        }
-        if errors.len() == request.roots.len()
-            && let Some(first) = errors.first()
-        {
-            return Err(summary(SearchStatus::Failed(first.to_string())));
-        }
-        self.cache = Some(Cache {
+        let walked = Cache {
             roots: request.roots.clone(),
             options: request.options.clone(),
             found,
             unreadable,
             truncated,
-        });
+        };
+        if cancel.is_cancelled() {
+            return Err(walked.summary(SearchStatus::Cancelled));
+        }
+        if errors.len() == request.roots.len()
+            && let Some(first) = errors.first()
+        {
+            return Err(walked.summary(SearchStatus::Failed(first.to_string())));
+        }
+        self.cache = Some(walked);
         Ok(())
     }
 }
