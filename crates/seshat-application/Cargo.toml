@@ -14,8 +14,8 @@ tracing.workspace = true
 
 [features]
 # Shared test code for other crates' tests, such as the FileSystem
-# conformance checks (`operations::conformance`). Never enabled in a build
-# of the application, only as a dev-dependency.
+# conformance checks (`operations::conformance`). Only ever a dev-dependency;
+# scripts/check-architecture.sh fails if a build of the application enables it.
 test-support = []
 
 [lints]

@@ -524,8 +524,10 @@ fn highlighted(text: &str, ranges: &[Range<usize>]) -> String {
 }
 
 #[cfg(test)]
-// Lists of one matched range are what the tests mean.
-#[allow(clippy::single_range_in_vec_init)]
+#[expect(
+    clippy::single_range_in_vec_init,
+    reason = "lists of one matched range are what the tests mean"
+)]
 mod tests {
     use seshat_domain::entities::{EntryKind, Location};
     use seshat_domain::search::SearchMatch;

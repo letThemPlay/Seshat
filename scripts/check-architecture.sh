@@ -33,19 +33,28 @@ MATCHERS="nucleo|nucleo-matcher|fuzzy-matcher|skim"
 forbid seshat-domain "$UI" "$RUNTIMES" "$MATCHERS" "seshat-.*" "serde|toml|rustix"
 # Application: use cases and ports; no toolkit, IPC or concrete I/O.
 forbid seshat-application "$UI" "$RUNTIMES" "$MATCHERS" "seshat-infrastructure|seshat-presentation" "serde|toml|rustix"
-# Infrastructure implements ports; it never knows the UI.
-forbid seshat-infrastructure "gtk4|gdk4|relm4" "seshat-presentation"
+# Infrastructure implements ports; it never knows the UI (GLib and GIO are
+# platform services, not UI).
+forbid seshat-infrastructure "gtk4|gdk4|gdk4-wayland|gdk4-x11|relm4" "seshat-presentation"
 # Presentation consumes application functionality, not infrastructure.
 forbid seshat-presentation "seshat-infrastructure" "$RUNTIMES" "$MATCHERS" "rustix"
 # The example client speaks only the protocol.
 forbid seshat-progress "seshat-.*"
 
 # Presentation never performs filesystem I/O itself.
-if grep -rnE '\bstd::fs\b|\bfs::(read|write|remove|create|rename|copy)' crates/seshat-presentation/src; then
+if grep -rnE '\bstd::fs\b|\bfs::(read|write|remove|create|rename|copy)|File::open|read_dir|symlink_metadata|\.(metadata|canonicalize)\(|\.(exists|is_dir|is_file)\(\)' crates/seshat-presentation/src; then
     echo "FAIL seshat-presentation uses std::fs directly (see above)"
     failures=$((failures + 1))
 else
     echo "ok   seshat-presentation performs no direct filesystem I/O"
+fi
+
+# Test doubles never reach a build of the application.
+if cargo tree -q -p seshat -e normal,features -i seshat-application | grep -q '"test-support"'; then
+    echo "FAIL seshat is built with seshat-application/test-support"
+    failures=$((failures + 1))
+else
+    echo "ok   seshat is built without test-support"
 fi
 
 if ((failures > 0)); then

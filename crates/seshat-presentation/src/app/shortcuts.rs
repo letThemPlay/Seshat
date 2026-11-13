@@ -49,11 +49,13 @@ pub fn install(
 ) {
     install_modal_keys(window, router, command_entry, sender);
     let controller = gtk::ShortcutController::new();
-    for (accelerator, action) in ACTION_SHORTCUTS {
-        if let Some(trigger) = gtk::ShortcutTrigger::parse_string(accelerator) {
-            let action = gtk::NamedAction::new(&crate::actions::detailed_name(*action));
-            controller.add_shortcut(gtk::Shortcut::new(Some(trigger), Some(action)));
-        }
+    for &(accelerator, action) in ACTION_SHORTCUTS {
+        let Some(trigger) = gtk::ShortcutTrigger::parse_string(accelerator) else {
+            tracing::warn!(accelerator, "invalid shortcut trigger");
+            continue;
+        };
+        let action = gtk::NamedAction::new(&crate::actions::detailed_name(action));
+        controller.add_shortcut(gtk::Shortcut::new(Some(trigger), Some(action)));
     }
     for &(accelerator, action) in SHORTCUTS {
         let Some(trigger) = gtk::ShortcutTrigger::parse_string(accelerator) else {

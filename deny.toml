@@ -39,6 +39,9 @@ multiple-versions = "warn"
 wildcards = "deny"
 # Path dependencies inside the workspace use `workspace = true`.
 allow-wildcard-paths = true
+deny = [
+    { crate = "libadwaita", reason = "Seshat does not use libadwaita (ADR 0001)" },
+]
 
 [sources]
 unknown-registry = "deny"

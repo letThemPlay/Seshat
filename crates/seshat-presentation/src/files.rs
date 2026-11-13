@@ -46,7 +46,7 @@ const CURSOR_CLASS: &str = "seshat-cursor";
 
 #[derive(Debug, Clone)]
 pub struct FileView {
-    /// Stack with the "list" and "grid" pages.
+    /// Stack with a page per [`ViewMode`], named by its id.
     pub root: gtk::Stack,
     store: gio::ListStore,
     selection: gtk::MultiSelection,
@@ -129,8 +129,8 @@ impl FileView {
             background_menu_gesture(scroll, &root, &selection, &on_event);
             scroll.add_controller(drop_target(None, &on_event));
         }
-        root.add_named(&list_scroll, Some("list"));
-        root.add_named(&grid_scroll, Some("grid"));
+        root.add_named(&list_scroll, Some(ViewMode::List.id()));
+        root.add_named(&grid_scroll, Some(ViewMode::Grid.id()));
 
         Self {
             root,
@@ -144,6 +144,10 @@ impl FileView {
             cursor,
             applying,
         }
+    }
+
+    fn shows_grid(&self) -> bool {
+        self.root.visible_child_name().as_deref() == Some(ViewMode::Grid.id())
     }
 
     pub fn set_mode(&self, mode: ViewMode) {
@@ -359,6 +363,7 @@ fn children(widget: &gtk::Widget) -> Vec<gtk::Widget> {
 fn bind_row(widget: &gtk::Widget, entry: &FileEntry) {
     let parts = children(widget);
     let [icon, name, origin, kind, size, time] = parts.as_slice() else {
+        debug_assert!(false, "a row has the children `build_row` gives it");
         return;
     };
     let label = |w: &gtk::Widget| w.downcast_ref::<gtk::Label>().cloned();
@@ -369,6 +374,7 @@ fn bind_row(widget: &gtk::Widget, entry: &FileEntry) {
         label(size),
         label(time),
     ) else {
+        debug_assert!(false, "a row has the children `build_row` gives it");
         return;
     };
 
@@ -704,7 +710,7 @@ impl FileView {
         } else {
             gtk::ListScrollFlags::NONE
         };
-        if self.root.visible_child_name().as_deref() == Some("grid") {
+        if self.shows_grid() {
             self.grid.scroll_to(position, flags, None);
         } else {
             self.list.scroll_to(position, flags, None);
@@ -740,7 +746,7 @@ impl FileView {
 
     /// Roughly how many items fit on one page (for half-page scrolling).
     pub fn rows_per_page(&self) -> usize {
-        let (scroll, columns) = if self.root.visible_child_name().as_deref() == Some("grid") {
+        let (scroll, columns) = if self.shows_grid() {
             (&self.grid_scroll, 4.0)
         } else {
             (&self.list_scroll, 1.0)
@@ -752,7 +758,7 @@ impl FileView {
     }
 
     pub fn scroll_offset(&self) -> f64 {
-        if self.root.visible_child_name().as_deref() == Some("grid") {
+        if self.shows_grid() {
             self.grid_scroll.vadjustment().value()
         } else {
             self.list_scroll.vadjustment().value()

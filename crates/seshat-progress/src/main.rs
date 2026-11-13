@@ -53,6 +53,8 @@ impl OperationInfo {
     }
 }
 
+// The proxy attributes need literals; `tests::matches_the_service` checks
+// them against the constants above and the service's own.
 #[proxy(
     interface = "dev.kdmorris.Seshat.Operations",
     default_service = "dev.kdmorris.Seshat.Operations",
@@ -285,4 +287,36 @@ fn report(signal: &str, op: &OperationInfo) {
         _ => format!("{}  {} items so far", op.status, op.files_completed),
     };
     println!("[{short_id}] {:<40} {line}", describe(op));
+}
+
+/// The client copies the protocol rather than depending on Seshat's
+/// crates; these checks (dev-dependencies only) keep the copy honest.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use seshat_infrastructure::ipc;
+    use zbus::proxy::Defaults;
+
+    #[test]
+    fn matches_the_service() {
+        assert_eq!(BUS_NAME, ipc::BUS_NAME);
+        assert_eq!(INTERFACE, ipc::INTERFACE);
+        assert_eq!(PROTOCOL_VERSION, ipc::PROTOCOL_VERSION);
+        assert_eq!(
+            OperationsProxy::INTERFACE.as_ref().map(|n| n.as_str()),
+            Some(ipc::INTERFACE)
+        );
+        assert_eq!(
+            OperationsProxy::DESTINATION.as_ref().map(|n| n.as_str()),
+            Some(ipc::BUS_NAME)
+        );
+        assert_eq!(
+            OperationsProxy::PATH.as_ref().map(|n| n.as_str()),
+            Some(ipc::OBJECT_PATH)
+        );
+        assert_eq!(
+            OperationInfo::SIGNATURE.to_string(),
+            ipc::OperationInfo::SIGNATURE.to_string()
+        );
+    }
 }

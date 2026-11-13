@@ -189,6 +189,7 @@ pub struct CompletionCycle {
 impl CompletionCycle {
     /// Starts cycling after a Tab that left `shown` in the command line.
     pub fn new(keep: String, candidates: Vec<String>, shown: String) -> Self {
+        debug_assert!(!candidates.is_empty(), "a cycle needs candidates");
         Self {
             keep,
             candidates,
@@ -275,6 +276,34 @@ mod tests {
                 EntryKind::Directory,
             ),
         ]
+    }
+
+    #[test]
+    fn completion_command_lists_match_the_parser() {
+        use crate::interaction::command::{Command, Destination, parse};
+        for name in PATH_COMMANDS {
+            let path = || Destination::Path("/x".into());
+            assert!(
+                matches!(
+                    parse(&format!("{name} /x")),
+                    Ok(Command::Open(p)) if p == "/x"
+                ) || matches!(
+                    parse(&format!("{name} /x")),
+                    Ok(Command::Copy(Some(d)) | Command::Move(Some(d))) if d == path()
+                ),
+                "{name} does not take a folder"
+            );
+        }
+        for name in BRANCH_COMMANDS {
+            assert!(
+                matches!(
+                    parse(&format!("{name} b2")),
+                    Ok(Command::Copy(Some(Destination::Branch(2)))
+                        | Command::Move(Some(Destination::Branch(2))))
+                ),
+                "{name} does not take a branch"
+            );
+        }
     }
 
     #[test]

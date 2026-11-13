@@ -38,9 +38,11 @@ impl SearchTarget {
             Some(query) => (SearchScope::AbsolutePath(query.folder), None, query.pattern),
             None => (chosen.scope(), Some(chosen), text.to_owned()),
         };
+        let roots = roots(&scope, workspace)?;
+        debug_assert!(!roots.is_empty(), "a scope covers at least one folder");
         Ok(Self {
             scope: choice,
-            roots: roots(&scope, workspace)?,
+            roots,
             pattern,
         })
     }
