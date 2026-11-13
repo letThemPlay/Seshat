@@ -15,30 +15,25 @@ use seshat_domain::search::SearchResult;
 /// Rows moved by Page Up and Page Down.
 const PAGE: isize = 10;
 
-/// A scope's full name, as screen readers and announcements say it.
-/// The buttons follow the order of [`ScopeChoice::ALL`], and Alt+1… pick
-/// them in that order too.
-pub fn scope_name(scope: ScopeChoice) -> &'static str {
+/// A scope's full name, as screen readers and announcements say it, and
+/// the short one on its button.
+fn scope_names(scope: ScopeChoice) -> (&'static str, &'static str) {
     match scope {
-        ScopeChoice::CurrentDirectory => "Current Directory",
-        ScopeChoice::CurrentBranch => "Current Branch",
-        ScopeChoice::EntireWorkspace => "Entire Workspace",
+        ScopeChoice::CurrentDirectory => ("Current Directory", "Directory"),
+        ScopeChoice::CurrentBranch => ("Current Branch", "Branch"),
+        ScopeChoice::EntireWorkspace => ("Entire Workspace", "Workspace"),
     }
 }
 
-/// A scope's button: its Alt+ number and a short name.
+/// A scope's full name, as screen readers and announcements say it.
+pub fn scope_name(scope: ScopeChoice) -> &'static str {
+    scope_names(scope).0
+}
+
+/// A scope's button: its number, which is also its `Alt+` key, and its
+/// short name.
 fn scope_button_label(scope: ScopeChoice) -> String {
-    let number = ScopeChoice::ALL
-        .iter()
-        .position(|&s| s == scope)
-        .unwrap_or(0)
-        + 1;
-    let name = match scope {
-        ScopeChoice::CurrentDirectory => "Directory",
-        ScopeChoice::CurrentBranch => "Branch",
-        ScopeChoice::EntireWorkspace => "Workspace",
-    };
-    format!("{number} {name}")
+    format!("{} {}", scope.number(), scope_names(scope).1)
 }
 
 /// What the user did in the overlay.
@@ -110,21 +105,16 @@ impl FuzzyView {
             .build();
         scopes.update_property(&[gtk::accessible::Property::Label("Search in")]);
         let mut scope_buttons: Vec<gtk::ToggleButton> = Vec::new();
-        for (i, choice) in ScopeChoice::ALL.into_iter().enumerate() {
+        for choice in ScopeChoice::ALL {
+            let (name, number) = (scope_name(choice), choice.number());
             let button = gtk::ToggleButton::builder()
                 .label(scope_button_label(choice))
                 .focusable(false)
                 .can_focus(false)
-                .tooltip_text(format!(
-                    "{} (Alt+{}, or Tab to cycle)",
-                    scope_name(choice),
-                    i + 1
-                ))
+                .tooltip_text(format!("{name} (Alt+{number}, or Tab to cycle)"))
                 .build();
             button.update_property(&[gtk::accessible::Property::Label(&format!(
-                "{}, Alt+{}",
-                scope_name(choice),
-                i + 1
+                "{name}, Alt+{number}"
             ))]);
             if let Some(first) = scope_buttons.first() {
                 button.set_group(Some(first));
@@ -226,10 +216,7 @@ impl FuzzyView {
                         return;
                     }
                     on_event(FuzzyViewEvent::Scope(choice));
-                    // Back to typing, without selecting the query text.
-                    let caret = entry.position();
-                    entry.grab_focus();
-                    entry.set_position(caret);
+                    back_to_typing(&entry);
                 }
             });
         }
@@ -243,10 +230,7 @@ impl FuzzyView {
                     return;
                 }
                 on_event(FuzzyViewEvent::Highlight(position));
-                // Back to typing, without selecting the query text.
-                let caret = entry.position();
-                entry.grab_focus();
-                entry.set_position(caret);
+                back_to_typing(&entry);
             }
         });
         list.connect_activate({
@@ -349,6 +333,14 @@ impl FuzzyView {
     }
 }
 
+/// Gives the keyboard back to the search field after a click, with the
+/// caret where it was: grabbing focus alone would select the query text.
+fn back_to_typing(entry: &gtk::SearchEntry) {
+    let caret = entry.position();
+    entry.grab_focus();
+    entry.set_position(caret);
+}
+
 /// The overlay's own keys in the search field (§8). Everything else,
 /// Ctrl+Backspace included, is ordinary text editing.
 fn overlay_key(key: gtk::gdk::Key, state: gtk::gdk::ModifierType) -> Option<FuzzyViewEvent> {
@@ -359,8 +351,7 @@ fn overlay_key(key: gtk::gdk::Key, state: gtk::gdk::ModifierType) -> Option<Fuzz
             Key::Return | Key::KP_Enter | Key::ISO_Enter => Some(FuzzyViewEvent::Reveal),
             _ => {
                 let digit = key.to_unicode()?.to_digit(10)? as usize;
-                let scope = ScopeChoice::ALL.get(digit.checked_sub(1)?)?;
-                Some(FuzzyViewEvent::Scope(*scope))
+                ScopeChoice::from_number(digit).map(FuzzyViewEvent::Scope)
             }
         };
     }

@@ -4,7 +4,7 @@ Status as of 2026-11-13, branch `main`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 450 Rust tests (165 originally), native Wayland verification, and three sandboxed UI tests: file operations (21 checks), the spatial workspace (63 checks, including backward pruning) and Fuzzy Find (38 checks).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 451 Rust tests (165 originally), native Wayland verification, and three sandboxed UI tests: file operations (21 checks), the spatial workspace (63 checks, including backward pruning) and Fuzzy Find (38 checks).
 
 ## Spatial file manager specification
 

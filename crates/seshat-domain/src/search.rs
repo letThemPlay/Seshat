@@ -119,7 +119,9 @@ pub struct SearchResult {
     /// The path relative to the searched folder, for display.
     pub relative_path: String,
     pub origin: Option<SearchOrigin>,
-    /// Higher is better; only comparable within one query.
+    /// The matcher's score: higher is better, and only comparable within
+    /// one query. Results already come in rank order, so nothing sorts by
+    /// it; it is kept for tests and for debugging the ranking.
     pub score: u32,
     /// Matched parts of `name`, when the name matched.
     pub name_match: SearchMatch,

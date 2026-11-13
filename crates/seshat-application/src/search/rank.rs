@@ -71,6 +71,9 @@ fn relative_of(path: &Path, root: &Path) -> String {
         .into_owned()
 }
 
+/// Whether `name` is exactly the query. Case follows `query.case` with the
+/// same smart-case rule the matcher applies (`NucleoMatcher`: case matters
+/// once the query has a capital letter); keep the two in step.
 fn is_exact(name: &str, query: &SearchQuery) -> bool {
     let wanted = query.text.trim();
     match query.case {

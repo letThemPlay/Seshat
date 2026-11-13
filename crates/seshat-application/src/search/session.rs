@@ -93,7 +93,7 @@ impl SearchSessions {
     }
 
     /// Stops the running search, keeping the session open.
-    pub fn cancel(&mut self) {
+    pub(crate) fn cancel(&mut self) {
         if let Some(current) = self.current.as_mut()
             && let Some(cancel) = current.cancel.take()
         {
@@ -109,7 +109,9 @@ impl SearchSessions {
         self.current = None;
     }
 
-    pub fn current(&self) -> Option<SearchSessionId> {
+    /// The open session; only tests need to ask.
+    #[cfg(test)]
+    pub(crate) fn current(&self) -> Option<SearchSessionId> {
         self.current.as_ref().map(|c| c.id)
     }
 

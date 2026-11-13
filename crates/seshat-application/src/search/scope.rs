@@ -37,17 +37,14 @@ pub enum ScopeError {
 ///   walk.
 pub fn roots(scope: &SearchScope, workspace: &Workspace) -> Result<Vec<SearchRoot>, ScopeError> {
     let branch = workspace.active_branch().id();
+    let single = |panel| {
+        root_of(workspace, branch, panel)
+            .map(|root| vec![root])
+            .ok_or(ScopeError::InTrash)
+    };
     match scope {
-        SearchScope::CurrentDirectory => {
-            let panel = workspace.active_panel();
-            let root = root_of(workspace, branch, panel).ok_or(ScopeError::InTrash)?;
-            Ok(vec![root])
-        }
-        SearchScope::CurrentBranch => {
-            let panel = workspace.path(branch)[0];
-            let root = root_of(workspace, branch, panel).ok_or(ScopeError::InTrash)?;
-            Ok(vec![root])
-        }
+        SearchScope::CurrentDirectory => single(workspace.active_panel()),
+        SearchScope::CurrentBranch => single(workspace.path(branch)[0]),
         SearchScope::EntireWorkspace => {
             let mut roots: Vec<SearchRoot> = Vec::new();
             for branch in workspace.branches() {
