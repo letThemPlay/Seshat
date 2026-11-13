@@ -1,7 +1,8 @@
 //! Seshat presentation layer (GTK4 + Relm4).
 //!
 //! Renders application state and forwards user intent to application use
-//! cases. Never performs filesystem I/O directly.
+//! cases. Never performs filesystem I/O directly (checked by
+//! `scripts/check-architecture.sh`).
 
 mod actions;
 mod app;

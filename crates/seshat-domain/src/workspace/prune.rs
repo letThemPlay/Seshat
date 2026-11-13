@@ -148,6 +148,7 @@ impl Workspace {
             .take_while(|&p| p != destination)
             .collect();
         removed.reverse();
+        debug_assert!(!removed.is_empty(), "the destination is a strict ancestor");
         Ok(PrunePlan {
             destination,
             removed,

@@ -35,21 +35,8 @@ impl Drop for Bus {
     }
 }
 
-/// A minimal session-bus configuration, so tests do not depend on the
-/// host's `/etc/dbus-1` (absent in build sandboxes).
-const BUS_CONFIG: &str = r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
- "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
-<busconfig>
-  <type>session</type>
-  <listen>unix:path=SOCKET</listen>
-  <auth>EXTERNAL</auth>
-  <policy context="default">
-    <allow send_destination="*" eavesdrop="true"/>
-    <allow eavesdrop="true"/>
-    <allow own="*"/>
-  </policy>
-</busconfig>
-"#;
+/// A minimal session bus, with `SOCKET` to be replaced.
+const BUS_CONFIG: &str = include_str!("support/session-bus.conf");
 
 /// `None` when `dbus-daemon` is not installed (the tests then skip). A
 /// daemon that is installed but fails to start is a test failure.
@@ -387,7 +374,7 @@ fn cancellation_and_structured_errors() {
     assert!(names.contains(&"OperationCancelling"), "{names:?}");
     assert_eq!(names.last(), Some(&"OperationCancelled"));
 
-    let prefix = "dev.kdmorris.Seshat.Operations.Error.";
+    let prefix = format!("{INTERFACE}.Error.");
     assert_eq!(
         error_name(zbus::block_on(ops.cancel_operation(&id)).unwrap_err()),
         format!("{prefix}AlreadyFinished")
@@ -460,4 +447,83 @@ fn service_restart_releases_and_reclaims_the_name() {
     assert!(has_owner());
     let (_, active) = zbus::block_on(proxy(&client).get_active_operations()).unwrap();
     assert!(active.is_empty());
+}
+
+/// The interface's members and their argument types, one per line, read
+/// from the service's own introspection data. Argument names and doc
+/// comments are left out: they are not part of the wire contract.
+fn introspected_members(xml: &str) -> Vec<String> {
+    let attr = |line: &str, name: &str| {
+        let start = line.find(&format!("{name}=\""))? + name.len() + 2;
+        Some(line[start..start + line[start..].find('"')?].to_owned())
+    };
+    let interface = format!("<interface name=\"{INTERFACE}\">");
+    let body = xml
+        .split_once(&interface)
+        .and_then(|(_, rest)| rest.split_once("</interface>"))
+        .expect("the interface is introspectable")
+        .0;
+    let mut members = Vec::new();
+    for line in body.lines().map(str::trim) {
+        if let Some(kind) = ["method", "signal", "property"]
+            .into_iter()
+            .find(|kind| line.starts_with(&format!("<{kind} ")))
+        {
+            members.push(format!("{kind} {}(", attr(line, "name").unwrap()));
+        } else if line.starts_with("<arg ") {
+            let current = members.last_mut().expect("an argument belongs to a member");
+            if !current.ends_with('(') {
+                current.push_str(", ");
+            }
+            if let Some(direction) = attr(line, "direction") {
+                current.push_str(&direction);
+                current.push(' ');
+            }
+            current.push_str(&attr(line, "type").unwrap());
+        } else if line.starts_with("</method") || line.starts_with("</signal") {
+            members.last_mut().unwrap().push(')');
+        }
+    }
+    members
+}
+
+/// Pins the D-Bus contract that external clients rely on. If this fails,
+/// the change is incompatible: bump `PROTOCOL_VERSION` and update
+/// `docs/ipc/protocol.md`, or keep the interface as it was.
+#[test]
+fn the_interface_is_unchanged() {
+    let fx = Fixture::new(bus_or_skip!(), 1);
+    let client = connect(&fx.address);
+    let xml = zbus::block_on(async {
+        zbus::fdo::IntrospectableProxy::builder(&client)
+            .destination(seshat_infrastructure::ipc::BUS_NAME)
+            .path(seshat_infrastructure::ipc::OBJECT_PATH)
+            .build()
+            .await
+            .unwrap()
+            .introspect()
+            .await
+    })
+    .unwrap();
+    const INFO: &str = "(sssasussttbttbdbtttsu)";
+    let signal = |name: &str| format!("signal {name}(t, {INFO})");
+    let expected = [
+        "method GetProtocolVersion(out u)".to_owned(),
+        format!("method GetActiveOperations(out t, out a{INFO})"),
+        format!("method GetOperation(in s, out {INFO})"),
+        "method CancelOperation(in s)".to_owned(),
+        signal("OperationQueued"),
+        signal("OperationStarted"),
+        signal("OperationProgress"),
+        signal("OperationCancelling"),
+        signal("OperationCompleted"),
+        signal("OperationFailed"),
+        signal("OperationCancelled"),
+    ];
+    assert_eq!(
+        introspected_members(&xml),
+        expected,
+        "incompatible D-Bus change: bump PROTOCOL_VERSION and update docs/ipc/protocol.md"
+    );
+    assert_eq!(seshat_infrastructure::ipc::PROTOCOL_VERSION, 1);
 }

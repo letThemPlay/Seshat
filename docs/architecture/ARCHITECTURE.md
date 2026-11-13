@@ -10,6 +10,18 @@ Seshat follows Clean Architecture. Crate boundaries enforce it, and `scripts/che
 - **Linux and Wayland:** [LINUX-WAYLAND.md](LINUX-WAYLAND.md)
 - **Fuzzy Find search engine:** [search.md](search.md)
 
+## Rules enforced by checks
+
+Rules that would otherwise live only in comments are checked automatically (`scripts/check.sh`):
+
+| Rule | Check |
+|---|---|
+| Layer dependencies; presentation does no filesystem I/O; `test-support` never reaches a build of the application | `scripts/check-architecture.sh` |
+| The D-Bus interface (methods, signals, argument types) and the `kind`/`status` strings don't change without a `PROTOCOL_VERSION` bump | `the_interface_is_unchanged` (`seshat-infrastructure/tests/ipc.rs`), `kind_and_status_strings_are_stable` |
+| The example client's copy of the protocol matches the service | `matches_the_service` (`seshat-progress`) |
+| No libadwaita (ADR 0001) | `deny.toml` `[bans]` |
+| Lint exceptions say why | `clippy::allow_attributes_without_reason`; use `#[expect(…, reason = "…")]` |
+
 ## The spatial workspace
 
 [ADR 0004](../decisions/0004-spatial-workspace.md) has the full rationale.

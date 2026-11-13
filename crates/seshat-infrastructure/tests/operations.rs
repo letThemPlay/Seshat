@@ -230,6 +230,22 @@ fn copies_drop_setuid_and_setgid() {
 }
 
 #[test]
+fn copied_folders_keep_the_sticky_bit() {
+    let dir = tempfile::tempdir().unwrap();
+    let shared = dir.path().join("shared");
+    fs::create_dir(&shared).unwrap();
+    fs::set_permissions(&shared, fs::Permissions::from_mode(0o1777)).unwrap();
+    let dst = dir.path().join("dst");
+    fs::create_dir(&dst).unwrap();
+    let op = run(copy(&[&shared], &dst));
+    assert_eq!(op.status(), OperationStatus::Completed);
+    assert_eq!(
+        fs::metadata(dst.join("shared")).unwrap().mode() & 0o7777,
+        0o1777
+    );
+}
+
+#[test]
 fn copy_into_symlinked_folder_and_alias_refusal() {
     let dir = tempfile::tempdir().unwrap();
     let real = dir.path().join("real");

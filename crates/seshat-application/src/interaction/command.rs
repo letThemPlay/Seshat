@@ -258,6 +258,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_listed_command_name_parses() {
+        for (name, _) in COMMANDS {
+            assert!(
+                !matches!(parse(name), Err(CommandError::Unknown(_))),
+                "{name} is listed but not parsed"
+            );
+        }
+    }
+
+    #[test]
     fn commands_with_a_window_action_map_to_that_action() {
         let action = |input: &str| parse(input).expect("parses").as_action();
         assert_eq!(action("branch next"), Some(Action::BranchNext.into()));

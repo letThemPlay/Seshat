@@ -331,7 +331,6 @@ impl App {
                 Ok(location) => self.service.open_location(location),
                 Err(err) => self.notice = Some(Notice::from_error(&err)),
             },
-            // Carried out above by `perform` (see `Command::as_action`).
             Command::Delete { .. }
             | Command::View(_)
             | Command::Hidden
@@ -342,7 +341,7 @@ impl App {
                 | BranchCommand::Previous
                 | BranchCommand::Overview
                 | BranchCommand::Close,
-            ) => {}
+            ) => unreachable!("carried out above through `Command::as_action`"),
         }
     }
 

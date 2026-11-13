@@ -22,21 +22,8 @@ impl Drop for Killed {
     }
 }
 
-/// A minimal session-bus configuration, so tests do not depend on the
-/// host's `/etc/dbus-1` (absent in build sandboxes).
-const BUS_CONFIG: &str = r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
- "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
-<busconfig>
-  <type>session</type>
-  <listen>unix:path=SOCKET</listen>
-  <auth>EXTERNAL</auth>
-  <policy context="default">
-    <allow send_destination="*" eavesdrop="true"/>
-    <allow eavesdrop="true"/>
-    <allow own="*"/>
-  </policy>
-</busconfig>
-"#;
+/// A minimal session bus, with `SOCKET` to be replaced.
+const BUS_CONFIG: &str = include_str!("../../seshat-infrastructure/tests/support/session-bus.conf");
 
 /// `None` when `dbus-daemon` is not installed (the tests then skip). The
 /// daemon is dropped before its directory.

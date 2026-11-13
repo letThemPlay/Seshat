@@ -4,7 +4,7 @@ Status as of 2026-11-13, branch `main`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
-**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 451 Rust tests (165 originally), native Wayland verification, and three sandboxed UI tests: file operations (21 checks), the spatial workspace (63 checks, including backward pruning) and Fuzzy Find (38 checks).
+**Checks:** `scripts/check.sh --ui` passes. That covers fmt, clippy with `-D warnings`, the architecture rules, 457 Rust tests (165 originally), native Wayland verification, and three sandboxed UI tests: file operations (21 checks), the spatial workspace (63 checks, including backward pruning) and Fuzzy Find (38 checks).
 
 ## Spatial file manager specification
 
@@ -112,4 +112,4 @@ Status as of 2026-11-13, branch `main`.
    - `open_path_ends_on_the_folder_asked_for_not_deeper` never reached the C1 override it is named for.
    - A dead `.seshat-path` CSS rule and an overridden `.seshat-status` padding rule.
 
-   `docs-comment-audit` removed divider and redundant comments and corrected about 35 outdated ones (no change in behaviour). Enforcing documented constraints in code and type refactors follow as separate pull requests.
+   `docs-comment-audit` removed divider and redundant comments and corrected about 35 outdated ones (no change in behaviour). `enforce-comment-constraints` turned constraints stated in comments into checks (see [ARCHITECTURE.md](../architecture/ARCHITECTURE.md#rules-enforced-by-checks)): a D-Bus interface test, IPC string and client-constant tests, command-name tests, a sticky-bit copy test, debug assertions, a libadwaita ban, the `allow_attributes_without_reason` lint and stricter architecture checks. Invalid window-action shortcuts are now logged, as other shortcuts already were. Type refactors follow as a separate pull request.

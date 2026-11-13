@@ -33,21 +33,7 @@ chmod 700 "$SESSION/runtime"
 
 # A private session bus, so the app can publish its D-Bus service without
 # touching the user's bus.
-# Own minimal config: does not depend on the host's /etc/dbus-1.
-cat > "$SESSION/bus.conf" <<BUSCONF
-<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
- "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
-<busconfig>
-  <type>session</type>
-  <listen>unix:path=$SESSION/bus</listen>
-  <auth>EXTERNAL</auth>
-  <policy context="default">
-    <allow send_destination="*" eavesdrop="true"/>
-    <allow eavesdrop="true"/>
-    <allow own="*"/>
-  </policy>
-</busconfig>
-BUSCONF
+sed "s|SOCKET|$SESSION/bus|" "$ROOT/crates/seshat-infrastructure/tests/support/session-bus.conf" >"$SESSION/bus.conf"
 dbus-daemon --config-file="$SESSION/bus.conf" --nofork --nopidfile --print-address=1 >"$SESSION/bus-address" 2>"$SESSION/dbus.log" &
 DBUS_PID=$!
 for _ in $(seq 50); do [[ -s "$SESSION/bus-address" ]] && break; sleep 0.1; done

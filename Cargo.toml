@@ -25,9 +25,8 @@ glib = "0.22"
 gtk = { package = "gtk4", version = "0.11", features = ["v4_20"] }
 gdk4-wayland = "0.11"
 gdk4-x11 = "0.11"
-# No relm4 "gnome_*" feature: from gnome_43 on they pull in libadwaita,
-# which Seshat deliberately does not use (ADR 0001). GTK API levels come
-# from the gtk4 dependency's own feature above.
+# No relm4 "gnome_*" feature: they pull in libadwaita, which deny.toml bans
+# (ADR 0001). GTK API levels come from the gtk4 feature above.
 relm4 = "0.11"
 tempfile = "3"
 serde = { version = "1", features = ["derive"] }
@@ -44,3 +43,4 @@ missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+allow_attributes_without_reason = "warn"

@@ -148,6 +148,54 @@ mod tests {
         )
     }
 
+    /// The `kind` and `status` strings are part of the protocol, as listed on
+    /// [`OperationInfo`] and in `docs/ipc/protocol.md`.
+    #[test]
+    fn kind_and_status_strings_are_stable() {
+        use OperationKind::*;
+        let kinds = [
+            Copy,
+            Move,
+            Rename,
+            Delete,
+            Trash,
+            Restore,
+            CreateDirectory,
+            CreateFile,
+        ];
+        // A new kind stops this compiling until it is added above.
+        for kind in kinds {
+            match kind {
+                Copy | Move | Rename | Delete | Trash | Restore | CreateDirectory | CreateFile => {}
+            }
+        }
+        assert_eq!(
+            kinds.map(OperationKind::id),
+            [
+                "copy",
+                "move",
+                "rename",
+                "delete",
+                "trash",
+                "restore",
+                "create_directory",
+                "create_file"
+            ]
+        );
+        assert_eq!(
+            OperationStatus::ALL.map(status_id),
+            [
+                "queued",
+                "started",
+                "in_progress",
+                "cancelling",
+                "completed",
+                "failed",
+                "cancelled"
+            ]
+        );
+    }
+
     #[test]
     fn signature_is_stable() {
         assert_eq!(
