@@ -72,10 +72,6 @@ window.seshat {{
   background-color: @seshat_hover;
 }}
 
-.seshat-path {{
-  color: @seshat_text_secondary;
-}}
-
 .seshat-sidebar,
 .seshat-sidebar list {{
   background-color: @seshat_navigation_surface;
@@ -415,10 +411,6 @@ window.seshat popover separator {{
 .seshat-branch.seshat-branch-active {{
   color: @seshat_text_primary;
   box-shadow: inset 0 -2px 0 0 @seshat_accent;
-}}
-
-.seshat-status {{
-  padding: 2px {padding}px;
 }}
 
 .seshat-mode {{

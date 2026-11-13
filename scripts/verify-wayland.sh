@@ -9,7 +9,7 @@
 #   3. confirms the check fails when no Wayland compositor is reachable.
 #
 # Run inside `nix develop`. Exits non-zero on any failure. Uses a throwaway
-# XDG_CONFIG_HOME so the run never writes to the real Seshat settings.
+# HOME and XDG directories so the run never touches the real Seshat state.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -23,7 +23,7 @@ RUNTIME_DIR="$(mktemp -d)"
 chmod 700 "$RUNTIME_DIR"
 SOCKET="seshat-verify-$$"
 LOG_DIR="$RUNTIME_DIR/logs"
-mkdir -p "$LOG_DIR"
+mkdir -p "$LOG_DIR" "$RUNTIME_DIR/home"
 
 cleanup() {
     [[ -n "${WESTON_PID:-}" ]] && kill "$WESTON_PID" 2>/dev/null || true
@@ -43,10 +43,11 @@ for _ in $(seq 50); do
 done
 [[ -S "$RUNTIME_DIR/$SOCKET" ]] || { cat "$LOG_DIR/weston.log"; fail "weston did not start"; }
 
-# Isolated environment: no X11 display, Wayland only.
+# Isolated environment: no X11 display, Wayland only, throwaway home.
 run() {
-    env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="$RUNTIME_DIR" \
-        XDG_CONFIG_HOME="$RUNTIME_DIR/config" \
+    env -i PATH="$PATH" HOME="$RUNTIME_DIR/home" XDG_RUNTIME_DIR="$RUNTIME_DIR" \
+        XDG_CONFIG_HOME="$RUNTIME_DIR/config" XDG_STATE_HOME="$RUNTIME_DIR/state" \
+        XDG_DATA_HOME="$RUNTIME_DIR/data" XDG_CACHE_HOME="$RUNTIME_DIR/cache" \
         WAYLAND_DISPLAY="$SOCKET" XDG_SESSION_TYPE=wayland GDK_BACKEND=wayland \
         XDG_DATA_DIRS="${XDG_DATA_DIRS:-}" RUST_LOG=info "$@"
 }
