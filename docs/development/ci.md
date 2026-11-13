@@ -10,6 +10,7 @@ Every pull request into `main` runs the full test suite and the security scanner
 | | **UI end-to-end** | Three sandboxed headless Sway sessions: `scripts/ui/file-operations.sh`, `scripts/ui/workspace.sh` and `scripts/ui/fuzzy-find.sh`. Screenshots and logs of each are uploaded as artifacts (`ui-e2e-artifacts`, `ui-e2e-workspace-artifacts`, `ui-e2e-fuzzy-artifacts`) when it fails |
 | | **Nix package** | `nix build .#seshat` (runs the suite again in the Nix sandbox), Wayland verification of the packaged binary, desktop entry and AppStream validation |
 | | **Dependencies (cargo-deny)** | RustSec advisories, the license allow-list, banned and wildcard dependencies, crates.io-only sources (`deny.toml`) |
+| | **Commit messages** | Pull requests only: `scripts/check-commits.sh` checks that every commit subject follows [Conventional Commits](commits.md) |
 | `security.yml` | **CodeQL (rust)** / **CodeQL (actions)** | Code scanning of the Rust code (no build needed) and of the workflow files; results go to the Security tab |
 | | **Dependency review** | Fails PRs that add dependencies with known vulnerabilities (moderate or worse) |
 | | **Workflow security (zizmor)** | Static analysis of the workflows (pinning, injection, permissions); results go to the Security tab |
@@ -54,6 +55,7 @@ Run these inside `nix develop`:
 
 ```sh
 scripts/check.sh --ui                                  # Checks + UI end-to-end
+scripts/check-commits.sh origin/main                   # Commit messages
 nix build .#seshat && SESHAT_BIN=./result/bin/seshat scripts/verify-wayland.sh
 nix shell nixpkgs#cargo-deny -c cargo deny check       # Dependencies
 nix shell nixpkgs#zizmor -c zizmor --persona pedantic .github/
@@ -62,6 +64,6 @@ nix shell nixpkgs#zizmor -c zizmor --persona pedantic .github/
 ## Repository settings (done in GitHub, not in workflows)
 
 - **Code security:** enable secret scanning and push protection, Dependabot alerts and Dependabot security updates.
-- **A ruleset or branch protection on `main`** that requires: `Checks`, `UI end-to-end`, `Nix package`, `Dependencies (cargo-deny)`, `CodeQL (rust)`, `CodeQL (actions)`, `Dependency review` and `Workflow security (zizmor)`.
+- **A ruleset or branch protection on `main`** that requires: `Checks`, `UI end-to-end`, `Nix package`, `Dependencies (cargo-deny)`, `Commit messages`, `CodeQL (rust)`, `CodeQL (actions)`, `Dependency review` and `Workflow security (zizmor)`.
 - **Optional:** a merge queue. `ci.yml` already handles `merge_group`.
 - **`update-flake-lock` PRs** are created with `GITHUB_TOKEN`, which doesn't trigger other workflows. Start CI on them with "Run workflow", or give the workflow a GitHub App token.

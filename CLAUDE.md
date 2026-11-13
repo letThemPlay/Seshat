@@ -98,6 +98,8 @@ For substantial features, use Plan Mode first and wait for approval before makin
 
 Do not begin a large implementation based on assumptions.
 
+Commit messages and PR titles follow Conventional Commits; see `docs/development/commits.md`.
+
 ## 8. Code quality
 
 - Follow existing Rust conventions and project patterns.

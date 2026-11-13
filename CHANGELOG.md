@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased: development
+
+- **Conventional Commits:** commit messages and pull request titles now follow [Conventional Commits](docs/development/commits.md) (`fix(workspace): …`, `feat(fuzzy-find): …`). A new CI job, **Commit messages**, checks every commit of a pull request with `scripts/check-commits.sh`, which `scripts/check.sh` also runs locally. Dependabot and the flake update write messages in the same format. Earlier history is unchanged.
+
 ## Unreleased: Fuzzy Find
 
 Implements the [Fuzzy Find specification](docs/specifications/4-FUZZY-FIND.md), except operations on several results at once (§10), which wait for a later phase (F13). Design: [search.md](docs/architecture/search.md); decisions F1–F14 in [DECISIONS.md](docs/architecture/DECISIONS.md); opening results: [ADR 0008](docs/decisions/0008-opening-search-results.md).

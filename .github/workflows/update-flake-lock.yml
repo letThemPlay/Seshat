@@ -32,5 +32,6 @@ jobs:
           github_access_token: ${{ github.token }}
       - uses: DeterminateSystems/update-flake-lock@da03c0f078bc4b2c37ee4f7e072d34bf8f188bb3 # v29
         with:
-          pr-title: "Update flake.lock"
+          commit-msg: "build(nix): update flake.lock"
+          pr-title: "build(nix): update flake.lock"
           pr-labels: dependencies
