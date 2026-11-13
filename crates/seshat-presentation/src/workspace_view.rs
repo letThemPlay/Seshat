@@ -251,11 +251,7 @@ impl WorkspaceView {
         }
 
         let viewport = self.viewport_width();
-        let active_width = if focus {
-            viewport
-        } else {
-            (viewport / 2).max(MIN_ACTIVE_WIDTH).min(viewport.max(1))
-        };
+        let active_width = active_width_request(focus, viewport);
         let path = ws.active_path();
         let branch_number = layout.first_row + layout.active_row + 1;
         let top = i32::from(layout.hidden_above > 0);
@@ -662,6 +658,20 @@ fn reveal_shift(panel: &gtk::Widget, scroller: &gtk::ScrolledWindow) -> Option<f
     ))
 }
 
+/// The width the active panel asks for. Normal layout: half the visible
+/// width, at least [`MIN_ACTIVE_WIDTH`] but never more than the view, so the
+/// other panels scroll beside it. Focus Mode asks for none (`-1`): the panel
+/// expands to fill what the viewport gives the strip, which already leaves
+/// room for the strip's padding. Asking for the full viewport width would
+/// add that padding on top and make the workspace scroll.
+fn active_width_request(focus: bool, viewport: i32) -> i32 {
+    if focus {
+        -1
+    } else {
+        (viewport / 2).max(MIN_ACTIVE_WIDTH).min(viewport.max(1))
+    }
+}
+
 /// The scroll needed to bring `[left, right]` inside `[margin, width - margin]`.
 fn shift_into_view(left: f64, right: f64, width: f64, margin: f64) -> f64 {
     if right - left > width - 2.0 * margin || left < margin {
@@ -674,9 +684,10 @@ fn shift_into_view(left: f64, right: f64, width: f64, margin: f64) -> f64 {
 }
 
 /// One debug line after the active panel was revealed: its edges within
-/// the visible area and the height of every panel header. The UI tests
-/// check that the panel is fully visible and the headers are all the same
-/// height.
+/// the visible area, how far the workspace can scroll sideways and the
+/// height of every panel header. The UI tests check that the panel is fully
+/// visible, the headers are all the same height and, in Focus Mode, that
+/// nothing scrolls.
 fn log_geometry(active: &gtk::Widget, scroller: &gtk::ScrolledWindow, headers: &[gtk::Box]) {
     let Some(bounds) = active.compute_bounds(scroller) else {
         return;
@@ -690,6 +701,10 @@ fn log_geometry(active: &gtk::Widget, scroller: &gtk::ScrolledWindow, headers: &
         active_left = bounds.x().round() as i32,
         active_right = (bounds.x() + bounds.width()).round() as i32,
         viewport = scroller.width(),
+        overflow = {
+            let h = scroller.hadjustment();
+            (h.upper() - h.page_size()).round() as i32
+        },
         headers = heights.join(","),
         "workspace geometry"
     );
@@ -737,7 +752,7 @@ fn header_info(
 
 #[cfg(test)]
 mod tests {
-    use super::{rows_for_height, shift_into_view};
+    use super::{active_width_request, rows_for_height, shift_into_view};
 
     #[test]
     fn lanes_depend_on_height_and_are_capped() {
@@ -758,5 +773,27 @@ mod tests {
         assert_eq!(shift_into_view(-124.0, 176.0, 1059.0, 6.0), -130.0);
         // Wider than the view: its left edge wins.
         assert_eq!(shift_into_view(200.0, 1400.0, 1059.0, 6.0), 194.0);
+    }
+
+    #[test]
+    fn focus_mode_asks_for_no_width_so_the_strip_padding_fits() {
+        assert_eq!(active_width_request(true, 1059), -1);
+        assert_eq!(active_width_request(true, 200), -1);
+    }
+
+    #[test]
+    fn the_active_panel_takes_half_the_view_within_bounds() {
+        assert_eq!(active_width_request(false, 1200), 600);
+        assert_eq!(
+            active_width_request(false, 800),
+            460,
+            "at least MIN_ACTIVE_WIDTH"
+        );
+        assert_eq!(
+            active_width_request(false, 300),
+            300,
+            "never wider than the view"
+        );
+        assert_eq!(active_width_request(false, 0), 1);
     }
 }
