@@ -1,6 +1,6 @@
 # Implementation status
 
-Status as of 2026-11-13, branch `feature-fuzzy-scope-keys`.
+Status as of 2026-11-13, branch `main`.
 
 "Verified" means checked by an automated test or script in this repository, unless marked *manual*. The original specification's status is kept in [definition-of-done.md](../definition-of-done.md), and it still holds: every original check passes unchanged, except the UI test now starts searches with `/` (decision D1).
 
