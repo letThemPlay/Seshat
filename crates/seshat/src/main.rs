@@ -22,7 +22,7 @@ use seshat_presentation::AppInit;
 use tracing_subscriber::EnvFilter;
 
 /// Application ID (reverse-DNS). The desktop entry, icon, AppStream id and
-/// the D-Bus service name (`seshat-infrastructure::ipc`) all derive from it.
+/// the D-Bus service name ([`seshat_infrastructure::ipc`]) all derive from it.
 const APP_ID: &str = "dev.kdmorris.Seshat";
 
 /// File operations running at once; more are queued.

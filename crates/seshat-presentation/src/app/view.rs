@@ -25,7 +25,7 @@ pub struct AppWidgets {
     /// Location the breadcrumbs were last rendered for.
     pub rendered_crumbs: Option<seshat_domain::entities::Location>,
     pub editing_address: bool,
-    /// Interaction mode (NORMAL, VISUAL, COMMAND).
+    /// Shows [`Mode::label`](seshat_application::interaction::Mode::label).
     pub mode_label: gtk::Label,
     /// Keys of an unfinished sequence, e.g. `g`.
     pub pending_label: gtk::Label,
@@ -86,7 +86,7 @@ pub fn build(
     classic_keys: bool,
     sender: &ComponentSender<App>,
 ) -> (AppWidgets, Handles) {
-    // ── Toolbar ──
+    // Toolbar
     let header = gtk::HeaderBar::new();
     header.add_css_class("seshat-toolbar");
     let back_button = icon_button(
@@ -196,7 +196,7 @@ pub fn build(
     header.pack_start(&focus_toggle);
     root.set_titlebar(Some(&header));
 
-    // ── Search ──
+    // Search
     let search_entry = gtk::SearchEntry::builder()
         .placeholder_text("Search this panel")
         .hexpand(true)
@@ -278,7 +278,7 @@ pub fn build(
         }
     });
 
-    // ── Content ──
+    // Content
     let context_menu = gtk::PopoverMenu::builder()
         .has_arrow(false)
         .halign(gtk::Align::Start)
@@ -325,7 +325,7 @@ pub fn build(
         .vexpand(true)
         .build();
 
-    // ── Mode and status bar ──
+    // Mode and status bar
     let mode_label = gtk::Label::builder()
         .label("NORMAL")
         .css_classes(["seshat-mode"])

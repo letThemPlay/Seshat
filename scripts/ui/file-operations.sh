@@ -4,7 +4,8 @@
 H="$HOME_DIR"
 mkdir -p "$H/Notes" "$H/Projects"
 for f in file1.txt file2.txt report.pdf; do echo "content of $f" > "$H/$f"; done
-mkdir "$H/many"; (cd "$H/many" && head -c 120M /dev/urandom | split -b 2k -a 5 - part-)   # ~60k files: cannot be reflinked in one go, and the copy outlasts the close below
+# ~60k files: too many to reflink at once, and the copy outlasts the close below.
+mkdir "$H/many"; (cd "$H/many" && head -c 120M /dev/urandom | split -b 2k -a 5 - part-)
 
 log_text() { sed 's/\x1b\[[0-9;]*m//g' "$SESSION/seshat.log"; }
 # Operations queued but not yet finished, from the operation manager's
@@ -70,8 +71,8 @@ type_text /; type_text many; press Return
 chord ctrl c
 chord ctrl l; type_text "$H/Projects"; press Return 1
 shot progress
-# Close as soon as the copy is running: a fixed sleep let fast runners
-# finish the copy before the close, so nothing was deferred.
+# Close as soon as the copy is running, so the close is deferred even on
+# fast runners.
 chord ctrl v
 wait_until 10 operations_running && running_at_close=yes || running_at_close=no
 in_session swaymsg '[title="^Seshat$"] kill' >/dev/null   # no sleep or screenshot in between

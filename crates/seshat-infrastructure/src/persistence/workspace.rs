@@ -23,11 +23,9 @@ use super::atomic::write_atomic;
 /// Larger files are not read: a workspace this big is not one we wrote.
 const MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
 
-/// Saves the workspace as TOML. Encoding happens on the caller's thread,
-/// which is fast; writing, including the `fsync` of the atomic write, runs
-/// on a writer thread, because `fsync` can take tens of milliseconds on a
-/// busy filesystem and must not block the UI. Saves made while one is being
-/// written are coalesced: only the latest is written.
+/// Saves the workspace as TOML. Encoding runs on the caller's thread;
+/// writing, whose `fsync` can take tens of milliseconds, runs on a writer
+/// thread. Saves queued during a write are coalesced to the latest.
 #[derive(Debug)]
 pub struct TomlWorkspaceStore {
     path: PathBuf,
@@ -168,7 +166,8 @@ fn write_queue(path: &Path, queue: &mpsc::Receiver<Job>) {
     }
 }
 
-// ── File format ─────────────────────────────────────────────────────────
+// The file format. The `*V1` types read and write versions 1 and 2:
+// version 2 only added the optional panel `identity`.
 
 #[derive(Debug, Serialize, Deserialize)]
 struct FileV1 {
@@ -211,7 +210,7 @@ struct PanelV1 {
     selection: Vec<LocationV1>,
     #[serde(skip_serializing_if = "Option::is_none")]
     anchor: Option<LocationV1>,
-    /// Format 2: the folder's identity as "device:inode" (a string, because
+    /// Version 2: the folder's identity as "device:inode" (a string, because
     /// TOML integers cannot hold every 64-bit inode).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     identity: Option<String>,
@@ -421,9 +420,8 @@ fn decode(text: &str) -> Result<Workspace, String> {
     Workspace::from_parts(parts).map_err(|e| e.to_string())
 }
 
-/// Brings an older file up to the current format. Version 1 is the first,
-/// so there is nothing to migrate yet; each future version adds a step
-/// here (e.g. `1 => rename fields`, then fall through to the next).
+/// Brings an older file up to the current format, one step per version
+/// (e.g. `2 => rename fields`, then fall through to the next).
 fn migrate(table: toml::Table, from: u32) -> Result<toml::Table, String> {
     match from {
         // Version 2 only added the optional panel `identity`: a version 1

@@ -64,9 +64,9 @@ pub enum Intent {
         launch_files: bool,
     },
     /// A complete binding for an action this mode does not allow. Nothing
-    /// happens; the caller may say why. Pruning in Visual Mode is the case
-    /// (decision B6): there `d` must neither delete files, as it would in
-    /// Vim, nor drop panels holding the selection being made.
+    /// happens; the caller may say why. In Visual Mode, pruning (decision
+    /// B6: `d` must neither delete files, as in Vim, nor drop panels
+    /// holding the selection) and Fuzzy Find (F6) are refused.
     NotInThisMode(Action),
     /// Everything else, carried out the same way in every mode.
     Perform(Action),
@@ -186,8 +186,8 @@ impl Interaction {
             (mode, Action::Open) => Intent::Open {
                 launch_files: !matches!(mode, Mode::Visual { .. }),
             },
-            // Fuzzy Find is unavailable while selecting (decision F6), so
-            // the selection is never put at risk.
+            // Pruning (B6) and Fuzzy Find (F6) are unavailable while
+            // selecting, so the selection is never put at risk.
             (
                 Mode::Visual { .. },
                 Action::PruneBack | Action::PruneBackSegment | Action::FuzzyFind,

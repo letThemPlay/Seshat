@@ -177,9 +177,9 @@ impl CommandLineController {
                 folder,
                 partial,
             } => {
-                // An open panel's listing is used as is; otherwise the
-                // folder is read in the background (decision: no extra
-                // reads for folders already shown).
+                // An open panel's listing is used as is, so folders already
+                // shown are never read again; others are read in the
+                // background.
                 if let Some(listing) = service.listing_for(&folder) {
                     let names = completion::path_candidates(listing.entries(), &partial);
                     self.finish(keep, &partial, names.clone(), names, cx.notice);

@@ -112,4 +112,4 @@ Status as of 2026-11-13, branch `main`.
    - `open_path_ends_on_the_folder_asked_for_not_deeper` never reached the C1 override it is named for.
    - A dead `.seshat-path` CSS rule and an overridden `.seshat-status` padding rule.
 
-   Comment cleanup, enforcing documented constraints in code, and type refactors follow as separate pull requests.
+   `docs-comment-audit` removed divider and redundant comments and corrected about 35 outdated ones (no change in behaviour). Enforcing documented constraints in code and type refactors follow as separate pull requests.

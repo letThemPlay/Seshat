@@ -73,7 +73,8 @@ use view::{AppWidgets, Handles};
 /// Seshat owns its look through its own theme system, so its stylesheet must
 /// win over a desktop-wide `~/.config/gtk-4.0/gtk.css` (USER priority);
 /// otherwise mandated rules such as the shared surface token and 12px
-/// selected radius could be overridden. All rules are scoped to `.seshat*`.
+/// selected radius could be overridden. Rules are scoped to Seshat's own
+/// widgets, except the focus outline colour.
 const THEME_PROVIDER_PRIORITY: u32 = gtk::STYLE_PROVIDER_PRIORITY_USER + 1;
 
 /// Bursts of filesystem events (e.g. extracting an archive) are coalesced
@@ -83,12 +84,9 @@ const RELOAD_DEBOUNCE: Duration = Duration::from_millis(300);
 /// Opening many files at once from one action is almost always a mistake.
 const MAX_FILES_TO_OPEN: usize = 20;
 
-/// What a feature controller that changes the workspace, reports to the
-/// status bar and sends itself messages may use from the window while it
-/// handles a message. Borrowed from the window's own fields for the
-/// duration of one call, so controllers never keep a copy of workspace
-/// state. A controller gets only what it uses: [`NoticeCx`] when it never
-/// touches the workspace, plain arguments when it needs less.
+/// Window state lent to a controller for one message: the service, the
+/// status-bar notice and the sender. Controllers never keep a copy of
+/// workspace state; those that don't touch the workspace get [`NoticeCx`].
 pub(super) struct Cx<'a> {
     pub service: &'a mut WorkspaceService,
     /// The status bar's transient message.
@@ -170,7 +168,6 @@ pub enum Msg {
     Address(AddressMsg),
     Theme(ThemeMsg),
 
-    // Workspace
     Workspace(WorkspaceEvent),
     PanelLoaded {
         panel: PanelId,
@@ -199,7 +196,6 @@ pub enum Msg {
 
     Device(DeviceMsg),
     OpenFailed(String),
-    // File operations
     /// The clipboard was read for a paste.
     PasteFiles(Option<ClipboardFiles>),
     /// Submit a request; select the given item in that panel once listed.
@@ -700,13 +696,13 @@ impl App {
         }
     }
 
-    /// Text from the address bar, `:open`, `:copy` or `:move`, resolved
-    /// against Home and the active panel's folder.
+    /// See [`AddressBarController::resolve`].
     fn resolve_address(&self, text: &str) -> Result<Location, AddressError> {
         self.address.resolve(text, self.service.active_location())
     }
 
-    /// Ctrl+P: opens Fuzzy Find over the workspace, which stays as it is.
+    /// `fuzzy-find` (Ctrl+P by default): opens Fuzzy Find over the
+    /// workspace, which stays as it is.
     pub(super) fn open_fuzzy_find(&mut self, sender: &ComponentSender<Self>) {
         self.fuzzy.open(&self.service, sender);
     }

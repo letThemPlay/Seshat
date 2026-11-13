@@ -81,7 +81,7 @@ impl QueryMatcher for Compiled {
 /// character of every grapheme is ASCII (it then matches the raw bytes);
 /// otherwise it indexes graphemes. Either way, a match is widened to the
 /// whole grapheme it lies in, so a highlight never splits a character or
-/// separates a letter from its accent (§5.2).
+/// separates a letter from its accent (Spec 4 §5.2).
 fn byte_ranges(haystack: &str, indices: &[u32]) -> Vec<Range<usize>> {
     let mut ranges: Vec<Range<usize>> = Vec::new();
     let mut push = |range: Range<usize>| match ranges.last_mut() {

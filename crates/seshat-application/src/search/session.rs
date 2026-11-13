@@ -109,7 +109,7 @@ impl SearchSessions {
         self.current = None;
     }
 
-    /// The open session; only tests need to ask.
+    /// The open session.
     #[cfg(test)]
     pub(crate) fn current(&self) -> Option<SearchSessionId> {
         self.current.as_ref().map(|c| c.id)

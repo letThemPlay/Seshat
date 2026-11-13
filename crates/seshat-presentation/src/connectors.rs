@@ -35,8 +35,8 @@ pub fn elbow(width: f64, parent_y: f64, child_y: f64) -> [(f64, f64); 4] {
     ]
 }
 
-/// One connector to draw: the parent and child widgets, so the geometry is
-/// read from the real allocation at draw time.
+/// The connectors to draw, as (parent, child) widget pairs, so the
+/// geometry is read from the real allocation at draw time.
 pub type Links = Rc<RefCell<Vec<(gtk::Widget, gtk::Widget)>>>;
 
 #[derive(Debug, Clone)]

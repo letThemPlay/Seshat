@@ -174,8 +174,9 @@ impl App {
         }
     }
 
-    /// `db` / `dB`: the service resolves and prunes; this only reports.
-    /// Workspace structure only: files are never touched.
+    /// `prune-back` / `prune-back-segment` (`db` / `dB` by default): the
+    /// service resolves and prunes; this only reports. Workspace structure
+    /// only: files are never touched.
     fn prune_back(&mut self, motion: PruneMotion) {
         let ws = self.service.workspace();
         let (branch, panel) = (ws.active_branch().id(), ws.active_panel());
@@ -194,7 +195,7 @@ impl App {
         });
     }
 
-    /// `u`: undoes the last prune. Never undoes file operations.
+    /// `undo-workspace` (`u` by default): undoes the last prune. Never undoes file operations.
     fn undo_workspace(&mut self) {
         self.notice = Some(match self.service.undo_workspace() {
             Ok(outcome) => notice::restored(outcome.restored),
@@ -211,12 +212,11 @@ impl App {
         self.ui.workspace.focus_panel(active, cursor.as_ref());
     }
 
-    /// Enter: open the cursor item; with several files selected in the
-    /// panel and the cursor among them, open them all.
-    /// `l` and `Enter` (the same action). A folder under the cursor opens
-    /// through the workspace's context-aware resolution (continue, return
-    /// to or start a branch). A file opens in its application, but not in
-    /// Visual Mode (`launch_files` is false there, decision C6). With
+    /// `l` / `Enter`: a folder under the cursor opens through the
+    /// workspace's context-aware resolution (continue, return to or start a
+    /// branch). A file opens in its application, but not in Visual Mode
+    /// (`launch_files` is false there, decision C6); with several files
+    /// selected in the panel and the cursor among them, all open. With
     /// nothing under the cursor (an empty folder), it moves to the next
     /// panel of the branch, as `L` does (decision C2).
     fn open_cursor(&mut self, launch_files: bool) {
@@ -251,7 +251,7 @@ impl App {
         }
     }
 
-    // ── Command line ────────────────────────────────────────────────────
+    // Command line
 
     pub(super) fn open_command_line(&mut self) {
         self.command_line.open();

@@ -118,8 +118,8 @@ impl WorkspaceView {
             .css_classes(["seshat-strip"])
             .build();
         // GTK's own scroll-to-focus is off: it scrolls whenever keyboard
-        // focus moves (e.g. to a row of a neighbouring panel) and pushed the
-        // active panel back out of view. `reveal` keeps the active panel
+        // focus moves (e.g. to a row of a neighbouring panel), which would
+        // push the active panel out of view. `reveal` keeps the active panel
         // visible instead.
         let viewport = gtk::Viewport::builder()
             .child(&grid)
@@ -742,7 +742,7 @@ mod tests {
     fn panels_are_scrolled_fully_into_view_with_a_margin() {
         // Visible already: nothing to do.
         assert_eq!(shift_into_view(100.0, 600.0, 1059.0, 6.0), 0.0);
-        // The rightmost panel 7 px past the edge (the reported bug).
+        // The rightmost panel 7 px past the right edge.
         assert_eq!(shift_into_view(537.0, 1066.0, 1059.0, 6.0), 13.0);
         // Partly off the left edge.
         assert_eq!(shift_into_view(-124.0, 176.0, 1059.0, 6.0), -130.0);

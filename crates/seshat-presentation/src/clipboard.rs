@@ -22,7 +22,8 @@ pub struct ClipboardFiles {
     pub kind: TransferKind,
 }
 
-/// Puts `paths` on the clipboard.
+/// Puts `paths` on the clipboard in all the formats above, and as plain
+/// text.
 pub fn set_files(display: &gdk::Display, paths: &[PathBuf], kind: TransferKind) {
     let files: Vec<gio::File> = paths.iter().map(gio::File::for_path).collect();
     let uris: Vec<String> = files.iter().map(|f| f.uri().to_string()).collect();

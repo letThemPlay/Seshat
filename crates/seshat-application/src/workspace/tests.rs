@@ -176,7 +176,7 @@ fn scenario() -> (Shell, [PanelId; 4]) {
     (s, [home, documents, projects, downloads])
 }
 
-// ── Spec §16.1 / §19 ────────────────────────────────────────────────────
+// Spec §16.1 / §19
 
 #[test]
 fn spec_19_branches_coexist_and_navigate_independently() {
@@ -201,7 +201,7 @@ fn spec_19_branches_coexist_and_navigate_independently() {
     assert_eq!(s.service.state(downloads).unwrap().cursor, None);
 }
 
-// ── Spec §16.3 Panel history ────────────────────────────────────────────
+// Spec §16.3 Panel history
 
 #[test]
 fn spec_16_3_panel_state_is_restored_when_returning() {
@@ -329,7 +329,7 @@ fn settings_change_one_panel_and_become_defaults() {
     assert!(s.service.state(s.active()).unwrap().options.show_hidden);
 }
 
-// ── Spec §16.4 / §16.8: no unnecessary reloads ──────────────────────────
+// Spec §16.4 / §16.8: no unnecessary reloads
 
 #[test]
 fn spec_16_4_focus_mode_never_reloads() {
@@ -389,7 +389,7 @@ fn evicted_panels_keep_their_state_and_reload_once() {
     );
 }
 
-// ── Navigation semantics (D3) ───────────────────────────────────────────
+// Navigation semantics (D3)
 
 #[test]
 fn sidebar_locations_open_as_new_root_branches() {
@@ -437,7 +437,7 @@ fn parent_at_a_root_inserts_a_parent_panel() {
     assert_eq!(s.service.active_location(), &loc("/h"));
 }
 
-// ── Availability (D14) ──────────────────────────────────────────────────
+// Availability (D14)
 
 #[test]
 fn a_deleted_folder_marks_its_panels_unavailable_but_keeps_them() {
@@ -518,7 +518,7 @@ fn stale_listings_are_ignored() {
     assert_eq!(s.shown(home).len(), 3, "the superseded result was dropped");
 }
 
-// ── Cursor and selection ────────────────────────────────────────────────
+// Cursor and selection
 
 #[test]
 fn cursor_movement_clamps_or_wraps() {
@@ -612,7 +612,7 @@ fn a_created_item_is_selected_once_listed() {
     assert_eq!(state.selection.items(), [loc("/h/New Folder")]);
 }
 
-// ── Spec §16.6 Cross-branch operations through the operation manager ───
+// Spec §16.6 Cross-branch operations through the operation manager
 
 fn manager() -> (
     Arc<MemoryFs>,
@@ -756,7 +756,7 @@ fn d15_same_named_sources_from_different_folders_never_overwrite() {
     assert_eq!(fs.content("/h/Target/a.txt").as_deref(), Some("a"));
 }
 
-// ── Context-aware navigation (2-CONTEXT-AWARE-NAVIGATION.md) ────────────
+// Context-aware navigation (2-CONTEXT-AWARE-NAVIGATION.md)
 
 use seshat_domain::entities::DirectoryIdentity;
 use seshat_domain::workspace::Resolution;
@@ -902,7 +902,7 @@ fn nav_unavailable_panels_wait_for_retry() {
     assert_eq!(s.loads_since(), 1);
 }
 
-// ── Backward branch pruning (3-BACKWARD-BRANCH-PRUNING.md) ──────────────
+// Backward branch pruning (3-BACKWARD-BRANCH-PRUNING.md)
 
 use seshat_domain::workspace::{PruneMotion, PruneRefusal, RestoreRefusal};
 
@@ -1129,7 +1129,7 @@ fn prune_keeps_l_h_and_branch_switching_working() {
     assert_eq!(s.service.workspace().branch_count(), 2);
 }
 
-// ── Fuzzy Find results (Spec 4 §9, decisions F5 and F9) ─────────────────
+// Fuzzy Find results (Spec 4 §9, decisions F5 and F9)
 
 fn found(path: &str, dir: bool, origin: Option<(&Shell, PanelId)>) -> SearchResult {
     use seshat_domain::search::{SearchMatch, SearchOrigin};

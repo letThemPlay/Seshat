@@ -4,9 +4,8 @@ use std::fmt;
 use super::keys::{KeyPress, format_sequence, parse_sequence};
 
 seshat_domain::stable_ids! {
-    /// Everything a key binding can do. Keyboard, mouse, menus and the command
-    /// line all map onto these and the same application services. The ids are
-    /// used in the settings file.
+    /// The actions a key binding can do; the ids are used in the settings
+    /// file. Menus, toolbar and commands use the wider `AppAction`.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum Action {
         PanelLeft => "panel-left",
@@ -119,10 +118,8 @@ impl Action {
         }
     }
 
-    /// Actions whose default bindings were added after users could already
-    /// have bound the same keys. When a user binding overlaps one of their
-    /// defaults, the default is dropped instead of the user's binding
-    /// (decision B8).
+    /// Actions whose defaults give way to an overlapping user binding
+    /// instead of rejecting it (decision B8).
     fn defaults_yield_to_overrides(self) -> bool {
         matches!(
             self,
@@ -130,8 +127,9 @@ impl Action {
         )
     }
 
-    /// Bindings made of one unmodified printable key. "Classic keys"
-    /// (decision D1) turns these off so typing searches instead.
+    /// Bindings that start with an unmodified printable key, such as `j`
+    /// or `gg`. "Classic keys" (decision D1) turns these off so typing
+    /// searches instead.
     fn is_single_letter(keys: &[KeyPress]) -> bool {
         keys.first()
             .is_some_and(|k| matches!(k.key, super::Key::Char(_)) && !k.ctrl && !k.alt)
@@ -163,7 +161,8 @@ impl KeyMap {
     /// Builds the keymap from the defaults and user `overrides` (action id
     /// → key sequences; an empty list unbinds the action). Invalid or
     /// conflicting overrides are skipped and reported; the defaults for
-    /// that action stay. With `classic`, single-key bindings are dropped.
+    /// that action stay. With `classic`, bindings that start with a plain printable key are
+    /// dropped.
     pub fn new(overrides: &[(String, Vec<String>)], classic: bool) -> (Self, Vec<String>) {
         let mut warnings = Vec::new();
         let mut table: HashMap<Action, Vec<Vec<KeyPress>>> = Action::ALL

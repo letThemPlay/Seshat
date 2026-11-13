@@ -248,7 +248,7 @@ impl Workspace {
         let mut opened = match opened {
             // A reactivated branch may have landed on its remembered panel
             // below the folder (C1). The folder asked for is the one wanted:
-            // it becomes active, and the panels below it stay (§9.1, §9.4).
+            // it becomes active, and the panels below it stay (Spec 4 §9.1, §9.4).
             Some(mut opened) if opened.active != opened.panel => {
                 self.set_active(opened.branch, opened.panel, true);
                 opened.active = opened.panel;

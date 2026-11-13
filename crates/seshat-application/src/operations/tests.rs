@@ -132,7 +132,7 @@ fn tree(fs: &MemoryFs) {
     fs.dir("/dst");
 }
 
-// ── Lifecycle, events, snapshots ────────────────────────────────────────────
+// Lifecycle, events, snapshots
 
 #[test]
 fn copy_tree_reports_full_lifecycle_and_totals() {
@@ -289,7 +289,7 @@ fn insufficient_space_fails_before_writing() {
     assert!(!h.fs.paths().iter().any(|p| p.starts_with("/dst/")));
 }
 
-// ── Copy and conflicts ──────────────────────────────────────────────────────
+// Copy and conflicts
 
 #[test]
 fn copying_into_the_same_folder_duplicates() {
@@ -404,7 +404,7 @@ fn vanished_sources_are_reported_not_fatal() {
     assert_eq!(op.failures.len(), 1);
 }
 
-// ── Move ────────────────────────────────────────────────────────────────────
+// Move
 
 #[test]
 fn move_on_same_device_renames() {
@@ -465,7 +465,7 @@ fn move_merge_into_existing_folder() {
     assert!(h.fs.get("/src/docs").is_none());
 }
 
-// ── Delete, Trash, Restore ──────────────────────────────────────────────────
+// Delete, Trash, Restore
 
 #[test]
 fn delete_tree_without_following_links() {
@@ -544,7 +544,7 @@ fn restore_conflict_can_keep_both() {
     );
 }
 
-// ── Rename and create ───────────────────────────────────────────────────────
+// Rename and create
 
 #[test]
 fn rename_never_overwrites() {
@@ -592,7 +592,7 @@ fn create_folder_and_file() {
     assert_eq!(h.fs.content("/d/notes.txt").as_deref(), Some(""));
 }
 
-// ── Symlinked destinations ──────────────────────────────────────────────────
+// Symlinked destinations
 
 #[test]
 fn copying_into_a_symlinked_folder_uses_the_real_folder() {

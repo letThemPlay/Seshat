@@ -7,8 +7,8 @@ targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 all-features = true
 
 [advisories]
-# Every RustSec vulnerability fails; unmaintained/unsound crates too, but only
-# when they are in our own dependency tree, not merely possible.
+# Vulnerabilities and unsound crates fail anywhere in the dependency graph;
+# unmaintained crates only when a workspace crate depends on them directly.
 unmaintained = "workspace"
 unsound = "all"
 yanked = "deny"

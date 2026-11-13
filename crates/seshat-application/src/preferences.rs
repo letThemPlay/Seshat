@@ -46,7 +46,7 @@ impl ThemeChoice {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Preferences {
     pub theme: ThemeChoice,
-    /// Defaults for new panels (each panel keeps its own settings).
+    // Defaults for new panels (each panel keeps its own settings).
     pub show_hidden: bool,
     pub view_mode: ViewMode,
     pub sort: SortOrder,
@@ -84,12 +84,11 @@ pub struct WorkspacePreferences {
     pub restore: bool,
     /// Keep Focus Mode when switching branches.
     pub retain_focus_mode: bool,
-    /// "Classic keys" (decision D1): typing searches, and single-key
-    /// bindings such as `h` or `j` are off.
+    /// "Classic keys" (decision D1): typing searches, and bindings that
+    /// start with a plain printable key, such as `j` or `gg`, are off.
     pub classic_keys: bool,
     /// Moving past the last item wraps to the first, and vice versa.
     pub wrap_cursor: bool,
-    /// Branches side by side (`Tree`) or only the active one (`Strip`).
     pub layout: WorkspaceLayout,
     /// Key binding overrides: action id and its key sequences.
     pub key_bindings: Vec<(String, Vec<String>)>,

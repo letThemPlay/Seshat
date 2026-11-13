@@ -6,9 +6,10 @@
 //!
 //! Sources are the workspace-wide selection (or the active panel's cursor
 //! item), captured as absolute paths when the plan is made. A destination
-//! is always explicit: the panel pasted or dropped into, or a folder named
-//! on the command line. Nothing depends on which panel happens to be
-//! active when an operation runs.
+//! is always explicit: the panel pasted or dropped into, a folder or branch
+//! (`bN`) named on the command line, or one picked from the open panels.
+//! Nothing depends on which panel happens to be active when an operation
+//! runs.
 
 use std::path::{Path, PathBuf};
 

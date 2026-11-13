@@ -5,7 +5,7 @@ use seshat_domain::operation::Operation;
 pub enum OperationEventKind {
     Queued,
     Started,
-    /// Progress or other non-lifecycle change (throttled).
+    /// Progress or other non-lifecycle change (throttled unless important).
     Progress,
     Cancelling,
     Completed,

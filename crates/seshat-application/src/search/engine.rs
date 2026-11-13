@@ -110,8 +110,7 @@ impl SearchEngine {
     }
 
     /// Forgets the walked candidates, so the next search walks again. Used
-    /// after a search panicked, when the cache may be half built; the
-    /// overlay doesn't watch the filesystem, so a new session walks afresh.
+    /// after a search panicked, when the engine is no longer trusted.
     pub fn invalidate(&mut self) {
         self.cache = None;
     }

@@ -138,8 +138,8 @@ fn run(shared: &Shared, mut engine: SearchEngine, listener: &SearchListener) {
             })
         }))
         .unwrap_or_else(|_| {
-            // A bug must not take the app down; the cache may be half
-            // built, so it is dropped.
+            // A bug must not take the app down. The engine is not trusted
+            // after a panic, so the next search walks again.
             engine.invalidate();
             tracing::error!("the search failed unexpectedly");
             SearchSummary::failed("the search failed unexpectedly")

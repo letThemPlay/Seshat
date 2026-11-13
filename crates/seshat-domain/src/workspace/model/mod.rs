@@ -42,7 +42,8 @@ pub enum WorkspaceError {
 ///   tip is a leaf, so branches never duplicate shared ancestors;
 /// - each branch's cursor lies on its own path;
 /// - siblings never show the same location;
-/// - the active panel is the active branch's cursor.
+/// - the active branch exists, and the jump list names only existing
+///   panels.
 ///
 /// Navigation never changes presentation state, and presentation (Focus
 /// Mode) never changes panels or branches.
@@ -82,7 +83,7 @@ impl Workspace {
         workspace
     }
 
-    // ── Queries ─────────────────────────────────────────────────────────
+    // Queries
 
     pub fn panel(&self, id: PanelId) -> Option<&Panel> {
         self.panels.get(&id)
@@ -217,7 +218,7 @@ impl Workspace {
             .find(|id| self.panels[id].location == *location)
     }
 
-    // ── Navigation ──────────────────────────────────────────────────────
+    // Navigation
 
     /// Makes `panel` the active panel. If the active branch passes through
     /// it, that branch stays active; otherwise the most recently active
@@ -350,7 +351,7 @@ impl Workspace {
         self.jump(false)
     }
 
-    // ── Presentation and availability ───────────────────────────────────
+    // Presentation and availability
 
     /// Focus Mode is presentation only: it never touches panels, branches
     /// or the active panel. Returns whether it changed.
@@ -441,8 +442,6 @@ impl Workspace {
         }
         Ok(())
     }
-
-    // ── Internals ───────────────────────────────────────────────────────
 
     fn tick(&mut self) -> u64 {
         self.clock += 1;
