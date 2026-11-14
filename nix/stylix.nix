@@ -26,13 +26,17 @@ let
   # `base0D` with an alpha suffix: `#rrggbb` + `aa`.
   withAlpha = base: alpha: colors.${base} + alpha;
 
-  # Decision S9: Base16 roles onto Seshat's colour tokens. base06, base07,
-  # base0A, base0C, base0E and base0F have no matching token, and
+  # Decision S9: Base16 roles onto Seshat's colour tokens. base01, base06,
+  # base07, base0A, base0C, base0E and base0F have no matching token, and
   # navigation_selected is left unset so the selected item follows surface.
+  # Every background the main text sits on is base00, the scheme's own text
+  # background: base01 under text fails the contrast check for 25 of the 303
+  # schemes in nixpkgs. Borders (base02) separate the areas, and the selected
+  # navigation item keeps its outline and accent icon.
   palette = {
-    surface = colors.base00; # content pane AND selected navigation item
-    app_background = colors.base01;
-    navigation_surface = colors.base01;
+    surface = colors.base00; # content pane and selected navigation item
+    app_background = colors.base00;
+    navigation_surface = colors.base00;
     text_primary = colors.base05;
     text_secondary = colors.base04;
     text_muted = colors.base03;

@@ -39,8 +39,8 @@ let
     in
     {
       surface = c.base00;
-      app_background = c.base01;
-      navigation_surface = c.base01;
+      app_background = c.base00;
+      navigation_surface = c.base00;
       text_primary = c.base05;
       text_secondary = c.base04;
       text_muted = c.base03;
