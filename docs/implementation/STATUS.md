@@ -118,6 +118,12 @@ Status as of 2026-11-13, branch `main`.
 | 4 | NixOS with Home Manager | ✅ Verified | `stylix-nixos`: Stylix's NixOS module, Seshat themed with no Stylix setting in the user's configuration |
 | 13 | User guide with tested examples | ⏳ Not started | Phase 4 |
 
+## Specification amendments
+
+| Date | Amendment | Status | Evidence |
+|---|---|---|---|
+| 2026-11-14 | The selected navigation item gets its own optional colour, `navigation_selected` (original spec §6.3, §7.3, §7.4; Stylix spec §6; decision T1) | ✅ Verified | `selected_nav_follows_the_surface_token_by_default` (unset, it is `@seshat_surface` itself, in both built-in themes), `a_theme_can_give_the_selected_nav_item_its_own_colour` (12px kept, content pane unaffected), `the_selected_nav_item_follows_surface_unless_set`, `an_invalid_navigation_selected_falls_back_to_surface`, `its_own_selected_nav_colour_is_contrast_checked`; the Nix module accepts it (`theme` check passes `--check-theme`); screenshots with and without it checked by hand |
+
 ## Known gaps and follow-ups
 
 1. **Performance follow-ups** from the [2026-11-09 run](../review/performance.md): the listing cache size (D13) for workspaces with many branches, and incremental model updates for live reloads of very large folders. Deferred (2026-11-09, R5): revisit only if needed.

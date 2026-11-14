@@ -72,6 +72,7 @@ let
     t.checkTheme name config ''
       ${hasColors config}
       has 'name = "Stylix"'
+      lacks 'navigation_selected'
       ${extendsLine}
       has 'font_family = "${config.stylix.fonts.sansSerif.name}"'
       has 'font_size = 12'

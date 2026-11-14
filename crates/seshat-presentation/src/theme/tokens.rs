@@ -10,13 +10,17 @@ pub struct Theme {
     pub typography: Typography,
 }
 
-/// Colour tokens. `surface` is the single source for both the main content
-/// background and the selected navigation item background.
+/// Colour tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColorTokens {
     pub app_background: Color,
+    /// The main content pane and every workspace panel.
     pub surface: Color,
     pub navigation_surface: Color,
+    /// The selected navigation item's background. `None` (the default)
+    /// means `surface`: the stylesheet then defines it as `@seshat_surface`,
+    /// so the two cannot drift apart (decision T1).
+    pub navigation_selected: Option<Color>,
     pub text_primary: Color,
     pub text_secondary: Color,
     pub text_muted: Color,

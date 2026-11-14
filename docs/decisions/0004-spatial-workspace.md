@@ -70,7 +70,7 @@ Other parts of the service:
 - **Focus Mode** hides the other panel widgets without destroying them, so nothing reloads or is duplicated (§6, §12.4).
 - **Keyboard:** a capture-phase key controller feeds GDK key events, converted to `KeyPress`, to the shared mode machine. Unbound keys, and every key while a text field or menu has focus, reach GTK unchanged, so all existing Ctrl and Alt shortcuts, arrows and dialogs keep working.
 - **Cursor:** keyboard focus and the cursor are kept in step. A focused row becomes its panel's cursor, and the cursor is drawn on bound rows with a style class.
-- **Styling:** every panel uses the `surface` token, the same one as the selected navigation item. The active panel is an `accent` outline, never a different fill. No new theme tokens were needed, so existing custom themes remain valid.
+- **Styling:** every panel uses the `surface` token, the same one as the selected navigation item (unless a theme sets `navigation_selected`, decision T1, 2026-11-14). The active panel is an `accent` outline, never a different fill. No new theme tokens were needed, so existing custom themes remain valid.
 
 ## Consequences
 

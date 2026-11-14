@@ -26,8 +26,9 @@ Start from [`docs/themes/nord.toml`](../themes/nord.toml) or [`docs/themes/catpp
 | Token | Used for |
 |---|---|
 | `app_background` | Window, toolbar, status bar |
-| `surface` | **Main content pane and the selected navigation item** (one token by design) |
+| `surface` | Main content pane and workspace panels; also the selected navigation item unless you set `navigation_selected` |
 | `navigation_surface` | Navigation pane |
+| `navigation_selected` | Selected navigation item. Leave it out to follow `surface`, so the selected item always matches the content pane |
 | `text_primary`, `text_secondary`, `text_muted` | Text hierarchy |
 | `accent` | Selected-item icon, checked menu items |
 | `border` | Outlines, separators |
@@ -48,10 +49,8 @@ Whole numbers in pixels: `border_radius` (0–24), `padding` (0–32), `spacing`
 
 Some parts of the design are deliberately not configurable:
 
-- The selected navigation item always has a **12px** radius on all corners.
-- The selected navigation item's background is always the `surface` token, the same as the content pane, so they cannot drift apart.
-
-A theme that tries to set these gets an "unknown setting" warning.
+- The selected navigation item always has a **12px** radius on all corners. A theme that tries to set it gets an "unknown setting" warning.
+- Unless you set `navigation_selected`, the selected navigation item's background *is* the `surface` token (not a copy of its value), so it always matches the content pane.
 
 ## Validation
 
@@ -63,7 +62,7 @@ Themes are validated when they load:
   ```
   WARN theme=nord path=…/nord.toml geometry.border_radius: expected a whole number from 0 to 24, found 100
   ```
-- **Low contrast:** if `text_primary` reaches less than 4.5:1 (WCAG AA) against `surface`, `navigation_surface` or `app_background`, you get a warning. The theme is still applied.
+- **Low contrast:** if `text_primary` reaches less than 4.5:1 (WCAG AA) against `surface`, `navigation_surface`, `app_background` or (when set) `navigation_selected`, you get a warning. The theme is still applied.
 
 Run Seshat with `RUST_LOG=warn` (the default is `info`) to see the warnings in the terminal.
 

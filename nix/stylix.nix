@@ -26,8 +26,9 @@ let
   # `base0D` with an alpha suffix: `#rrggbb` + `aa`.
   withAlpha = base: alpha: colors.${base} + alpha;
 
-  # Decision S9: Base16 roles onto Seshat's 14 tokens. base06, base07,
-  # base0A, base0C, base0E and base0F have no matching token.
+  # Decision S9: Base16 roles onto Seshat's colour tokens. base06, base07,
+  # base0A, base0C, base0E and base0F have no matching token, and
+  # navigation_selected is left unset so the selected item follows surface.
   palette = {
     surface = colors.base00; # content pane AND selected navigation item
     app_background = colors.base01;

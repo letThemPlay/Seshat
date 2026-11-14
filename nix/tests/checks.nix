@@ -19,6 +19,7 @@ let
     extends = "dark";
     colors = {
       surface = "#3b4252";
+      navigation_selected = "#434c5e";
       accent = "#88c0d0";
       hover = "#ffffff12";
     };
@@ -64,6 +65,7 @@ in
   theme = t.checkTheme "theme" themed ''
     has 'accent = "#88c0d0"'
     has 'border_radius = 6'
+    has 'navigation_selected = "#434c5e"'
     lacks 'border ='
     test -e ${themed.programs.seshat.finalPackage}/bin/seshat-progress
     test -e ${themed.programs.seshat.finalPackage}/share/applications/dev.kdmorris.Seshat.desktop

@@ -502,16 +502,19 @@ Use appropriate icons.
 
 This is a strict visual requirement.
 
+> **Amended 2026-11-14** (decision T1 in `docs/architecture/DECISIONS.md`, at the maintainer's request during the Stylix integration). Before, the selected item's background always had to be the main content pane's colour, through the same theme token. Now the selected item has its own optional theme token, `navigation_selected`, which follows the main content surface unless a theme sets it.
+
 When a navigation location is selected:
 
-- Its background colour must be exactly the same as the main content pane background.
+- By default its background colour is exactly the same as the main content pane background.
+- A theme may give it a different background through the `navigation_selected` token.
 - Its border radius must be exactly 12px.
 - All four corners must use this radius.
 - The selected state must remain visually distinguishable.
 - Use appropriate text, icon, subtle outline or other non-contrasting treatment.
-- Do not introduce a contrasting filled background.
+- The built-in themes do not set `navigation_selected`, so they never introduce a contrasting filled background.
 
-The selected item's background and main content background must reference the same theme token.
+Unless a theme sets `navigation_selected`, the selected item's background must reference the main content's `surface` token itself, not a copy of its value, so the two cannot drift apart.
 
 Example:
 
@@ -519,13 +522,14 @@ Example:
 theme:
   colors:
     surface: "#1E1E1E"
+    navigation_selected: (optional; unset means surface)
 
 main_content:
   background: surface
 
 navigation:
   selected:
-    background: surface
+    background: navigation_selected  # defined as surface when unset
     border_radius: 12px
 ```
 
@@ -591,6 +595,7 @@ Provide sensible defaults for missing or invalid values.
 - Application background.
 - Main content surface.
 - Navigation surface.
+- Selected navigation item (optional; follows the main content surface when unset; amended 2026-11-14, decision T1).
 - Primary text.
 - Secondary text.
 - Muted text.
@@ -620,7 +625,7 @@ Provide sensible defaults for missing or invalid values.
 
 ## 7.4 Theme consistency
 
-The selected navigation item's background and main content background must always reference the same token.
+The selected navigation item's background must reference the main content surface token unless the theme sets the selected navigation item token (amended 2026-11-14, decision T1; before, both always had to reference the same token).
 
 Do not duplicate colour definitions.
 

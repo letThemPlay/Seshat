@@ -18,7 +18,8 @@
 //!
 //! Invalid or unknown values are reported as warnings and fall back to the
 //! base theme, so a typo never breaks the UI. The selected navigation
-//! radius and the shared surface token are not configurable.
+//! radius is not configurable. The selected navigation item's background
+//! follows `surface` unless `navigation_selected` is set (decision T1).
 
 use toml::{Table, Value};
 
@@ -102,6 +103,18 @@ fn with_table(
 fn apply_colors(theme: &mut Theme, table: &Table, warnings: &mut Vec<String>) {
     let c = &mut theme.colors;
     for (key, value) in table {
+        let color = || match value.as_str().map(str::parse::<Color>) {
+            Some(Ok(color)) => Ok(color),
+            Some(Err(err)) => Err(format!("colors.{key}: {err}")),
+            None => Err(format!("colors.{key}: expected \"#rrggbb\", found {value}")),
+        };
+        if key == "navigation_selected" {
+            match color() {
+                Ok(color) => c.navigation_selected = Some(color),
+                Err(warning) => warnings.push(warning),
+            }
+            continue;
+        }
         let slot = match key.as_str() {
             "app_background" => &mut c.app_background,
             "surface" => &mut c.surface,
@@ -122,10 +135,9 @@ fn apply_colors(theme: &mut Theme, table: &Table, warnings: &mut Vec<String>) {
                 continue;
             }
         };
-        match value.as_str().map(str::parse::<Color>) {
-            Some(Ok(color)) => *slot = color,
-            Some(Err(err)) => warnings.push(format!("colors.{key}: {err}")),
-            None => warnings.push(format!("colors.{key}: expected \"#rrggbb\", found {value}")),
+        match color() {
+            Ok(color) => *slot = color,
+            Err(warning) => warnings.push(warning),
         }
     }
 }
@@ -207,11 +219,17 @@ fn integer_in(value: &Value, range: &std::ops::RangeInclusive<u32>) -> Option<u3
 
 fn check_contrast(theme: &Theme, warnings: &mut Vec<String>) {
     let c = &theme.colors;
+    let own_navigation_selected = c
+        .navigation_selected
+        .map(|color| ("navigation_selected", color));
     for (name, background) in [
         ("surface", c.surface),
         ("navigation_surface", c.navigation_surface),
         ("app_background", c.app_background),
-    ] {
+    ]
+    .into_iter()
+    .chain(own_navigation_selected)
+    {
         let ratio = contrast_ratio(c.text_primary, background);
         if ratio < MIN_TEXT_CONTRAST {
             warnings.push(format!(
@@ -323,6 +341,41 @@ mod tests {
         let css = render_css(&t.theme);
         assert_eq!(css.matches("#123456").count(), 1, "defined once");
         assert!(css.contains("@define-color seshat_surface #123456;"));
+    }
+
+    #[test]
+    fn the_selected_nav_item_follows_surface_unless_set() {
+        let t = parse("[colors]\nsurface = \"#123456\"\ntext_primary = \"#ffffff\"\n");
+        assert_eq!(t.theme.colors.navigation_selected, None);
+
+        let t = parse(
+            "[colors]\nnavigation_selected = \"#202020\"\ntext_primary = \"#ffffff\"\nsurface = \"#000000\"\napp_background = \"#000000\"\nnavigation_surface = \"#000000\"\n",
+        );
+        assert!(t.warnings.is_empty(), "{:?}", t.warnings);
+        assert_eq!(
+            t.theme.colors.navigation_selected,
+            Some(Color::rgb(0x20, 0x20, 0x20))
+        );
+        assert!(render_css(&t.theme).contains("@define-color seshat_navigation_selected #202020;"));
+    }
+
+    #[test]
+    fn an_invalid_navigation_selected_falls_back_to_surface() {
+        let t = parse("[colors]\nnavigation_selected = \"teal\"\n");
+        assert_eq!(t.theme.colors.navigation_selected, None);
+        assert_eq!(t.warnings.len(), 1, "{:?}", t.warnings);
+    }
+
+    #[test]
+    fn its_own_selected_nav_colour_is_contrast_checked() {
+        let t = parse("[colors]\nnavigation_selected = \"#1f1f23\"\n");
+        assert!(
+            t.warnings
+                .iter()
+                .any(|w| w.contains("text_primary on navigation_selected")),
+            "{:?}",
+            t.warnings
+        );
     }
 
     #[test]
