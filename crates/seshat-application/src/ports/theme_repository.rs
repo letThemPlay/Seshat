@@ -20,4 +20,9 @@ pub trait ThemeRepository {
     fn ensure_directory(&self) -> Result<PathBuf, String>;
 
     fn load_all(&self) -> Vec<ThemeSource>;
+
+    /// The theme file given on the command line (`--theme-file`), if any.
+    /// It is kept apart from the themes folder: it is not a custom theme,
+    /// and its id is never saved as the chosen theme.
+    fn load_provided(&self) -> Option<ThemeSource>;
 }

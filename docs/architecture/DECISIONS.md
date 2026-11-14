@@ -163,3 +163,17 @@ From the design review (R5). Status-bar messages are typed `Notice` values forma
 | N1 | Severity | Two kinds. **Error** (refusals and failures, including a theme that can't be applied) is drawn in the theme's error colour. **Info** (confirmations and information) uses the normal status text colour. Before, every message used the warning colour. Both come from existing theme tokens, so custom themes need no change. |
 | N2 | Screen readers | Error messages are announced through GTK's accessible announcements, at high priority, once each time they are raised. Information is not announced, so routine work stays quiet. |
 | N3 | Wording | Every message is a sentence: capital first letter, closing full stop unless it already ends in `.`, `!`, `?` or `…`. Lists of completion matches are shown as they are. Counts use one helper ("1 item", "3 items"), so "has 1 issue(s)" now reads "has 1 issue". The Visual Mode refusal names the action instead of always saying "Pruning". |
+
+## Stylix and Home Manager integration (plan approved 2026-11-14)
+
+[Specification 5](../specifications/5-STYLIX-INTEGRATION.md). Decided with the plan; S1 and S2 are delivered, S3–S7 apply to the coming Home Manager module.
+
+| # | Topic | Decision |
+|---|---|---|
+| S1 | How Home Manager applies a theme | The module installs a wrapped `seshat` that always passes `--theme-file <generated theme in the Nix store>`. The generated file is an ordinary Seshat theme, parsed and validated by the same code as the themes folder, so there is no second theme engine and no runtime dependency on Stylix. A running Seshat picks up a new theme on its next launch. |
+| S2 | Launch theme vs saved theme | The launch theme (`ThemeChoice::Provided`) wins at every launch and is listed first in the theme menu under **Launch Theme**. Picking another theme applies and saves it as usual; the launch theme itself is never saved, and a `theme = "provided"` in `settings.toml` is ignored. If the file can't be loaded, the error is shown and the saved theme is used. Starting without the option behaves exactly as before. |
+| S3 | `settings.toml` | Not managed by Home Manager: Seshat rewrites it whenever a setting changes, which would replace a Home Manager symlink and break the next switch. |
+| S4 | Validation | `seshat --check-theme FILE` loads a theme exactly as `--theme-file` would, without a display, and fails on any problem. The Nix checks run it on generated themes, so Nix and Rust can't drift apart unnoticed. |
+| S5 | Module outputs and namespace | `homeModules.{default,seshat}` plus a `homeManagerModules` alias; options under `programs.seshat`, with the Stylix part under `programs.seshat.stylix`. No NixOS module: theming is per user. |
+| S6 | When the Stylix part is on | It follows `stylix.autoEnable` when Stylix is imported and enabled, and is off otherwise. Enabling it without Stylix fails evaluation with a clear assertion. |
+| S7 | Test dependencies | Home Manager and Stylix are inputs of a separate test flake (`nix/tests`), so the main flake keeps only `nixpkgs` and `flake-utils`. |
