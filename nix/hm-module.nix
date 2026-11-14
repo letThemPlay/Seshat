@@ -127,6 +127,9 @@ in
 {
   _file = ./hm-module.nix;
 
+  # Theming from Stylix (`programs.seshat.stylix`); inactive without Stylix.
+  imports = [ ./stylix.nix ];
+
   options.programs.seshat = {
     enable = lib.mkEnableOption "Seshat, a native Wayland file manager";
 

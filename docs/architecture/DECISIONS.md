@@ -166,7 +166,7 @@ From the design review (R5). Status-bar messages are typed `Notice` values forma
 
 ## Stylix and Home Manager integration (plan approved 2026-11-14)
 
-[Specification 5](../specifications/5-STYLIX-INTEGRATION.md). Decided with the plan. S1–S5 and S7 are delivered; S6 applies to the coming Stylix part.
+[Specification 5](../specifications/5-STYLIX-INTEGRATION.md). Decided with the plan, all delivered. S8–S10 record the Stylix mapping that was proposed with the plan, as built.
 
 | # | Topic | Decision |
 |---|---|---|
@@ -177,6 +177,9 @@ From the design review (R5). Status-bar messages are typed `Notice` values forma
 | S5 | Module outputs and namespace | `homeModules.{default,seshat}` plus a `homeManagerModules` alias; options under `programs.seshat`, with the Stylix part under `programs.seshat.stylix`. No NixOS module: theming is per user. |
 | S6 | When the Stylix part is on | It follows `stylix.autoEnable` when Stylix is imported and enabled, and is off otherwise. Enabling it without Stylix fails evaluation with a clear assertion. |
 | S7 | Test dependencies | Home Manager and Stylix are inputs of a separate test flake (`nix/tests`), so the main flake keeps only `nixpkgs` and `flake-utils`. |
+| S8 | Precedence | The Stylix part sets every value of `programs.seshat.theme` with `mkDefault`. So a plain definition of the same value wins, value by value (`null` hands a value back to the base theme); then Stylix; then the `extends` base theme inside Seshat. `programs.seshat.stylix.{colors,fonts,polarity}.enable` turn each part off. |
+| S9 | Colours | Base16 onto Seshat's colour tokens, with no new tokens for Stylix. `navigation_selected` (T1) is left unset, so the selected navigation item follows `surface`: `surface` base00 (content pane and selected navigation item), `app_background` and `navigation_surface` base01, `text_primary` base05, `text_secondary` base04, `text_muted` base03, `accent` and `focus` base0D, `border` base02, `hover` base05 at 8% (`14`), `selected` base0D at 30% (`4d`), `error` base08, `warning` base09 (yellow is unreadable on light schemes), `success` base0B. base06, base07, base0A, base0C, base0E and base0F are unused. Across the 303 schemes in nixpkgs, 257 give a theme with no problems; 46 get Seshat's low-contrast warning (21 already on base00, the scheme's own text and background; 25 only on base01). base01 stays: with base00 for the navigation pane, the selected navigation item would vanish into it. |
+| S10 | Fonts and polarity | `font_family` is Stylix's sans-serif font and `font_size` its application size, rounded. A size outside 6 to 36 points is not passed on and Home Manager warns. Monospace, serif and emoji fonts have no use in Seshat, and Stylix has no weight. `extends` follows `stylix.polarity`; with `either` it is left unset, never guessed from the colours. |
 
 ## Theme tokens (2026-11-14)
 
