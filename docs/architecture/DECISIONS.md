@@ -166,7 +166,7 @@ From the design review (R5). Status-bar messages are typed `Notice` values forma
 
 ## Stylix and Home Manager integration (plan approved 2026-11-14)
 
-[Specification 5](../specifications/5-STYLIX-INTEGRATION.md). Decided with the plan; S1 and S2 are delivered, S3–S7 apply to the coming Home Manager module.
+[Specification 5](../specifications/5-STYLIX-INTEGRATION.md). Decided with the plan. S1–S5 and S7 are delivered; S6 applies to the coming Stylix part.
 
 | # | Topic | Decision |
 |---|---|---|

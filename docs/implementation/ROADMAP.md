@@ -51,6 +51,6 @@ See [STATUS.md](STATUS.md) for detail.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Theme given at launch | `--theme-file` (S1, S2) and `--check-theme` (S4) | ✅ Done |
-| 2. Home Manager module | `programs.seshat` with the package, a declarative theme and the wrapper; flake outputs; the test flake | ⏳ Next |
-| 3. Stylix | Colours, fonts and polarity from Stylix, overrides, the assertion | ⏳ Planned |
+| 2. Home Manager module | `programs.seshat` with the package, a declarative theme and the wrapper; flake outputs; the test flake | ✅ Done |
+| 3. Stylix | Colours, fonts and polarity from Stylix, overrides, the assertion | ⏳ Next |
 | 4. Documentation and verification | User guide with standalone and NixOS examples, ADR, visual checks with dark, light, high-contrast, custom-font and override schemes | ⏳ Planned |

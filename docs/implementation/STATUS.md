@@ -102,14 +102,15 @@ Status as of 2026-11-13, branch `main`.
 
 ## Stylix integration specification
 
-[5-STYLIX-INTEGRATION.md](../specifications/5-STYLIX-INTEGRATION.md), decisions S1–S7. **In progress:** the application side is done; the Home Manager module and the Stylix mapping are next ([roadmap](ROADMAP.md#stylix-integration)).
+[5-STYLIX-INTEGRATION.md](../specifications/5-STYLIX-INTEGRATION.md), decisions S1–S7. **In progress:** the application side and the Home Manager module are done; the Stylix mapping is next ([roadmap](ROADMAP.md#stylix-integration)).
 
 | § | Requirement | Status | Evidence / notes |
 |---|---|---|---|
 | 10, 11 | The app uses the generated theme on its own, through the existing theme system | ✅ Verified (app side) | `--theme-file` reads an ordinary theme file through `FileThemeRepository` and the same parser (`the_provided_file_is_read_apart_from_the_folder`, `the_provided_theme_is_kept_apart_from_the_custom_themes`); nothing in the app knows about Stylix |
 | 9 | Predictable precedence; the user's theme configuration untouched | ✅ Verified (app side) | The launch theme wins at launch and is never saved (S2): `a_provided_theme_wins_at_launch_over_the_saved_choice`, `the_provided_theme_is_never_loaded_from_settings`, `theme_ids_round_trip`; a broken file falls back to the saved theme (`a_provided_theme_that_stops_loading_gives_way_to_the_saved_choice`) |
-| 14 | Generated configuration uses valid theme values | 🟡 Tool ready | `seshat --check-theme` (S4): `crates/seshat/tests/check_theme.rs`; the Nix checks that run it come with the module |
-| 4, 5, 6, 7, 8, 12, 13 | Home Manager module, options, colour, font and polarity mapping, flake outputs, documentation | ⏳ Not started | Phases 2–4 |
+| 14 | Generated configuration uses valid theme values; the module evaluates; disabled means untouched; overrides win | ✅ Verified (without Stylix) | `nix flake check ./nix/tests`: `theme` runs the wrapped `seshat --check-theme` on the generated file (no problems) and checks the wrapper passes it; `disabled`, `without-theme`, `precedence` (plain beats `mkDefault`, `null` drops a value), `invalid-values` (rejected at evaluation), `theme-without-package` (refused). `crates/seshat/tests/check_theme.rs`. The wrapped binary passes `scripts/verify-wayland.sh` (checked by hand) |
+| 4, 12 | Home Manager module through the flake; standalone and NixOS with Home Manager; existing outputs kept | ✅ Verified | `homeModules.{default,seshat}` and the `homeManagerModules` alias (S5); `nix flake check` passes (it warns that `homeManagerModules` is an unknown output); the `nixos` check evaluates the module through `home-manager.users` and builds the wrapper. Runs in the **Nix package** CI job |
+| 5–8, 13 | Stylix options, colour, font and polarity mapping; user guide | ⏳ Not started | Phases 3–4 |
 
 ## Known gaps and follow-ups
 
@@ -140,3 +141,5 @@ Status as of 2026-11-13, branch `main`.
    - A checked constructor for match ranges.
    - Fixture files for each past workspace format.
    - Workspace invariant checks after every mutation in debug builds.
+6. **`nix/tests/flake.lock` is not updated automatically.** The monthly `update-flake-lock.yml` job updates only the root `flake.lock`; the test flake's Home Manager (and, later, Stylix) pins are updated by hand with `nix flake update --flake ./nix/tests` until the job covers both.
+7. **Found during the Stylix work, not changed:** the window's GTK header bar keeps the desktop's GTK look whatever the Seshat theme, so a dark theme can show a light header bar (same on `main`). The desktop entry runs `seshat %U`, but Seshat refuses file arguments, so opening a folder with Seshat from another application fails.
