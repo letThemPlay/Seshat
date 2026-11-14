@@ -26,7 +26,7 @@ let
   # `base0D` with an alpha suffix: `#rrggbb` + `aa`.
   withAlpha = base: alpha: colors.${base} + alpha;
 
-  # Decision S9: Base16 roles onto Seshat's colour tokens. base01, base06,
+  # Decision S9: Base16 roles onto Seshat's colour tokens. base01, base03, base06,
   # base07, base0A, base0C, base0E and base0F have no matching token, and
   # navigation_selected is left unset so the selected item follows surface.
   # Every background the main text sits on is base00, the scheme's own text
@@ -38,8 +38,11 @@ let
     app_background = colors.base00;
     navigation_surface = colors.base00;
     text_primary = colors.base05;
-    text_secondary = colors.base04;
-    text_muted = colors.base03;
+    # Base16 has two text colours, base05 and base04 (base03 is for comments
+    # and reaches 3:1 against base00 in only 115 of 303 schemes; base04 in
+    # 267). Secondary text is base05 so it is never fainter than muted text.
+    text_secondary = colors.base05;
+    text_muted = colors.base04;
     accent = colors.base0D;
     focus = colors.base0D;
     border = colors.base02;

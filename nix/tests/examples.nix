@@ -56,6 +56,7 @@ lib.optionalAttrs (system == "x86_64-linux") {
     has 'name = "Stylix"'
     has 'extends = "dark"'
     has 'surface = "${standalone.lib.stylix.colors.withHashtag.base00}"'
+    has 'text_secondary = "${standalone.lib.stylix.colors.withHashtag.base04}"'
     has 'text_muted = "${standalone.lib.stylix.colors.withHashtag.base04}"'
   '';
 

@@ -35,5 +35,5 @@ Two facts shaped the design:
 - Nix users get Seshat themed from Stylix with `programs.seshat.enable = true`; everyone else is unaffected, and Seshat runs anywhere with the generated file alone.
 - There is one theme engine: Nix only writes a theme file, and Seshat validates it as any other.
 - A new theme shows after Seshat restarts, not live.
-- Contrast follows the scheme: 282 of 303 Base16 schemes in nixpkgs give a theme without warnings. Muted text (base03) is faint on some schemes and the header bar keeps the desktop's GTK look (see [verification](../development/verification-results/2026-11-14-stylix.md)).
+- Contrast follows the scheme: 282 of 303 Base16 schemes in nixpkgs give a theme without warnings. Base16 has only two text colours, so muted text is base04 and secondary text shares base05 with the main text. The header bar keeps the desktop's GTK look (see [verification](../development/verification-results/2026-11-14-stylix.md)).
 - `nix/tests/flake.lock` is not updated by the monthly lock job yet.
