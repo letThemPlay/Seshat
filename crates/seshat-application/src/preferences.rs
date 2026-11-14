@@ -8,8 +8,8 @@ use crate::ports::WalkOptions;
 use crate::search::DEFAULT_RESULT_LIMIT;
 use crate::view::{SortOrder, ViewMode};
 
-/// Which theme to use: follow the system, a built-in theme, or a custom
-/// theme identified by its file stem.
+/// Which theme to use: follow the system, a built-in theme, a custom theme
+/// identified by its file stem, or the theme file given on the command line.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ThemeChoice {
     #[default]
@@ -17,6 +17,10 @@ pub enum ThemeChoice {
     Light,
     Dark,
     Custom(String),
+    /// The theme given with `--theme-file` (the Home Manager module passes
+    /// one). It lasts for one run: it is never saved, because the file may
+    /// not be given next time.
+    Provided,
 }
 
 impl ThemeChoice {
@@ -27,7 +31,13 @@ impl ThemeChoice {
             Self::Light => "light".to_owned(),
             Self::Dark => "dark".to_owned(),
             Self::Custom(name) => format!("custom:{name}"),
+            Self::Provided => "provided".to_owned(),
         }
+    }
+
+    /// Whether this choice may be saved in the settings.
+    pub fn is_saved(&self) -> bool {
+        *self != Self::Provided
     }
 
     pub fn from_id(id: &str) -> Option<Self> {
@@ -35,6 +45,7 @@ impl ThemeChoice {
             "system" => Some(Self::System),
             "light" => Some(Self::Light),
             "dark" => Some(Self::Dark),
+            "provided" => Some(Self::Provided),
             _ => id
                 .strip_prefix("custom:")
                 .filter(|name| !name.is_empty())
@@ -240,9 +251,12 @@ mod tests {
             ThemeChoice::Light,
             ThemeChoice::Dark,
             ThemeChoice::Custom("nord".into()),
+            ThemeChoice::Provided,
         ] {
             assert_eq!(ThemeChoice::from_id(&choice.id()), Some(choice));
         }
+        assert!(!ThemeChoice::Provided.is_saved());
+        assert!(ThemeChoice::Custom("nord".into()).is_saved());
         assert_eq!(ThemeChoice::from_id("custom:"), None);
         assert_eq!(ThemeChoice::from_id("neon"), None);
     }

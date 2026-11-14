@@ -100,6 +100,7 @@ fn from_file(file: SettingsFile) -> Preferences {
             .theme
             .as_deref()
             .and_then(ThemeChoice::from_id)
+            .filter(ThemeChoice::is_saved)
             .unwrap_or(defaults.theme),
         show_hidden: file.show_hidden.unwrap_or(defaults.show_hidden),
         view_mode: file
@@ -281,6 +282,14 @@ mod tests {
         let fuzzy = store.load().fuzzy_find;
         assert!(fuzzy.ignore.is_empty(), "an empty list ignores nothing");
         assert_eq!(fuzzy.max_results, 10_000);
+    }
+
+    #[test]
+    fn the_provided_theme_is_never_loaded_from_settings() {
+        let (_dir, store) = store();
+        std::fs::create_dir_all(store.path.parent().unwrap()).unwrap();
+        std::fs::write(&store.path, "theme = \"provided\"\n").unwrap();
+        assert_eq!(store.load().theme, ThemeChoice::System);
     }
 
     #[test]

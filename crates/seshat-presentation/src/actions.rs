@@ -13,7 +13,7 @@ use seshat_application::view::{SortKey, SortOrder, ViewMode};
 use seshat_application::workspace::file_actions::{Availability, ItemKind};
 
 use crate::app::{App, Msg, ThemeMsg};
-use crate::theme::ThemeRegistry;
+use crate::theme::{CustomTheme, ThemeRegistry};
 
 pub const GROUP: &str = "seshat";
 
@@ -214,6 +214,16 @@ pub fn sort_menu() -> gio::Menu {
 }
 
 pub fn theme_menu(registry: &ThemeRegistry) -> gio::Menu {
+    // The theme given with --theme-file (e.g. by the Home Manager module).
+    let provided = gio::Menu::new();
+    if let Some(theme) = registry.provided() {
+        radio(
+            &provided,
+            &theme_label(theme),
+            THEME,
+            &ThemeChoice::Provided.id(),
+        );
+    }
     let builtin = gio::Menu::new();
     for (label, choice) in [
         ("Follow System", ThemeChoice::System),
@@ -224,14 +234,9 @@ pub fn theme_menu(registry: &ThemeRegistry) -> gio::Menu {
     }
     let custom = gio::Menu::new();
     for theme in registry.customs() {
-        let label = if theme.warnings.is_empty() {
-            theme.theme.name.clone()
-        } else {
-            format!("{} ⚠", theme.theme.name)
-        };
         radio(
             &custom,
-            &label,
+            &theme_label(theme),
             THEME,
             &ThemeChoice::Custom(theme.id.clone()).id(),
         );
@@ -246,12 +251,24 @@ pub fn theme_menu(registry: &ThemeRegistry) -> gio::Menu {
     );
 
     let menu = gio::Menu::new();
+    if provided.n_items() > 0 {
+        menu.append_section(Some("Launch Theme"), &provided);
+    }
     menu.append_section(None, &builtin);
     if custom.n_items() > 0 {
         menu.append_section(Some("Custom"), &custom);
     }
     menu.append_section(None, &manage);
     menu
+}
+
+/// A loaded theme's menu label, marked ⚠ if it has problems.
+fn theme_label(theme: &CustomTheme) -> String {
+    if theme.warnings.is_empty() {
+        theme.theme.name.clone()
+    } else {
+        format!("{} ⚠", theme.theme.name)
+    }
 }
 
 /// Menu for a right-click on items.

@@ -2,6 +2,8 @@
 
 ## Unreleased: development
 
+- **Theme given at launch:** `seshat --theme-file FILE` starts with the theme in `FILE`, a normal theme file, which the coming Home Manager module will use for Stylix ([specification](docs/specifications/5-STYLIX-INTEGRATION.md)). It is listed first in the theme menu under **Launch Theme** and wins over your saved theme at every launch. You can still pick another theme for the session, but the launch theme itself is never saved, so starting Seshat without the option behaves as before. A file that can't be read or parsed is reported, and the saved theme is used.
+- **Checking themes:** `seshat --check-theme FILE` loads a theme exactly as Seshat would, without opening a window, prints every problem and exits with status 0 only if there are none.
 - **Conventional Commits:** commit messages and pull request titles now follow [Conventional Commits](docs/development/commits.md) (`fix(workspace): …`, `feat(fuzzy-find): …`). A new CI job, **Commit messages**, checks every commit of a pull request with `scripts/check-commits.sh`, which `scripts/check.sh` also runs locally. Dependabot and the flake update write messages in the same format. Earlier history is unchanged.
 
 ## Unreleased: Fuzzy Find

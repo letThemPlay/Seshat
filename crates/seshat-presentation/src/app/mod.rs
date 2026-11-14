@@ -833,7 +833,7 @@ impl App {
     /// Saves the theme and the defaults for new panels (decision D11: the
     /// last changed panel setting becomes the default).
     fn save_preferences(&mut self) {
-        self.preferences.theme = self.theme.choice().clone();
+        self.preferences.theme = self.theme.saved_choice().clone();
         self.preferences
             .adopt_panel_defaults(self.service.defaults());
         if let Err(err) = self.preferences_store.save(&self.preferences) {

@@ -73,7 +73,7 @@ The window (`seshat-presentation/src/app/`) is a Relm4 component, `App`, that co
 
 | Controller | Owns | Messages |
 |---|---|---|
-| `ThemeController` (`app/theme.rs`) | The chosen theme, custom theme registry, themes-folder watch and reload, stylesheet | `Msg::Theme(ThemeMsg)` |
+| `ThemeController` (`app/theme.rs`) | The theme shown and the theme to save (they differ only while a `--theme-file` launch theme is shown, decision S2), custom theme registry, themes-folder watch and reload, stylesheet | `Msg::Theme(ThemeMsg)` |
 | `DeviceController` (`app/devices.rs`) | The device list, mounting and ejecting | `Msg::Device(DeviceMsg)` |
 | `OperationsController` (`app/operations.rs`) | The operations panel, conflict dialogs, staying alive while hidden; observes the `OperationManager` | `Msg::Operations(OperationsMsg)` |
 | `CommandLineController` (`app/command_line.rs`) | The command line's field, history and Tab completion | `Msg::CommandLine(CommandLineMsg)` |

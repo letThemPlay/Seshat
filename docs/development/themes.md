@@ -67,6 +67,16 @@ Themes are validated when they load:
 
 Run Seshat with `RUST_LOG=warn` (the default is `info`) to see the warnings in the terminal.
 
+To check a theme without starting Seshat, run `seshat --check-theme path/to/theme.toml`. It loads the file exactly as Seshat would, prints every problem, and exits with status 0 only if there are none.
+
+## A theme given at launch
+
+`seshat --theme-file path/to/theme.toml` starts with the theme in that file. The file uses the same format and validation as any other theme, and it doesn't need to be in the themes folder. The Home Manager module uses it to pass on a theme generated from Stylix.
+
+- It is listed first in the theme menu, under **Launch Theme**, and it wins over your saved theme every time Seshat starts with the option.
+- You can pick another theme from the menu. That choice is saved as usual, but the launch theme itself is never saved, so starting without the option uses your saved theme.
+- If the file can't be read or parsed, the status bar says so and the saved theme is used. **Reload Themes** reads the file again.
+
 ## How it works
 
-`ThemeRegistry` (presentation) parses the files that `FileThemeRepository` (infrastructure) reads. `render_css` turns the resolved `Theme` into a single stylesheet in which each colour is defined once with `@define-color` and only referenced by rules. Unit tests in `theme/css.rs` and `theme/custom.rs` enforce the fixed rules for every built-in theme and for overrides.
+`ThemeRegistry` (presentation) parses the files that `FileThemeRepository` (infrastructure) reads, including the launch theme, which is kept apart from the custom themes as `ThemeChoice::Provided` and never saved. `render_css` turns the resolved `Theme` into a single stylesheet in which each colour is defined once with `@define-color` and only referenced by rules. Unit tests in `theme/css.rs` and `theme/custom.rs` enforce the fixed rules for every built-in theme and for overrides.

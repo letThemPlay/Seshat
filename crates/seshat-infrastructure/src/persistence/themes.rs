@@ -5,20 +5,31 @@ use seshat_application::ports::{ThemeRepository, ThemeSource};
 /// Largest theme file we read; themes are small and this bounds memory.
 const MAX_THEME_BYTES: u64 = 64 * 1024;
 
-/// Reads `*.toml` files from the themes directory.
+/// Reads `*.toml` files from the themes directory, and the theme file given
+/// on the command line.
 #[derive(Debug, Clone)]
 pub struct FileThemeRepository {
     directory: PathBuf,
+    provided: Option<PathBuf>,
 }
 
 impl FileThemeRepository {
     pub fn new(directory: PathBuf) -> Self {
-        Self { directory }
+        Self {
+            directory,
+            provided: None,
+        }
     }
 
     /// `$XDG_CONFIG_HOME/seshat/themes`.
     pub fn default_location() -> Self {
         Self::new(super::config_dir().join("themes"))
+    }
+
+    /// Also reads `path`: the theme file given with `--theme-file`.
+    pub fn with_provided(mut self, path: PathBuf) -> Self {
+        self.provided = Some(path);
+        self
     }
 }
 
@@ -51,6 +62,20 @@ impl ThemeRepository for FileThemeRepository {
             .collect();
         sources.sort_by(|a, b| a.id.cmp(&b.id));
         sources
+    }
+
+    fn load_provided(&self) -> Option<ThemeSource> {
+        let path = self.provided.clone()?;
+        // Only used in messages and as the name of a theme without one.
+        let id = path.file_stem().map_or_else(
+            || "provided".to_owned(),
+            |s| s.to_string_lossy().into_owned(),
+        );
+        Some(ThemeSource {
+            contents: read_limited(&path),
+            id,
+            path,
+        })
     }
 }
 
@@ -86,6 +111,30 @@ mod tests {
         let ids: Vec<_> = sources.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, ["aurora", "zen"]);
         assert_eq!(sources[0].contents.as_deref(), Ok("name = \"Aurora\""));
+    }
+
+    #[test]
+    fn the_provided_file_is_read_apart_from_the_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("stylix.toml");
+        std::fs::write(&file, "name = \"Stylix\"").unwrap();
+        let repo = FileThemeRepository::new(dir.path().join("themes"));
+        assert_eq!(repo.load_provided(), None, "no --theme-file");
+
+        let repo = repo.with_provided(file.clone());
+        assert!(repo.load_all().is_empty(), "not one of the folder's themes");
+        let provided = repo.load_provided().unwrap();
+        assert_eq!(provided.id, "stylix");
+        assert_eq!(provided.path, file);
+        assert_eq!(provided.contents.as_deref(), Ok("name = \"Stylix\""));
+    }
+
+    #[test]
+    fn a_missing_provided_file_reports_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = FileThemeRepository::new(dir.path().to_path_buf())
+            .with_provided(dir.path().join("gone.toml"));
+        assert!(repo.load_provided().unwrap().contents.is_err());
     }
 
     #[test]
