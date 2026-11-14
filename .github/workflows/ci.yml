@@ -121,6 +121,10 @@ jobs:
         run: nix build --print-build-logs .#seshat
       - name: Packaged binary is a native Wayland client
         run: SESHAT_BIN=./result/bin/seshat nix develop --command scripts/verify-wayland.sh
+      - name: Flake outputs
+        run: nix flake check
+      - name: Home Manager module (nix/tests)
+        run: nix flake check --print-build-logs ./nix/tests
       - name: Validate desktop entry and AppStream metadata
         run: |
           nix develop --command desktop-file-validate data/dev.kdmorris.Seshat.desktop

@@ -13,6 +13,45 @@ nix run .#seshat-progress                  # the example D-Bus client
 
 On NixOS, add the flake as an input and put `inputs.seshat.packages.${system}.default` in `environment.systemPackages` (or `home.packages` with Home Manager).
 
+## Home Manager module
+
+The flake exports a Home Manager module, `homeModules.default` (also available as `homeManagerModules.default`). It works the same in standalone Home Manager and in Home Manager inside NixOS.
+
+```nix
+# flake.nix
+inputs.seshat.url = "github:letThemPlay/Seshat";
+
+# standalone: homeManagerConfiguration { modules = [ inputs.seshat.homeModules.default ./home.nix ]; … }
+# NixOS:      home-manager.sharedModules = [ inputs.seshat.homeModules.default ];
+```
+
+```nix
+# home.nix
+programs.seshat = {
+  enable = true;              # installs the flake's package
+  theme = {                   # optional: a theme Seshat always starts with
+    name = "Nord";
+    extends = "dark";
+    colors.surface = "#3b4252";
+    colors.accent = "#88c0d0";
+    typography.font_family = "Inter";
+  };
+};
+```
+
+| Option | Meaning |
+|---|---|
+| `enable` | Install Seshat |
+| `package` | The package; defaults to this flake's. `null` installs nothing (for a Seshat installed some other way), but then no theme can be applied |
+| `theme` | A theme with the keys of a [theme file](development/themes.md). Every value is optional and checked when the configuration is evaluated; unset values come from the `extends` base theme |
+| `themeFile`, `finalPackage` | Read-only: the generated theme file, and the package that is installed |
+
+With a `theme`, the installed `seshat` is a wrapper that always runs `seshat --theme-file <generated file>`. The theme is listed first in the theme menu under **Launch Theme** and wins at every launch, but it is never saved, so it doesn't change `settings.toml`. A running Seshat shows a new theme the next time it starts. The module doesn't manage `settings.toml`, because Seshat rewrites it whenever a setting changes (decisions S1–S3).
+
+Install Seshat only through the module when you use a theme: a second, unwrapped `seshat` from `environment.systemPackages` may come first on `PATH`.
+
+Stylix support (theming Seshat from your Stylix palette and fonts) is coming next ([specification](specifications/5-STYLIX-INTEGRATION.md)). The module is tested in `nix/tests` (`nix flake check ./nix/tests`).
+
 ## What the package contains
 
 | Path | Purpose |

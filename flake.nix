@@ -116,5 +116,16 @@
             export XDG_DATA_DIRS=${pkgs.shared-mime-info}/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}
           '';
         };
-      });
+      })
+    // {
+      # Home Manager module (`programs.seshat`), for standalone Home Manager
+      # and Home Manager inside NixOS alike. `homeModules` is the current
+      # name; `homeManagerModules` is kept for older configurations.
+      # Decision S5; tests in nix/tests.
+      homeModules = rec {
+        seshat = import ./nix/hm-module.nix self;
+        default = seshat;
+      };
+      homeManagerModules = self.homeModules;
+    };
 }

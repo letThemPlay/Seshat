@@ -8,7 +8,7 @@ Every pull request into `main` runs the full test suite and the security scanner
 |---|---|---|
 | `ci.yml` | **Checks** | `cargo fmt --check`, `clippy -D warnings`, `scripts/check-architecture.sh`, `cargo test --workspace` (including D-Bus tests on a private bus), `scripts/verify-wayland.sh` (headless Weston) |
 | | **UI end-to-end** | Three sandboxed headless Sway sessions: `scripts/ui/file-operations.sh`, `scripts/ui/workspace.sh` and `scripts/ui/fuzzy-find.sh`. Screenshots and logs of each are uploaded as artifacts (`ui-e2e-artifacts`, `ui-e2e-workspace-artifacts`, `ui-e2e-fuzzy-artifacts`) when it fails |
-| | **Nix package** | `nix build .#seshat` (runs the suite again in the Nix sandbox), Wayland verification of the packaged binary, desktop entry and AppStream validation |
+| | **Nix package** | `nix build .#seshat` (runs the suite again in the Nix sandbox), Wayland verification of the packaged binary, `nix flake check`, the Home Manager module checks (`nix flake check ./nix/tests`), desktop entry and AppStream validation |
 | | **Dependencies (cargo-deny)** | RustSec advisories, the license allow-list, banned and wildcard dependencies, crates.io-only sources (`deny.toml`) |
 | | **Commit messages** | Pull requests only: `scripts/check-commits.sh` checks that every commit subject follows [Conventional Commits](commits.md) |
 | `security.yml` | **CodeQL (rust)** / **CodeQL (actions)** | Code scanning of the Rust code (no build needed) and of the workflow files; results go to the Security tab |
@@ -57,6 +57,7 @@ Run these inside `nix develop`:
 scripts/check.sh --ui                                  # Checks + UI end-to-end
 scripts/check-commits.sh origin/main                   # Commit messages
 nix build .#seshat && SESHAT_BIN=./result/bin/seshat scripts/verify-wayland.sh
+nix flake check && nix flake check ./nix/tests        # flake outputs, Home Manager module
 nix shell nixpkgs#cargo-deny -c cargo deny check       # Dependencies
 nix shell nixpkgs#zizmor -c zizmor --persona pedantic .github/
 ```
