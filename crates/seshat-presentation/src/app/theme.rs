@@ -37,7 +37,12 @@ pub enum ThemeMsg {
 
 pub(super) struct ThemeController {
     repository: Rc<dyn ThemeRepository>,
+    /// The theme shown now.
     choice: ThemeChoice,
+    /// The theme to save: the last saved choice picked, never
+    /// [`ThemeChoice::Provided`]. Keeps the settings independent of whether
+    /// Seshat was started with `--theme-file`.
+    saved: ThemeChoice,
     registry: ThemeRegistry,
     watch: Option<WatchGuard>,
     reload_pending: bool,
@@ -54,6 +59,7 @@ impl ThemeController {
     ) -> Self {
         Self {
             repository,
+            saved: choice.clone(),
             choice,
             registry: ThemeRegistry::default(),
             watch: None,
@@ -67,10 +73,17 @@ impl ThemeController {
         &self.choice
     }
 
+    /// The choice to save in the settings.
+    pub(super) fn saved_choice(&self) -> &ThemeChoice {
+        &self.saved
+    }
+
     /// Loads the custom themes, starts watching their folder and applies
-    /// the chosen theme.
+    /// the chosen theme. A theme given with `--theme-file` wins over the
+    /// saved choice at launch.
     pub(super) fn start(&mut self, watcher: &dyn DirectoryWatcher, cx: &mut NoticeCx<'_>) {
         self.load(cx);
+        self.choice = launch_choice(&self.registry, &self.saved);
         self.watch_folder(watcher, cx.sender);
         self.apply(cx);
     }
@@ -79,6 +92,9 @@ impl ThemeController {
     pub(super) fn update(&mut self, msg: ThemeMsg, cx: &mut NoticeCx<'_>) -> ThemeOutcome {
         match msg {
             ThemeMsg::Set(choice) => {
+                if choice.is_saved() {
+                    self.saved = choice.clone();
+                }
                 self.choice = choice;
                 self.apply(cx);
                 return ThemeOutcome::SavePreferences;
@@ -112,12 +128,14 @@ impl ThemeController {
     }
 
     fn load(&mut self, cx: &mut NoticeCx<'_>) {
-        self.registry = ThemeRegistry::from_sources(self.repository.load_all());
+        self.registry = ThemeRegistry::from_sources(self.repository.load_all())
+            .with_provided(self.repository.load_provided());
         self.menu_button
             .set_menu_model(Some(&actions::theme_menu(&self.registry)));
         if let Some(error) = self.registry.errors().first() {
             *cx.notice = Some(notice::theme_not_loaded(&error.id, &error.message));
         }
+        self.choice = reloaded_choice(&self.registry, &self.choice, &self.saved);
     }
 
     /// Reloads themes when files in the themes folder change.
@@ -152,6 +170,30 @@ impl ThemeController {
     }
 }
 
+/// The theme to show at launch: the one given with `--theme-file` if it
+/// loaded, otherwise the saved choice.
+fn launch_choice(registry: &ThemeRegistry, saved: &ThemeChoice) -> ThemeChoice {
+    if registry.provided().is_some() {
+        ThemeChoice::Provided
+    } else {
+        saved.clone()
+    }
+}
+
+/// The theme to show after reloading: a provided theme that no longer
+/// loads gives way to the saved choice (the load error says why).
+fn reloaded_choice(
+    registry: &ThemeRegistry,
+    choice: &ThemeChoice,
+    saved: &ThemeChoice,
+) -> ThemeChoice {
+    if *choice == ThemeChoice::Provided && registry.provided().is_none() {
+        saved.clone()
+    } else {
+        choice.clone()
+    }
+}
+
 /// The theme to show for `choice`, and what to tell the user about it: a
 /// custom theme that is gone falls back to the system theme, and a custom
 /// theme with problems says so.
@@ -167,13 +209,14 @@ fn pick(
             .expect("built-in themes always resolve");
         return (fallback, Some(notice));
     };
-    let notice = match choice {
-        ThemeChoice::Custom(id) => registry
-            .custom(id)
-            .filter(|custom| !custom.warnings.is_empty())
-            .map(|custom| notice::theme_has_issues(&custom.theme.name, custom.warnings.len())),
+    let loaded = match choice {
+        ThemeChoice::Custom(id) => registry.custom(id),
+        ThemeChoice::Provided => registry.provided(),
         _ => None,
     };
+    let notice = loaded
+        .filter(|custom| !custom.warnings.is_empty())
+        .map(|custom| notice::theme_has_issues(&custom.theme.name, custom.warnings.len()));
     (theme, notice)
 }
 
@@ -226,6 +269,59 @@ mod tests {
         assert_eq!(
             notice.as_ref().map(Notice::text),
             Some("Theme “gone” is not available; following the system theme.")
+        );
+    }
+
+    fn provided(contents: Result<&str, &str>) -> Option<ThemeSource> {
+        Some(ThemeSource {
+            id: "theme".into(),
+            path: PathBuf::from("/nix/store/abc-theme.toml"),
+            contents: contents.map(str::to_owned).map_err(str::to_owned),
+        })
+    }
+
+    #[test]
+    fn a_provided_theme_wins_at_launch_over_the_saved_choice() {
+        let saved = ThemeChoice::Custom("good".into());
+        let with = registry().with_provided(provided(Ok("name = \"Stylix\"")));
+        assert_eq!(launch_choice(&with, &saved), ThemeChoice::Provided);
+        assert_eq!(launch_choice(&registry(), &saved), saved, "no --theme-file");
+        let broken = registry().with_provided(provided(Err("not found")));
+        assert_eq!(launch_choice(&broken, &saved), saved, "unreadable file");
+    }
+
+    #[test]
+    fn a_provided_theme_that_stops_loading_gives_way_to_the_saved_choice() {
+        let saved = ThemeChoice::Dark;
+        let gone = registry().with_provided(provided(Err("not found")));
+        assert_eq!(
+            reloaded_choice(&gone, &ThemeChoice::Provided, &saved),
+            saved
+        );
+        let fine = registry().with_provided(provided(Ok("")));
+        assert_eq!(
+            reloaded_choice(&fine, &ThemeChoice::Provided, &saved),
+            ThemeChoice::Provided
+        );
+        assert_eq!(
+            reloaded_choice(&gone, &ThemeChoice::Light, &saved),
+            ThemeChoice::Light,
+            "other choices are left alone"
+        );
+    }
+
+    #[test]
+    fn the_provided_theme_applies_and_reports_its_problems() {
+        let registry = registry().with_provided(Some(ThemeSource {
+            id: "abc-seshat-theme".into(),
+            path: PathBuf::from("/nix/store/abc-seshat-theme.toml"),
+            contents: Ok("name = \"Stylix\"\n[colors]\nsurface = \"nope\"".into()),
+        }));
+        let (theme, notice) = pick(&registry, &ThemeChoice::Provided, false);
+        assert_eq!(theme.name, "Stylix");
+        assert_eq!(
+            notice.as_ref().map(Notice::text),
+            Some("Theme “Stylix” has 1 issue; see the log for details.")
         );
     }
 

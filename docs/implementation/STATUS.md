@@ -100,6 +100,17 @@ Status as of 2026-11-13, branch `main`.
 | 14 | Session ids; late results never shown; statuses | ✅ Verified | `a_new_query_supersedes_the_previous_search`, `cancelling_and_closing_stop_the_running_search` |
 | 15 | Configuration | ✅ Verified (F11) | `[fuzzy_find]`: `default_scope`, `include_hidden`, `ignore`, `max_results`, `case`, and the `fuzzy-find` key binding. `FuzzyFindPreferences` turns them into walk options and queries (`fuzzy_find_settings_become_walk_options_and_queries`); saved and loaded, each invalid value falling back on its own (`round_trip_creates_parent_dirs`, `invalid_fuzzy_find_values_fall_back_individually`); the example file lists them with their defaults (`the_example_settings_list_every_binding_with_its_default`); the UI test runs with hidden names included and an extra ignored name. Following symbolic links and a preview are not offered (F11) |
 
+## Stylix integration specification
+
+[5-STYLIX-INTEGRATION.md](../specifications/5-STYLIX-INTEGRATION.md), decisions S1–S7. **In progress:** the application side is done; the Home Manager module and the Stylix mapping are next ([roadmap](ROADMAP.md#stylix-integration)).
+
+| § | Requirement | Status | Evidence / notes |
+|---|---|---|---|
+| 10, 11 | The app uses the generated theme on its own, through the existing theme system | ✅ Verified (app side) | `--theme-file` reads an ordinary theme file through `FileThemeRepository` and the same parser (`the_provided_file_is_read_apart_from_the_folder`, `the_provided_theme_is_kept_apart_from_the_custom_themes`); nothing in the app knows about Stylix |
+| 9 | Predictable precedence; the user's theme configuration untouched | ✅ Verified (app side) | The launch theme wins at launch and is never saved (S2): `a_provided_theme_wins_at_launch_over_the_saved_choice`, `the_provided_theme_is_never_loaded_from_settings`, `theme_ids_round_trip`; a broken file falls back to the saved theme (`a_provided_theme_that_stops_loading_gives_way_to_the_saved_choice`) |
+| 14 | Generated configuration uses valid theme values | 🟡 Tool ready | `seshat --check-theme` (S4): `crates/seshat/tests/check_theme.rs`; the Nix checks that run it come with the module |
+| 4, 5, 6, 7, 8, 12, 13 | Home Manager module, options, colour, font and polarity mapping, flake outputs, documentation | ⏳ Not started | Phases 2–4 |
+
 ## Known gaps and follow-ups
 
 1. **Performance follow-ups** from the [2026-11-09 run](../review/performance.md): the listing cache size (D13) for workspaces with many branches, and incremental model updates for live reloads of very large folders. Deferred (2026-11-09, R5): revisit only if needed.

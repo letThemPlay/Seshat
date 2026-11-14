@@ -30,10 +30,12 @@ pub struct ThemeLoadError {
     pub message: String,
 }
 
-/// Built-in plus successfully parsed custom themes.
+/// Built-in plus successfully parsed custom themes, and the theme given on
+/// the command line.
 #[derive(Debug, Clone, Default)]
 pub struct ThemeRegistry {
     customs: Vec<CustomTheme>,
+    provided: Option<CustomTheme>,
     errors: Vec<ThemeLoadError>,
 }
 
@@ -43,30 +45,49 @@ impl ThemeRegistry {
     pub fn from_sources(sources: Vec<ThemeSource>) -> Self {
         let mut registry = Self::default();
         for source in sources {
-            let parsed = source
-                .contents
-                .and_then(|text| parse_custom_theme(&source.id, &text));
-            match parsed {
-                Ok(theme) => {
-                    for warning in &theme.warnings {
-                        tracing::warn!(theme = %theme.id, path = %source.path.display(), "{warning}");
-                    }
-                    registry.customs.push(theme);
-                }
-                Err(message) => {
-                    tracing::warn!(theme = %source.id, path = %source.path.display(), error = %message, "theme not loaded");
-                    registry.errors.push(ThemeLoadError {
-                        id: source.id,
-                        message,
-                    });
-                }
+            if let Some(theme) = registry.parse(source) {
+                registry.customs.push(theme);
             }
         }
         registry
     }
 
+    /// Adds the theme given with `--theme-file`. It goes through the same
+    /// parser and validation as the custom themes.
+    pub fn with_provided(mut self, source: Option<ThemeSource>) -> Self {
+        self.provided = source.and_then(|source| self.parse(source));
+        self
+    }
+
+    fn parse(&mut self, source: ThemeSource) -> Option<CustomTheme> {
+        let parsed = source
+            .contents
+            .and_then(|text| parse_custom_theme(&source.id, &text));
+        match parsed {
+            Ok(theme) => {
+                for warning in &theme.warnings {
+                    tracing::warn!(theme = %theme.id, path = %source.path.display(), "{warning}");
+                }
+                Some(theme)
+            }
+            Err(message) => {
+                tracing::warn!(theme = %source.id, path = %source.path.display(), error = %message, "theme not loaded");
+                self.errors.push(ThemeLoadError {
+                    id: source.id,
+                    message,
+                });
+                None
+            }
+        }
+    }
+
     pub fn customs(&self) -> &[CustomTheme] {
         &self.customs
+    }
+
+    /// The theme given with `--theme-file`, if it loaded.
+    pub fn provided(&self) -> Option<&CustomTheme> {
+        self.provided.as_ref()
     }
 
     pub fn errors(&self) -> &[ThemeLoadError] {
@@ -85,6 +106,7 @@ impl ThemeRegistry {
             ThemeChoice::System | ThemeChoice::Light => Some(light()),
             ThemeChoice::Dark => Some(dark()),
             ThemeChoice::Custom(id) => self.custom(id).map(|t| t.theme.clone()),
+            ThemeChoice::Provided => self.provided().map(|t| t.theme.clone()),
         }
     }
 }
@@ -128,5 +150,33 @@ mod tests {
             registry.resolve(&ThemeChoice::Custom("syntax".into()), false),
             None
         );
+    }
+
+    #[test]
+    fn the_provided_theme_is_kept_apart_from_the_custom_themes() {
+        let registry = ThemeRegistry::from_sources(vec![source("stylix", Ok("name = \"Mine\""))])
+            .with_provided(Some(source(
+                "stylix",
+                Ok("name = \"Stylix\"\nextends = \"dark\""),
+            )));
+        assert_eq!(registry.customs().len(), 1, "same stem, no clash");
+        let provided = registry.resolve(&ThemeChoice::Provided, false).unwrap();
+        assert_eq!(provided.name, "Stylix");
+        assert!(provided.dark);
+        let custom = registry
+            .resolve(&ThemeChoice::Custom("stylix".into()), false)
+            .unwrap();
+        assert_eq!(custom.name, "Mine");
+    }
+
+    #[test]
+    fn a_broken_provided_theme_is_an_error_not_a_theme() {
+        let registry =
+            ThemeRegistry::default().with_provided(Some(source("stylix", Ok("name = "))));
+        assert!(registry.provided().is_none());
+        assert_eq!(registry.errors().len(), 1);
+        assert_eq!(registry.resolve(&ThemeChoice::Provided, false), None);
+        let none = ThemeRegistry::default().with_provided(None);
+        assert!(none.provided().is_none() && none.errors().is_empty());
     }
 }
