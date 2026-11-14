@@ -26,8 +26,9 @@ let
   # apart unnoticed (decision S4).
   colorTokens = {
     app_background = "Window, toolbar and status bar.";
-    surface = "Main content pane and the selected navigation item (one token by design).";
+    surface = "Main content pane and workspace panels; also the selected navigation item unless navigation_selected is set.";
     navigation_surface = "Navigation pane.";
+    navigation_selected = "Selected navigation item. Unset, it follows surface.";
     text_primary = "Primary text.";
     text_secondary = "Secondary text.";
     text_muted = "Muted text.";

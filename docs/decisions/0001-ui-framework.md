@@ -89,7 +89,7 @@ GTK is LGPL-2.1-or-later and dynamically linked, so it imposes no constraint on 
 - XDG standard locations, without hardcoded paths, and with disabled or missing directories omitted;
 - async directory enumeration through `ListDirectory` → `GioDirectoryReader`, with loading, empty and error states (42 entries in about 10–15 ms on the dev machine, without blocking the UI);
 - Light/Dark/System theme switching at runtime, with System following `gtk-interface-color-scheme` live;
-- the selected navigation item sharing `@seshat_surface` with the content pane, at a 12px radius. Unit tests in `theme/css.rs` enforce both rules, and the screenshots were checked in both themes.
+- the selected navigation item sharing `@seshat_surface` with the content pane, at a 12px radius. Unit tests in `theme/css.rs` enforce both rules, and the screenshots were checked in both themes. (Since 2026-11-14 a theme may give the selected item its own `navigation_selected` colour; unset, it is still `@seshat_surface`. Decision T1.)
 
 ### Wayland verification results (2026-11-06)
 

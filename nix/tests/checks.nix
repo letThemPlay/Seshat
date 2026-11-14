@@ -51,6 +51,7 @@ let
     extends = "dark";
     colors = {
       surface = "#3b4252";
+      navigation_selected = "#434c5e";
       accent = "#88c0d0";
       hover = "#ffffff12";
     };
@@ -113,6 +114,7 @@ in
       # or to Home Manager: Seshat reads it on its own.
       grep -qx 'accent = "#88c0d0"' "$theme"
       grep -qx 'border_radius = 6' "$theme"
+      grep -qx 'navigation_selected = "#434c5e"' "$theme"
       # (`! grep` would not stop the script under `set -e`.)
       if grep -q 'border =' "$theme"; then echo "unset values are written"; exit 1; fi
       if grep -q '/nix/store' "$theme"; then echo "store path in the theme"; exit 1; fi

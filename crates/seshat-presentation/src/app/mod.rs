@@ -73,7 +73,7 @@ use view::{AppWidgets, Handles};
 
 /// Seshat owns its look through its own theme system, so its stylesheet must
 /// win over a desktop-wide `~/.config/gtk-4.0/gtk.css` (USER priority);
-/// otherwise mandated rules such as the shared surface token and 12px
+/// otherwise mandated rules such as the content pane's surface token and 12px
 /// selected radius could be overridden. Rules are scoped to Seshat's own
 /// widgets, except the focus outline colour.
 const THEME_PROVIDER_PRIORITY: u32 = gtk::STYLE_PROVIDER_PRIORITY_USER + 1;

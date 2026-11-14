@@ -177,3 +177,9 @@ From the design review (R5). Status-bar messages are typed `Notice` values forma
 | S5 | Module outputs and namespace | `homeModules.{default,seshat}` plus a `homeManagerModules` alias; options under `programs.seshat`, with the Stylix part under `programs.seshat.stylix`. No NixOS module: theming is per user. |
 | S6 | When the Stylix part is on | It follows `stylix.autoEnable` when Stylix is imported and enabled, and is off otherwise. Enabling it without Stylix fails evaluation with a clear assertion. |
 | S7 | Test dependencies | Home Manager and Stylix are inputs of a separate test flake (`nix/tests`), so the main flake keeps only `nixpkgs` and `flake-utils`. |
+
+## Theme tokens (2026-11-14)
+
+| # | Topic | Decision |
+|---|---|---|
+| T1 | The selected navigation item's colour | **Changes an established requirement, at the maintainer's request** (2026-11-14, during the Stylix integration). The selected navigation item has its own optional colour token, `navigation_selected`. Unset (the default, and in both built-in themes and the example themes), the stylesheet defines it as `@seshat_surface` itself, so the selected item still matches the content pane exactly and the two cannot drift apart. Set, the selected item uses it; the content pane and workspace panels keep `surface`. The 12px radius on all four corners stays fixed, and the selected item keeps its outline and accent icon. A set `navigation_selected` is contrast-checked like the other backgrounds. The original specification §6.3, §7.3 and §7.4 and the Stylix specification §6 were amended to match; existing theme files are unaffected. |

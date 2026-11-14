@@ -151,7 +151,7 @@ The application already has specific visual requirements that must remain intact
 
 In particular:
 - The selected navigation item must retain its 12px rounded corners.
-- The selected location's background must match the main pane background.
+- The selected location's background follows the main pane background unless the theme sets the selected navigation item's own token, `navigation_selected`. The generated theme may set it. *(Amended 2026-11-14, decision T1. Before: "must match the main pane background". See the original specification §6.3.)*
 - Text and icons must maintain sufficient contrast.
 - Selection, hover, focus and active states must remain distinguishable.
 - Error, warning and success states must remain visually recognisable.

@@ -5,9 +5,10 @@ use super::{NAV_SELECTED_RADIUS_PX, Theme};
 /// Renders a theme into the application stylesheet.
 ///
 /// Every colour is emitted once as a named `@define-color`; rules only
-/// reference those names. In particular, the main content background and the
-/// selected navigation item background both reference `@seshat_surface`, so
-/// they cannot drift apart.
+/// reference those names. The selected navigation item's background is
+/// `@seshat_navigation_selected`, which a theme may set; otherwise it is
+/// defined as `@seshat_surface`, the main content background, so the two
+/// cannot drift apart (decision T1).
 pub fn render_css(theme: &Theme) -> String {
     let c = &theme.colors;
     let g = &theme.geometry;
@@ -32,6 +33,13 @@ pub fn render_css(theme: &Theme) -> String {
     ] {
         let _ = writeln!(css, "@define-color seshat_{name} {};", color.to_css());
     }
+    let navigation_selected = c
+        .navigation_selected
+        .map_or_else(|| "@seshat_surface".to_owned(), |color| color.to_css());
+    let _ = writeln!(
+        css,
+        "@define-color seshat_navigation_selected {navigation_selected};"
+    );
 
     let font_family = t.font_family.replace(['\\', '"'], "");
     let line_height = t
@@ -92,7 +100,7 @@ window.seshat {{
 
 .seshat-sidebar row:selected,
 .seshat-sidebar row:selected:hover {{
-  background-color: @seshat_surface;
+  background-color: @seshat_navigation_selected;
   border-radius: {nav_radius}px;
   color: @seshat_text_primary;
   box-shadow: inset 0 0 0 1px @seshat_border;
@@ -296,8 +304,9 @@ window.seshat popover separator {{
 }}
 
 /* Spatial workspace. Every panel is main content, so every panel uses the
-   surface token (the same one as the selected navigation item). The active
-   panel is marked with an outline, never with a different fill. */
+   surface token (which the selected navigation item follows unless the
+   theme sets navigation_selected). The active panel is marked with an
+   outline, never with a different fill. */
 .seshat-workspace,
 .seshat-strip {{
   background-color: @seshat_app_background;
@@ -546,14 +555,36 @@ mod tests {
     }
 
     #[test]
-    fn selected_nav_and_content_share_the_surface_token() {
+    fn selected_nav_follows_the_surface_token_by_default() {
         for theme in [light(), dark()] {
             let css = render_css(&theme);
             let content = rule_body(&css, ".seshat-content");
             let selected = rule_body(&css, ".seshat-sidebar row:selected");
             assert_eq!(background(content), "@seshat_surface", "{}", theme.name);
-            assert_eq!(background(selected), "@seshat_surface", "{}", theme.name);
+            assert_eq!(
+                background(selected),
+                "@seshat_navigation_selected",
+                "{}",
+                theme.name
+            );
+            // Defined as the surface token itself, not a copy of its value.
+            assert!(css.contains("@define-color seshat_navigation_selected @seshat_surface;"));
         }
+    }
+
+    #[test]
+    fn a_theme_can_give_the_selected_nav_item_its_own_colour() {
+        let mut theme = dark();
+        theme.colors.navigation_selected = Some(crate::theme::Color::rgb(0x12, 0x34, 0x56));
+        let css = render_css(&theme);
+        assert!(css.contains("@define-color seshat_navigation_selected #123456;"));
+        assert_eq!(
+            background(rule_body(&css, ".seshat-content")),
+            "@seshat_surface",
+            "the content pane is unaffected"
+        );
+        let selected = rule_body(&css, ".seshat-sidebar row:selected");
+        assert!(selected.contains("border-radius: 12px;"), "{selected}");
     }
 
     #[test]
