@@ -50,7 +50,20 @@ With a `theme`, the installed `seshat` is a wrapper that always runs `seshat --t
 
 Install Seshat only through the module when you use a theme: a second, unwrapped `seshat` from `environment.systemPackages` may come first on `PATH`.
 
-Stylix support (theming Seshat from your Stylix palette and fonts) is coming next ([specification](specifications/5-STYLIX-INTEGRATION.md)). The module is tested in `nix/tests` (`nix flake check ./nix/tests`).
+### Stylix
+
+With [Stylix](https://github.com/nix-community/stylix) imported and enabled, the module fills `programs.seshat.theme` from your Stylix colours, sans-serif font, application font size and polarity, so Seshat starts with your Stylix theme ([specification](specifications/5-STYLIX-INTEGRATION.md), decisions S6–S10). Like Stylix's own targets it is on when `stylix.autoEnable` is true. Import Stylix yourself; Seshat's module never imports it.
+
+```nix
+programs.seshat = {
+  enable = true;
+  # stylix.enable = false;          # opt out
+  # stylix.fonts.enable = false;    # keep Seshat's font; also colors.enable, polarity.enable
+  theme.colors.accent = "#ff5555";  # your own values win over Stylix's, one by one
+};
+```
+
+The module is tested in `nix/tests` (`nix flake check ./nix/tests`).
 
 ## What the package contains
 
