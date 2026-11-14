@@ -1,7 +1,7 @@
 # Checks for Seshat's Home Manager module (decision S7).
 #
-# A separate flake, so Home Manager (and later Stylix) are inputs only
-# here and the main flake keeps just nixpkgs and flake-utils.
+# A separate flake, so Home Manager and Stylix are inputs only here and
+# the main flake keeps just nixpkgs and flake-utils.
 #
 #   nix flake check ./nix/tests
 {
@@ -14,6 +14,10 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    stylix = {
+      url = "github:nix-community/stylix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -21,6 +25,7 @@
       seshat,
       nixpkgs,
       home-manager,
+      stylix,
       ...
     }:
     {
@@ -31,6 +36,15 @@
             system
             nixpkgs
             home-manager
+            seshat
+            ;
+        }
+        // import ./stylix-checks.nix {
+          inherit
+            system
+            nixpkgs
+            home-manager
+            stylix
             seshat
             ;
         }
