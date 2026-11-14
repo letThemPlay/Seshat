@@ -15,7 +15,7 @@ On NixOS, add the flake as an input and put `inputs.seshat.packages.${system}.de
 
 ## Home Manager module
 
-The flake exports a Home Manager module, `homeModules.default` (also available as `homeManagerModules.default`). It works the same in standalone Home Manager and in Home Manager inside NixOS.
+The flake exports a Home Manager module, `homeModules.default` (also available as `homeManagerModules.default`). It works the same in standalone Home Manager and in Home Manager inside NixOS. **The full guide, with tested examples, the Stylix colour and font mapping, overrides and limitations, is [docs/home-manager](home-manager/README.md)** ([ADR 0009](decisions/0009-home-manager-stylix.md)). In short:
 
 ```nix
 # flake.nix
