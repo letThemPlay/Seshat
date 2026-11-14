@@ -11,6 +11,8 @@ scripts/verify-wayland.sh              # native Wayland verification (headless W
 scripts/ui-session.sh scripts/ui/file-operations.sh [artifact-dir]   # UI end-to-end
 scripts/ui-session.sh scripts/ui/workspace.sh [artifact-dir]         # spatial workspace end-to-end
 scripts/ui-session.sh scripts/ui/fuzzy-find.sh [artifact-dir]        # Fuzzy Find end-to-end
+STYLIX_THEMES=$(nix build ./nix/tests#stylix-themes --print-out-paths --no-link) \
+  scripts/ui-session.sh scripts/ui/stylix-themes.sh [artifact-dir]  # Stylix themes: screenshots to review by hand
 ```
 
 ## Automated tests

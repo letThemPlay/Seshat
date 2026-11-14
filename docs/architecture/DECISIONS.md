@@ -12,6 +12,7 @@ Full ADRs live in [`docs/decisions/`](../decisions):
 | [0006](../decisions/0006-context-aware-navigation.md) | Context-aware navigation: continue, reactivate or create |
 | [0007](../decisions/0007-backward-branch-pruning.md) | Backward branch pruning (`db`, `dB`) and workspace undo |
 | [0008](../decisions/0008-opening-search-results.md) | Opening Fuzzy Find results in the workspace |
+| [0009](../decisions/0009-home-manager-stylix.md) | Home Manager module and Stylix theming |
 
 ## Spatial file manager: product decisions (approved 2026-11-09)
 

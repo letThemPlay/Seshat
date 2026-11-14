@@ -28,26 +28,32 @@
       stylix,
       ...
     }:
+    let
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+      argsFor = system: {
+        inherit
+          system
+          nixpkgs
+          home-manager
+          stylix
+          seshat
+          ;
+      };
+    in
     {
-      checks = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (
+      checks = nixpkgs.lib.genAttrs systems (
         system:
-        import ./checks.nix {
-          inherit
-            system
-            nixpkgs
-            home-manager
-            seshat
-            ;
-        }
-        // import ./stylix-checks.nix {
-          inherit
-            system
-            nixpkgs
-            home-manager
-            stylix
-            seshat
-            ;
-        }
+        import ./checks.nix (argsFor system)
+        // import ./stylix-checks.nix (argsFor system)
+        // import ./examples.nix (argsFor system)
       );
+
+      # The visual scenarios' theme files (scripts/ui/stylix-themes.sh).
+      packages = nixpkgs.lib.genAttrs systems (system: {
+        stylix-themes = import ./visual.nix (argsFor system);
+      });
     };
 }
