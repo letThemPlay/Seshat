@@ -13,6 +13,7 @@ Full ADRs live in [`docs/decisions/`](../decisions):
 | [0007](../decisions/0007-backward-branch-pruning.md) | Backward branch pruning (`db`, `dB`) and workspace undo |
 | [0008](../decisions/0008-opening-search-results.md) | Opening Fuzzy Find results in the workspace |
 | [0009](../decisions/0009-home-manager-stylix.md) | Home Manager module and Stylix theming |
+| [0010](../decisions/0010-releases.md) | Releases through a release pull request |
 
 ## Spatial file manager: product decisions (approved 2026-11-09)
 
@@ -190,7 +191,7 @@ From the design review (R5). Status-bar messages are typed `Notice` values forma
 
 ## Releases (plan approved 2026-11-15)
 
-See [releasing.md](../development/releasing.md). R1–R4 are delivered; the release workflows (release PR and publishing) and their ADR come next.
+See [releasing.md](../development/releasing.md) and [ADR 0010](../decisions/0010-releases.md). All delivered; the first release waits for the release App.
 
 | # | Topic | Decision |
 |---|---|---|
@@ -198,3 +199,6 @@ See [releasing.md](../development/releasing.md). R1–R4 are delivered; the rele
 | R2 | Changelog | Stays hand-written: pull requests add to `## Unreleased`, and a release renames that section to `## VERSION (DATE)`. Not generated from commits (release-please, release-plz and semantic-release all generate it, which is why none of them was chosen). |
 | R3 | Tooling | cargo-release, only for `cargo release version LEVEL` (the shared workspace version and `Cargo.lock`); the changelog and AppStream metadata are our own script, `scripts/release/prepare.sh`. 0.1.0's record was made consistent: the AppStream file listed it as released on 2026-11-07 and the changelog as unreleased; both now say 2026-11-07. |
 | R4 | Guarding the tool | cargo-release comes only from the dev shell (pinned by `flake.lock`). `prepare.sh` stops with any other series than the tested one, and `scripts/release/test.sh` runs a full release cycle in CI on every pull request, including `flake.lock` updates. |
+| R5 | Release PR | Started by hand (Actions → Prepare release) with a level or an exact version, and an optional dry run. The workflow runs `prepare.sh` on `main`, commits `chore(release): VERSION` on `release/vVERSION` and opens the PR with the release notes. The maintainer reviews and merges it; CI and branch protection apply as to any PR. |
+| R6 | The release App | A GitHub App owned by the maintainer, with Contents and Pull requests write access to this repository only (`RELEASE_APP_CLIENT_ID` variable, `RELEASE_APP_PRIVATE_KEY` secret). It opens the release PR, because PRs opened with `GITHUB_TOKEN` start no CI, and a personal token would act as the maintainer. The monthly `flake.lock` update uses it too when it is set up, so the release-script tests run on cargo-release upgrades (R4). |
+| R7 | Publishing | `publish-release.yml` runs on every push to `main` and acts only when the push changed the workspace version and that version has no tag (`to-publish.sh`): it creates the GitHub Release "Seshat VERSION" with the changelog section (`notes.sh`), which tags the merged commit `vVERSION`. Alpha, beta and rc are pre-releases and never "Latest". It uses `GITHUB_TOKEN` with `contents: write`; the bot never pushes to `main`. |

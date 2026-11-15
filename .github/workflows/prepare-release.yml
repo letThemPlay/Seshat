@@ -1,0 +1,103 @@
+name: Prepare release
+
+# Opens a release pull request (docs/development/releasing.md): runs
+# scripts/release/prepare.sh on main, commits the result as
+# "chore(release): VERSION" on release/vVERSION and opens a PR with the
+# release notes. Merging it publishes the release (publish-release.yml).
+#
+# Acts as the release GitHub App (RELEASE_APP_CLIENT_ID variable and
+# RELEASE_APP_PRIVATE_KEY secret), so CI runs on the PR it opens; PRs opened
+# with GITHUB_TOKEN don't trigger other workflows.
+
+on:
+  workflow_dispatch:
+    inputs:
+      level:
+        description: "Level: auto follows the commits (and stays on a pre-release's label)"
+        type: choice
+        default: auto
+        options: [auto, alpha, beta, rc, patch, minor, major, release]
+      version:
+        description: "Or an exact version, e.g. 0.3.0-alpha.1 (overrides the level)"
+        type: string
+        default: ""
+      dry-run:
+        description: "Only show the changes; open no PR"
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read # the App's token does the writing
+    steps:
+      - name: Release App token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0 # tags and history, for the automatic level
+          persist-credentials: false
+      - uses: $/.github/actions/setup
+        with:
+          cache-key: release
+
+      - name: Prepare
+        id: prepare
+        env:
+          LEVEL: ${{ inputs.level }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          target=${VERSION:-$LEVEL}
+          version=$(nix develop --command scripts/release/prepare.sh "$target" | tail -1)
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          git diff --stat
+          git diff -- CHANGELOG.md data/
+          nix develop --command scripts/release/notes.sh "$version" >"$RUNNER_TEMP/notes.md"
+
+      - name: Open the release pull request
+        if: ${{ !inputs.dry-run }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          VERSION: ${{ steps.prepare.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          api() {
+            curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" "$@"
+          }
+          bot_id=$(api "https://api.github.com/users/$APP_SLUG%5Bbot%5D" | jq -r .id)
+          git config user.name "$APP_SLUG[bot]"
+          git config user.email "$bot_id+$APP_SLUG[bot]@users.noreply.github.com"
+
+          branch="release/v$VERSION"
+          git switch -c "$branch"
+          git commit -qam "chore(release): $VERSION"
+          git push "https://x-access-token:$GH_TOKEN@github.com/$REPOSITORY.git" "$branch"
+
+          prerelease=""
+          if [[ "$VERSION" == *-* ]]; then prerelease=" It will be marked as a pre-release."; fi
+          body=$(printf '%s\n\n---\n\nMerging this PR tags `v%s` and publishes the GitHub Release with the notes above.%s\n' \
+            "$(cat "$RUNNER_TEMP/notes.md")" "$VERSION" "$prerelease")
+          jq -n --arg title "chore(release): $VERSION" --arg head "$branch" --arg body "$body" \
+            '{title: $title, head: $head, base: "main", body: $body}' |
+            api -X POST "https://api.github.com/repos/$REPOSITORY/pulls" --data @- |
+            jq -r '"Opened " + .html_url'

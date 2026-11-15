@@ -14,7 +14,9 @@ Every pull request into `main` runs the full test suite and the security scanner
 | `security.yml` | **CodeQL (rust)** / **CodeQL (actions)** | Code scanning of the Rust code (no build needed) and of the workflow files; results go to the Security tab |
 | | **Dependency review** | Fails PRs that add dependencies with known vulnerabilities (moderate or worse) |
 | | **Workflow security (zizmor)** | Static analysis of the workflows (pinning, injection, permissions); results go to the Security tab |
-| `update-flake-lock.yml` | monthly | Opens a PR updating `flake.lock` (Dependabot does not handle Nix) |
+| `update-flake-lock.yml` | monthly | Opens a PR updating `flake.lock` (Dependabot does not handle Nix), as the release App when it is set up so CI runs on it |
+| `prepare-release.yml` | by hand | Opens the release PR `chore(release): VERSION` as the release App ([releasing.md](releasing.md)) |
+| `publish-release.yml` | push to `main` | When the push changed the version: tags it and publishes the GitHub Release (pre-release for alpha, beta, rc) |
 | `dependabot.yml` | weekly | Grouped updates for Cargo dependencies and the SHA-pinned actions |
 
 `security.yml` also runs weekly, so newly published advisories surface without a code change.

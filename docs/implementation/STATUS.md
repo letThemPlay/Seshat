@@ -126,14 +126,14 @@ Status as of 2026-11-13, branch `main`.
 
 ## Releases
 
-Decisions R1–R4, [releasing.md](../development/releasing.md). **In progress:** the release tooling is done; the release workflows and the first release are next ([roadmap](ROADMAP.md#releases)).
+Decisions R1–R7, [ADR 0010](../decisions/0010-releases.md), [releasing.md](../development/releasing.md). **In progress:** the tooling and the workflows are done; the first release needs the release App, which only the maintainer can create ([roadmap](ROADMAP.md#releases)).
 
 | Requirement | Status | Evidence |
 |---|---|---|
 | Version, changelog and AppStream metadata updated together, with alpha, beta and rc pre-releases | ✅ Verified | `scripts/release/test.sh` (in CI): alpha → beta → rc → release, patch, minor, explicit versions and `auto` produce the exact versions, `Cargo.lock` entries, changelog sections and AppStream releases |
 | Refusals change nothing | ✅ Verified | `test.sh`: empty Unreleased, a version that isn't higher, an unknown label or level, an existing tag, another cargo-release series |
 | The version is recorded consistently | ✅ Verified | `scripts/release/check-versions.sh` in CI and `scripts/check.sh`; its failure cases in `test.sh` |
-| Automated release PR, tag and GitHub Release | ⏳ Not started | Phase 2 |
+| Automated release PR, tag and GitHub Release | 🟡 Built, not yet run | `prepare-release.yml`, `publish-release.yml` (actionlint and zizmor pedantic clean). What publishing decides is tested: `to-publish.sh` publishes a merged release PR once, and nothing for other pushes, tagged versions or a new branch; `notes.sh` gives the changelog section (`test.sh`). The workflows themselves run for the first time with `0.2.0-alpha.1` |
 
 ## Known gaps and follow-ups
 

@@ -1,0 +1,64 @@
+name: Publish release
+
+# When a push to main changes the workspace version (a merged release PR,
+# see prepare-release.yml), tags the merge as vVERSION and publishes the
+# GitHub Release with the version's changelog section, marked as a
+# pre-release for -alpha, -beta and -rc versions. Any other push does
+# nothing, and a version that is already tagged is never published again
+# (scripts/release/to-publish.sh; docs/development/releasing.md).
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the tag and the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the previous main and the tags
+          persist-credentials: false
+
+      # Plain shell: the release scripts read files and git, no Nix needed.
+      - name: Is this a release?
+        id: release
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          version=$(scripts/release/to-publish.sh "$BEFORE")
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          if [[ -n "$version" ]]; then
+            scripts/release/notes.sh "$version" >"$RUNNER_TEMP/notes.md"
+          fi
+
+      - name: Tag and publish
+        if: ${{ steps.release.outputs.version != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          COMMIT: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          prerelease=false
+          if [[ "$VERSION" == *-* ]]; then prerelease=true; fi
+          # Creating the release creates the tag at the merged commit.
+          jq -n --arg tag "v$VERSION" --arg commit "$COMMIT" --arg name "Seshat $VERSION" \
+            --rawfile body "$RUNNER_TEMP/notes.md" --argjson prerelease "$prerelease" \
+            '{tag_name: $tag, target_commitish: $commit, name: $name, body: $body,
+              prerelease: $prerelease, make_latest: (if $prerelease then "false" else "true" end)}' |
+            curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPOSITORY/releases" --data @- |
+            jq -r '"Published " + .html_url'

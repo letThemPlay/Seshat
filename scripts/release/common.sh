@@ -1,3 +1,4 @@
+# shellcheck shell=bash disable=SC2034  # sourced: the variables are used by the scripts
 # Shared by the release scripts (docs/development/releasing.md). Sourced,
 # not run. Every function reads the files of the repository in the current
 # directory.
