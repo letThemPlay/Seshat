@@ -104,6 +104,8 @@
             wayland-utils
             desktop-file-utils
             appstream
+            # Version bumps for releases (scripts/release, release.toml).
+            cargo-release
           ];
 
           # Fail loudly instead of silently falling back to X11/XWayland.

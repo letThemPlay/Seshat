@@ -1,7 +1,12 @@
 # Changelog
 
-## Unreleased: development
+Written by hand: every pull request describes what changes for users under **Unreleased**. A release turns that section into the release's own section ([releasing.md](docs/development/releasing.md)); versions follow [Semantic Versioning](https://semver.org), with `-alpha.N`, `-beta.N` and `-rc.N` pre-releases.
 
+## Unreleased
+
+### Home Manager, Stylix and development
+
+- **Release tooling:** `scripts/release/prepare.sh` prepares a release, alpha, beta and rc pre-releases included: it bumps the version with cargo-release and turns this changelog's Unreleased section and the AppStream metadata into the release's entries ([releasing.md](docs/development/releasing.md), decisions R1–R4). CI now checks that `Cargo.toml`, the changelog and the AppStream metadata agree on the version, and runs a whole release cycle on a throwaway copy. The changelog's three Unreleased sections are now one, and 0.1.0 is dated 2026-11-07 as in the AppStream metadata.
 - **Home Manager and Stylix guide:** [docs/home-manager](docs/home-manager/README.md) explains the module and the Stylix integration, with complete standalone Home Manager and NixOS examples. The test flake evaluates the examples exactly as they are and checks that the guide shows them verbatim. [ADR 0009](docs/decisions/0009-home-manager-stylix.md) records the design. A new UI script, `scripts/ui/stylix-themes.sh`, screenshots Seshat with the themes generated for the specification's five visual scenarios ([results](docs/development/verification-results/2026-11-14-stylix.md), awaiting the maintainer's review).
 - **Readable muted text from Stylix:** muted text (file types, dates, the status bar) now uses the scheme's `base04` instead of `base03`, Base16's faint comment colour, and secondary text (navigation labels, panel titles, the path bar) uses `base05` so it is never fainter than muted text (decision S9). To get dimmer secondary text back, set `programs.seshat.theme.colors.text_secondary` to `base04`.
 - **Stylix:** with Stylix imported and enabled, the Home Manager module themes Seshat from your Stylix colours, sans-serif font, application font size and polarity, and Seshat starts with that theme ([packaging.md](docs/packaging.md#stylix), decisions S8–S10). It is on when `stylix.autoEnable` is true. `programs.seshat.stylix.{colors,fonts,polarity}.enable` turn parts off, and your own `programs.seshat.theme` values win over Stylix's one by one. Enabling it without Stylix fails with an explanation. Stylix is only read while Home Manager evaluates the configuration; Seshat doesn't depend on it. Every background under the main text is the scheme's base00, so 282 of the 303 Base16 schemes in nixpkgs give a theme with no problems; the other 21 get Seshat's usual low-contrast warning, because their own text and background are below 4.5:1. The test flake now has Stylix as an input and 17 checks, including NixOS with Stylix's NixOS module.
@@ -11,7 +16,7 @@
 - **Checking themes:** `seshat --check-theme FILE` loads a theme exactly as Seshat would, without opening a window, prints every problem and exits with status 0 only if there are none.
 - **Conventional Commits:** commit messages and pull request titles now follow [Conventional Commits](docs/development/commits.md) (`fix(workspace): …`, `feat(fuzzy-find): …`). A new CI job, **Commit messages**, checks every commit of a pull request with `scripts/check-commits.sh`, which `scripts/check.sh` also runs locally. Dependabot and the flake update write messages in the same format. Earlier history is unchanged.
 
-## Unreleased: Fuzzy Find
+### Fuzzy Find
 
 Implements the [Fuzzy Find specification](docs/specifications/4-FUZZY-FIND.md), except operations on several results at once (§10), which wait for a later phase (F13). Design: [search.md](docs/architecture/search.md); decisions F1–F14 in [DECISIONS.md](docs/architecture/DECISIONS.md); opening results: [ADR 0008](docs/decisions/0008-opening-search-results.md).
 
@@ -26,7 +31,7 @@ Implements the [Fuzzy Find specification](docs/specifications/4-FUZZY-FIND.md), 
 - **Internal:** the design review's recommendations DR1–DR10 were carried out with no change in behaviour ([review](docs/review/architecture.md#patterns-and-principles-review-2026-11-11)). Fuzzy Find's search rules (what a query searches, when Enter opens a typed folder, when results name their branch) and its highlight now live in the application layer (`SearchTarget`, `ResultList`) instead of the overlay's controller, and repeated code in Fuzzy Find was merged, also with no change in behaviour.
 - **Tests:** 451 Rust tests and a third sandboxed UI test, `scripts/ui/fuzzy-find.sh` (38 checks). `scripts/ui/fuzzy-perf.sh` measures Fuzzy Find with the overlay in a release build.
 
-## Unreleased: spatial workspace
+### Spatial workspace
 
 - **Backward branch pruning** ([ADR 0007](docs/decisions/0007-backward-branch-pruning.md)): `db` removes the active panel from the end of its branch and goes back to its parent; `dB` goes back to where the branch meets another one (or to its first panel). Only panels no other branch uses are removed, and files are never touched. `u` undoes the last prune with every panel's state. Neither works in Focus Mode or Visual Mode; the status bar says why. Your own bindings for `d` or `u` keep working: the new defaults give way.
 - **Context-aware navigation** ([ADR 0006](docs/decisions/0006-context-aware-navigation.md)): `l`, like `Enter`, opens the folder under the cursor, and Seshat decides whether that continues the current branch, returns to the branch that already has that folder (where you left it, with its panels and state), or starts a new branch. Nothing is duplicated. The plain move to the next panel is now `L`. Folders renamed in place are followed; a folder replaced under the same name starts fresh. Sidebar locations reuse their existing branch. The saved workspace is format 2; older files still load. `/` now replaces a panel's remembered search instead of appending to it.
@@ -53,7 +58,7 @@ Implements the [spatial file manager specification](docs/specifications/1-SPATIA
   - Selections never include items hidden by a search filter.
 - **Tests:** 295 Rust tests (from 165) and a second sandboxed UI test, `scripts/ui/workspace.sh`, which walks the spec's definition of done.
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-07)
 
 First complete version, built in six phases (see `docs/specifications/0-INITIAL-PRODUCT-SPEC.md` §17).
 

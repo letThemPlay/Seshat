@@ -1,0 +1,10 @@
+# cargo-release configuration (docs/development/releasing.md).
+#
+# Seshat only uses `cargo release version LEVEL` to bump the shared
+# workspace version and Cargo.lock (scripts/release/prepare.sh). Tags,
+# the changelog, AppStream metadata and GitHub Releases are handled by our
+# own scripts and workflows, so a plain `cargo release` run is made
+# harmless: it publishes, tags and pushes nothing.
+publish = false
+tag = false
+push = false

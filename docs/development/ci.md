@@ -6,7 +6,7 @@ Every pull request into `main` runs the full test suite and the security scanner
 
 | Workflow | Job | What it does |
 |---|---|---|
-| `ci.yml` | **Checks** | `cargo fmt --check`, `clippy -D warnings`, `scripts/check-architecture.sh`, `cargo test --workspace` (including D-Bus tests on a private bus), `scripts/verify-wayland.sh` (headless Weston) |
+| `ci.yml` | **Checks** | `cargo fmt --check`, `clippy -D warnings`, `scripts/check-architecture.sh`, `scripts/release/check-versions.sh` and `scripts/release/test.sh` ([releasing.md](releasing.md)), `cargo test --workspace` (including D-Bus tests on a private bus), `scripts/verify-wayland.sh` (headless Weston) |
 | | **UI end-to-end** | Three sandboxed headless Sway sessions: `scripts/ui/file-operations.sh`, `scripts/ui/workspace.sh` and `scripts/ui/fuzzy-find.sh`. Screenshots and logs of each are uploaded as artifacts (`ui-e2e-artifacts`, `ui-e2e-workspace-artifacts`, `ui-e2e-fuzzy-artifacts`) when it fails |
 | | **Nix package** | `nix build .#seshat` (runs the suite again in the Nix sandbox), Wayland verification of the packaged binary, `nix flake check`, the Home Manager module checks (`nix flake check ./nix/tests`), desktop entry and AppStream validation |
 | | **Dependencies (cargo-deny)** | RustSec advisories, the license allow-list, banned and wildcard dependencies, crates.io-only sources (`deny.toml`) |

@@ -187,3 +187,14 @@ From the design review (R5). Status-bar messages are typed `Notice` values forma
 | # | Topic | Decision |
 |---|---|---|
 | T1 | The selected navigation item's colour | **Changes an established requirement, at the maintainer's request** (2026-11-14, during the Stylix integration). The selected navigation item has its own optional colour token, `navigation_selected`. Unset (the default, and in both built-in themes and the example themes), the stylesheet defines it as `@seshat_surface` itself, so the selected item still matches the content pane exactly and the two cannot drift apart. Set, the selected item uses it; the content pane and workspace panels keep `surface`. The 12px radius on all four corners stays fixed, and the selected item keeps its outline and accent icon. A set `navigation_selected` is contrast-checked like the other backgrounds. The original specification §6.3, §7.3 and §7.4 and the Stylix specification §6 were amended to match; existing theme files are unaffected. |
+
+## Releases (plan approved 2026-11-15)
+
+See [releasing.md](../development/releasing.md). R1–R4 are delivered; the release workflows (release PR and publishing) and their ADR come next.
+
+| # | Topic | Decision |
+|---|---|---|
+| R1 | Versions | Semantic Versioning, one version for every crate (`[workspace.package]`). Pre-releases are `-alpha.N`, `-beta.N` and `-rc.N` only. The first tagged release will be `0.2.0-alpha.1`; `v0.1.0` is tagged afterwards at its historical commit. |
+| R2 | Changelog | Stays hand-written: pull requests add to `## Unreleased`, and a release renames that section to `## VERSION (DATE)`. Not generated from commits (release-please, release-plz and semantic-release all generate it, which is why none of them was chosen). |
+| R3 | Tooling | cargo-release, only for `cargo release version LEVEL` (the shared workspace version and `Cargo.lock`); the changelog and AppStream metadata are our own script, `scripts/release/prepare.sh`. 0.1.0's record was made consistent: the AppStream file listed it as released on 2026-11-07 and the changelog as unreleased; both now say 2026-11-07. |
+| R4 | Guarding the tool | cargo-release comes only from the dev shell (pinned by `flake.lock`). `prepare.sh` stops with any other series than the tested one, and `scripts/release/test.sh` runs a full release cycle in CI on every pull request, including `flake.lock` updates. |

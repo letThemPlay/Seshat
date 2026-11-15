@@ -54,3 +54,13 @@ See [STATUS.md](STATUS.md) for detail.
 | 2. Home Manager module | `programs.seshat` with the package, a declarative theme and the wrapper; flake outputs; the test flake | ✅ Done |
 | 3. Stylix | Colours, fonts and polarity from Stylix, overrides, the assertion | ✅ Done |
 | 4. Documentation and verification | User guide with standalone and NixOS examples, ADR, visual checks with dark, light, high-contrast, custom-font and override schemes | ✅ Done (visual checks await the maintainer's review) |
+
+## Releases
+
+[releasing.md](../development/releasing.md), decisions R1–R4.
+
+| Phase | Scope | Status |
+|---|---|---|
+| 1. Release tooling | `scripts/release` (prepare, automatic level, consistency check, tests), cargo-release in the dev shell, a single `## Unreleased` changelog section | ✅ Done |
+| 2. Release workflows | "Prepare release" opens a release PR as a GitHub App; "Publish release" tags and creates the GitHub Release on merge; ADR 0010 | ⏳ Next |
+| 3. First release | Create the GitHub App; `0.2.0-alpha.1`; tag `v0.1.0` at its commit | ⏳ Planned (by the maintainer) |
