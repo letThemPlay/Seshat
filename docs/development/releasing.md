@@ -28,6 +28,8 @@ It commits, tags and pushes nothing. The level is one of:
 | `auto` | from the commits since the last tag (below) | the same label again: `0.2.0-alpha.2` |
 | an explicit version | any higher `X.Y.Z` or `X.Y.Z-alpha/beta/rc.N`, for example `0.3.0-alpha.1` to start the next minor version's pre-releases | |
 
+**Starting the pre-releases of a new minor or major version:** type the version, for example `0.2.0-alpha.1`. The `alpha`, `beta` and `rc` levels from a stable version bump the patch number: that is how the first release became `0.1.1-alpha.1` instead of the planned `0.2.0-alpha.1`.
+
 `auto` (`scripts/release/level.sh`) reads the [Conventional Commits](commits.md) since the last `v*` tag: a breaking change (`!` or `BREAKING CHANGE:`) gives `minor` below 1.0 and `major` from 1.0, a `feat` gives `minor`, and anything else `patch`. During a pre-release it repeats the label, so leaving a pre-release is always a deliberate choice.
 
 `prepare.sh` refuses, changing nothing, when:

@@ -126,14 +126,14 @@ Status as of 2026-11-13, branch `main`.
 
 ## Releases
 
-Decisions R1–R7, [ADR 0010](../decisions/0010-releases.md), [releasing.md](../development/releasing.md). **In progress:** the tooling and the workflows are done; the first release needs the release App, which only the maintainer can create ([roadmap](ROADMAP.md#releases)).
+Decisions R1–R7, [ADR 0010](../decisions/0010-releases.md), [releasing.md](../development/releasing.md). **Complete:** the tooling and the workflows are in use. `v0.1.0` is tagged at `959eb24`, and `v0.1.1-alpha.1` (2026-11-15) is the first release made by the workflows ([roadmap](ROADMAP.md#releases)).
 
 | Requirement | Status | Evidence |
 |---|---|---|
 | Version, changelog and AppStream metadata updated together, with alpha, beta and rc pre-releases | ✅ Verified | `scripts/release/test.sh` (in CI): alpha → beta → rc → release, patch, minor, explicit versions and `auto` produce the exact versions, `Cargo.lock` entries, changelog sections and AppStream releases |
 | Refusals change nothing | ✅ Verified | `test.sh`: empty Unreleased, a version that isn't higher, an unknown label or level, an existing tag, another cargo-release series |
 | The version is recorded consistently | ✅ Verified | `scripts/release/check-versions.sh` in CI and `scripts/check.sh`; its failure cases in `test.sh` |
-| Automated release PR, tag and GitHub Release | 🟡 Built, not yet run | `prepare-release.yml`, `publish-release.yml` (actionlint and zizmor pedantic clean). What publishing decides is tested: `to-publish.sh` publishes a merged release PR once, and nothing for other pushes, tagged versions or a new branch; `notes.sh` gives the changelog section (`test.sh`). The workflows themselves run for the first time with `0.2.0-alpha.1` |
+| Automated release PR, tag and GitHub Release | ✅ Verified | `prepare-release.yml` and `publish-release.yml` ran end to end for `0.1.1-alpha.1`: the release App opened the release PR, CI ran on it, and merging it tagged `v0.1.1-alpha.1` and published it as a pre-release, with `Cargo.toml`, the changelog and the AppStream metadata in step (actionlint and zizmor pedantic clean). What publishing decides is tested: `to-publish.sh` publishes a merged release PR once, and nothing for other pushes, tagged versions or a new branch; `notes.sh` gives the changelog section (`test.sh`). |
 
 ## Known gaps and follow-ups
 
