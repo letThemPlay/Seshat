@@ -191,11 +191,11 @@ From the design review (R5). Status-bar messages are typed `Notice` values forma
 
 ## Releases (plan approved 2026-11-15)
 
-See [releasing.md](../development/releasing.md) and [ADR 0010](../decisions/0010-releases.md). All delivered; the first release waits for the release App.
+See [releasing.md](../development/releasing.md) and [ADR 0010](../decisions/0010-releases.md). All delivered and in use: `v0.1.0` and the first release made by the workflows, `v0.1.1-alpha.1`, are tagged.
 
 | # | Topic | Decision |
 |---|---|---|
-| R1 | Versions | Semantic Versioning, one version for every crate (`[workspace.package]`). Pre-releases are `-alpha.N`, `-beta.N` and `-rc.N` only. The first tagged release will be `0.2.0-alpha.1`; `v0.1.0` is tagged afterwards at its historical commit. |
+| R1 | Versions | Semantic Versioning, one version for every crate (`[workspace.package]`). Pre-releases are `-alpha.N`, `-beta.N` and `-rc.N` only. `v0.1.0` is tagged at `959eb24` (PR #1, the end of the original specification's six phases), dated 2026-11-07 as before. The first release made by the workflows is `0.1.1-alpha.1` (2026-11-15). `0.2.0-alpha.1` was planned, but Prepare release ran with the `alpha` level, which from a stable version bumps the patch number (as documented); the maintainer kept it, because a published tag isn't withdrawn, and left the level behaviour as it is. The 0.2.0 pre-releases start with the explicit version `0.2.0-alpha.1`. |
 | R2 | Changelog | Stays hand-written: pull requests add to `## Unreleased`, and a release renames that section to `## VERSION (DATE)`. Not generated from commits (release-please, release-plz and semantic-release all generate it, which is why none of them was chosen). |
 | R3 | Tooling | cargo-release, only for `cargo release version LEVEL` (the shared workspace version and `Cargo.lock`); the changelog and AppStream metadata are our own script, `scripts/release/prepare.sh`. 0.1.0's record was made consistent: the AppStream file listed it as released on 2026-11-07 and the changelog as unreleased; both now say 2026-11-07. |
 | R4 | Guarding the tool | cargo-release comes only from the dev shell (pinned by `flake.lock`). `prepare.sh` stops with any other series than the tested one, and `scripts/release/test.sh` runs a full release cycle in CI on every pull request, including `flake.lock` updates. |
