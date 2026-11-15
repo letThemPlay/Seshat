@@ -83,7 +83,7 @@ Add Seshat's flake as an input, next to Home Manager and, if you use it, Stylix.
   programs.seshat = {
     enable = true;
     # Stylix fills in the theme. Your own values win, one by one:
-    theme.colors.text_muted = config.lib.stylix.colors.withHashtag.base04;
+    theme.colors.text_secondary = config.lib.stylix.colors.withHashtag.base04;
   };
 }
 ```
@@ -194,8 +194,8 @@ Stylix's Base16 colours become Seshat's colour tokens (decision S9):
 | `navigation_surface` | Navigation pane | `base00` |
 | `navigation_selected` | Selected navigation item | not set: follows `surface` |
 | `text_primary` | Main text | `base05` |
-| `text_secondary` | Secondary text | `base04` |
-| `text_muted` | File types, dates, hints | `base03` |
+| `text_secondary` | Navigation labels, panel titles, path bar | `base05` |
+| `text_muted` | File types, dates, status bar | `base04` |
 | `accent` | Selected-item icon, active panel, checked items | `base0D` |
 | `focus` | Keyboard focus outline | `base0D` |
 | `border` | Outlines, separators, connectors | `base02` |
@@ -205,7 +205,11 @@ Stylix's Base16 colours become Seshat's colour tokens (decision S9):
 | `warning` | Warnings | `base09` |
 | `success` | Success | `base0B` |
 
-Every background behind the main text is `base00`, the scheme's own text background, so the text keeps the contrast the scheme was designed with. Borders separate the areas, and the selected navigation item stands out by its 12px outline and accent icon. `base01`, `base06`, `base07`, `base0A`, `base0C`, `base0E` and `base0F` are not used. Warnings use orange (`base09`) because yellow is unreadable on light schemes.
+Every background behind the main text is `base00`, the scheme's own text background, so the text keeps the contrast the scheme was designed with. Borders separate the areas, and the selected navigation item stands out by its 12px outline and accent icon.
+
+Base16 has two text colours, `base05` and `base04`; `base03` is meant for comments and is too faint for text you need to read (it reaches 3:1 against `base00` in only 115 of the 303 schemes in nixpkgs, `base04` in 267). So muted text is `base04`, and secondary text is `base05` like the main text, so that it is never fainter than muted text. If you prefer dimmer secondary text, set it to `base04`, as the standalone example does.
+
+`base01`, `base03`, `base06`, `base07`, `base0A`, `base0C`, `base0E` and `base0F` are not used. Warnings use orange (`base09`) because yellow is unreadable on light schemes.
 
 ## Font mapping
 
@@ -230,7 +234,7 @@ Every value Stylix fills in can be replaced individually, without turning Stylix
 programs.seshat.theme = {
   name = "My Gruvbox";                 # shown in the theme menu
   colors.accent = "#fe8019";           # wins over Stylix's base0D
-  colors.text_muted = config.lib.stylix.colors.withHashtag.base04;
+  colors.text_secondary = config.lib.stylix.colors.withHashtag.base04;
   colors.border = null;                # Seshat's base theme instead of Stylix
   typography.font_size = 11;
   geometry.border_radius = 6;          # Stylix has no geometry; any theme key works
@@ -261,6 +265,6 @@ With `stylix.enable = false` and no `theme` of your own, Seshat is installed unw
 - **Restart to see a new theme.** The theme file is part of the wrapper, so after `home-manager switch` a running Seshat keeps its old theme until it is started again. A second launch while Seshat is running only opens a window in the running instance.
 - **Install Seshat only through the module.** Another, unwrapped `seshat` (for example from `environment.systemPackages`) may come first on `PATH` and start without the theme.
 - **Contrast follows the scheme.** 282 of the 303 Base16 schemes in nixpkgs give a theme with no problems. The other 21 have main text below 4.5:1 against their own background; Seshat still applies the theme, marks it ⚠ in the menu and says so in the status bar.
-- **Muted text can be faint.** `text_muted` is `base03`, Base16's colour for comments, which is faint on many light schemes. Set `programs.seshat.theme.colors.text_muted` (for example to `base04`, as in the standalone example) if you find it hard to read.
+- **Muted text follows the scheme's `base04`.** In 36 of the 303 schemes it is below 3:1 against `base00`. Seshat's contrast check only covers the main text, so it doesn't warn; set `programs.seshat.theme.colors.text_muted` if you find it hard to read.
 - **The title bar is not themed.** The window's GTK header bar keeps your desktop's GTK look, whatever the Seshat theme.
 - **Not every Stylix setting has a place in Seshat:** opacity, cursor, icons, wallpaper, and the colours and fonts listed as unused above.

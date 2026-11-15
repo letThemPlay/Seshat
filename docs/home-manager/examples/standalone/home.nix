@@ -13,6 +13,6 @@
   programs.seshat = {
     enable = true;
     # Stylix fills in the theme. Your own values win, one by one:
-    theme.colors.text_muted = config.lib.stylix.colors.withHashtag.base04;
+    theme.colors.text_secondary = config.lib.stylix.colors.withHashtag.base04;
   };
 }

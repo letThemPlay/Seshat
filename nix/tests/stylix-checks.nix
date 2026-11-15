@@ -42,8 +42,8 @@ let
       app_background = c.base00;
       navigation_surface = c.base00;
       text_primary = c.base05;
-      text_secondary = c.base04;
-      text_muted = c.base03;
+      text_secondary = c.base05;
+      text_muted = c.base04;
       accent = c.base0D;
       focus = c.base0D;
       border = c.base02;
