@@ -4,6 +4,8 @@ Written by hand: every pull request describes what changes for users under **Unr
 
 ## Unreleased
 
+## 0.1.1-alpha.1 (2026-11-15)
+
 ### Home Manager, Stylix and development
 
 - **Release workflows:** **Actions → Prepare release** opens a release pull request, `chore(release): VERSION`, with the version bumped and the release notes from this changelog; merging it tags `vVERSION` and publishes the GitHub Release, as a pre-release for alpha, beta and rc versions ([releasing.md](docs/development/releasing.md), [ADR 0010](docs/decisions/0010-releases.md)). The PR is opened by a GitHub App, so CI runs on it; the monthly `flake.lock` update uses the App too once it is set up.
