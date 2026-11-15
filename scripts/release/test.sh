@@ -101,7 +101,19 @@ check "  AppStream lists it as a stable release" \
 check "  every release so far is in AppStream, newest first" \
     test "$(grep -c '<release ' "$METAINFO")" = 6
 commit "chore(release): 0.2.0"
+
+echo "-- publishing (what the Publish release workflow runs)"
+publishes() { [[ "$(scripts/release/to-publish.sh "$1" 2>/dev/null)" == "$2" ]]; }
+check "the merged release PR publishes 0.2.0" publishes HEAD~1 0.2.0
+check "its notes are the changelog section" \
+    test "$(scripts/release/notes.sh 0.2.0)" = "- test change 4"
+check "a pre-release's notes too" test "$(scripts/release/notes.sh 0.2.0-beta.1)" = "- test change 2"
+check "no notes for a version that wasn't released" not scripts/release/notes.sh 0.9.0
 git tag v0.2.0
+check "once tagged, nothing more to publish" publishes HEAD~1 ""
+check "a push that keeps the version publishes nothing" publishes HEAD ""
+check "a new branch (no previous commit) publishes nothing" \
+    publishes 0000000000000000000000000000000000000000 ""
 
 echo "-- stable releases and the automatic level"
 check "auto after a release with no feat: patch" level_is patch

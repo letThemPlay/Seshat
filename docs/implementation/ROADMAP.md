@@ -62,5 +62,5 @@ See [STATUS.md](STATUS.md) for detail.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Release tooling | `scripts/release` (prepare, automatic level, consistency check, tests), cargo-release in the dev shell, a single `## Unreleased` changelog section | ✅ Done |
-| 2. Release workflows | "Prepare release" opens a release PR as a GitHub App; "Publish release" tags and creates the GitHub Release on merge; ADR 0010 | ⏳ Next |
-| 3. First release | Create the GitHub App; `0.2.0-alpha.1`; tag `v0.1.0` at its commit | ⏳ Planned (by the maintainer) |
+| 2. Release workflows | "Prepare release" opens a release PR as a GitHub App; "Publish release" tags and creates the GitHub Release on merge; ADR 0010 | ✅ Done (first run with the first release) |
+| 3. First release | Create the GitHub App; `0.2.0-alpha.1`; tag `v0.1.0` at its commit | ⏳ Next (by the maintainer) |
