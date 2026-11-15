@@ -948,7 +948,7 @@ dependencies = [
 
 [[package]]
 name = "seshat"
-version = "0.1.0"
+version = "0.1.1-alpha.1"
 dependencies = [
  "seshat-application",
  "seshat-domain",
@@ -960,7 +960,7 @@ dependencies = [
 
 [[package]]
 name = "seshat-application"
-version = "0.1.0"
+version = "0.1.1-alpha.1"
 dependencies = [
  "seshat-domain",
  "thiserror",
@@ -969,7 +969,7 @@ dependencies = [
 
 [[package]]
 name = "seshat-domain"
-version = "0.1.0"
+version = "0.1.1-alpha.1"
 dependencies = [
  "thiserror",
  "uuid",
@@ -977,7 +977,7 @@ dependencies = [
 
 [[package]]
 name = "seshat-infrastructure"
-version = "0.1.0"
+version = "0.1.1-alpha.1"
 dependencies = [
  "async-channel",
  "futures-util",
@@ -998,7 +998,7 @@ dependencies = [
 
 [[package]]
 name = "seshat-presentation"
-version = "0.1.0"
+version = "0.1.1-alpha.1"
 dependencies = [
  "gdk4-wayland",
  "gdk4-x11",
@@ -1012,7 +1012,7 @@ dependencies = [
 
 [[package]]
 name = "seshat-progress"
-version = "0.1.0"
+version = "0.1.1-alpha.1"
 dependencies = [
  "futures-util",
  "serde",
