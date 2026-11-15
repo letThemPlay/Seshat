@@ -124,6 +124,17 @@ Status as of 2026-11-13, branch `main`.
 |---|---|---|---|
 | 2026-11-14 | The selected navigation item gets its own optional colour, `navigation_selected` (original spec §6.3, §7.3, §7.4; Stylix spec §6; decision T1) | ✅ Verified | `selected_nav_follows_the_surface_token_by_default` (unset, it is `@seshat_surface` itself, in both built-in themes), `a_theme_can_give_the_selected_nav_item_its_own_colour` (12px kept, content pane unaffected), `the_selected_nav_item_follows_surface_unless_set`, `an_invalid_navigation_selected_falls_back_to_surface`, `its_own_selected_nav_colour_is_contrast_checked`; the Nix module accepts it (`theme` check passes `--check-theme`); screenshots with and without it checked by hand |
 
+## Releases
+
+Decisions R1–R4, [releasing.md](../development/releasing.md). **In progress:** the release tooling is done; the release workflows and the first release are next ([roadmap](ROADMAP.md#releases)).
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Version, changelog and AppStream metadata updated together, with alpha, beta and rc pre-releases | ✅ Verified | `scripts/release/test.sh` (in CI): alpha → beta → rc → release, patch, minor, explicit versions and `auto` produce the exact versions, `Cargo.lock` entries, changelog sections and AppStream releases |
+| Refusals change nothing | ✅ Verified | `test.sh`: empty Unreleased, a version that isn't higher, an unknown label or level, an existing tag, another cargo-release series |
+| The version is recorded consistently | ✅ Verified | `scripts/release/check-versions.sh` in CI and `scripts/check.sh`; its failure cases in `test.sh` |
+| Automated release PR, tag and GitHub Release | ⏳ Not started | Phase 2 |
+
 ## Known gaps and follow-ups
 
 1. **Performance follow-ups** from the [2026-11-09 run](../review/performance.md): the listing cache size (D13) for workspaces with many branches, and incremental model updates for live reloads of very large folders. Deferred (2026-11-09, R5): revisit only if needed.

@@ -24,7 +24,7 @@ Commit messages and pull request titles follow [Conventional Commits](https://ww
 | `test` | tests only |
 | `build` | Cargo, Nix, packaging, dependencies |
 | `ci` | GitHub workflows, Dependabot, CI scripts |
-| `chore` | anything else that changes no shipped behaviour (`.gitignore`, editor files) |
+| `chore` | anything else that changes no shipped behaviour (`.gitignore`, editor files); `chore(release): VERSION` for a release's version bump ([releasing.md](releasing.md)) |
 | `style` | formatting only |
 | `revert` | undoing an earlier commit |
 

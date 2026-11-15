@@ -7,6 +7,8 @@ scripts/check-architecture.sh          # layer dependency rules
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --workspace                 # unit + integration tests
+scripts/release/check-versions.sh      # Cargo.toml, changelog and AppStream agree on the version
+scripts/release/test.sh                # release scripts on a throwaway copy (releasing.md)
 scripts/verify-wayland.sh              # native Wayland verification (headless Weston)
 scripts/ui-session.sh scripts/ui/file-operations.sh [artifact-dir]   # UI end-to-end
 scripts/ui-session.sh scripts/ui/workspace.sh [artifact-dir]         # spatial workspace end-to-end

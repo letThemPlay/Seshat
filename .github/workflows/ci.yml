@@ -37,6 +37,10 @@ jobs:
         run: nix develop --command cargo clippy --all-targets --all-features -- -D warnings
       - name: Architecture rules
         run: nix develop --command scripts/check-architecture.sh
+      - name: Version recorded consistently
+        run: nix develop --command scripts/release/check-versions.sh
+      - name: Release scripts (with the pinned cargo-release)
+        run: nix develop --command scripts/release/test.sh
       - name: Tests (unit, integration, D-Bus on a private bus)
         run: nix develop --command cargo test --workspace
       - name: Native Wayland verification (headless Weston)
