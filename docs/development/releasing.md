@@ -39,7 +39,7 @@ It commits, tags and pushes nothing. The level is one of:
 ## Checks
 
 - `scripts/release/check-versions.sh` (CI, `scripts/check.sh`): the version in `Cargo.toml`, the newest release in the changelog and the newest `<release>` in the AppStream metadata must agree, and the changelog must have one `## Unreleased`.
-- `scripts/release/test.sh` (CI, `scripts/check.sh`): runs `prepare.sh` on a throwaway copy of the repository through a whole cycle (alpha, beta, rc, release, patch, minor, explicit versions, `auto`) and every refusal, checking the exact versions and files. It also checks what publishing does (`to-publish.sh`, `notes.sh`).
+- `scripts/release/test.sh` (CI, `scripts/check.sh`): runs `prepare.sh` on a throwaway copy of the repository, reset to a fixed starting point (0.1.0, released once) so the result doesn't depend on the real version, through a whole cycle (alpha, beta, rc, release, patch, minor, explicit versions, `auto`) and every refusal, checking the exact versions and files. It also checks what publishing does (`to-publish.sh`, `notes.sh`).
 
 ## Keeping cargo-release from changing under us
 

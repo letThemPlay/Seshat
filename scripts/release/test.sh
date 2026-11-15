@@ -16,6 +16,30 @@ mkdir "$WORK/repo"
 (cd "$ROOT" && git ls-files --cached --others --exclude-standard -z |
     tar --null --ignore-failed-read -T - -cf - 2>/dev/null) | tar -xf - -C "$WORK/repo"
 cd "$WORK/repo"
+
+# A fixed starting point, whatever the real project's version and
+# changelog are (a release PR's branch is already bumped): version 0.1.0,
+# released once, with one change waiting under Unreleased.
+sed -i '/^\[workspace\.package\]/,/^\[/s/^version = ".*"$/version = "0.1.0"/' Cargo.toml
+awk 'previous ~ /^name = "seshat(-[a-z]+)*"$/ && /^version = / { $0 = "version = \"0.1.0\"" }
+     { print; previous = $0 }' Cargo.lock >Cargo.lock.tmp
+mv Cargo.lock.tmp Cargo.lock
+cat >CHANGELOG.md <<'EOF'
+# Changelog
+
+## Unreleased
+
+- test change 0
+
+## 0.1.0 (2025-12-01)
+
+- the first release
+EOF
+awk '/^ *<releases>$/ { print; print "    <release version=\"0.1.0\" date=\"2025-12-01\"/>"; skip = 1; next }
+     /^ *<\/releases>$/ { skip = 0 }
+     !skip { print }' data/dev.kdmorris.Seshat.metainfo.xml >metainfo.tmp
+mv metainfo.tmp data/dev.kdmorris.Seshat.metainfo.xml
+
 git init -q
 git config user.name test
 git config user.email test@example.invalid
