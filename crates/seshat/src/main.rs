@@ -40,7 +40,12 @@ Options:
                       its problems and exit with status 0 only if it has none
   --check-backend     Connect to the display, print the detected backend and
                       exit with status 0 only if it is native Wayland
+  -V, --version       Show the version
   -h, --help          Show this help";
+
+/// The version, from `[workspace.package]` in Cargo.toml: the one every
+/// release records (docs/development/releasing.md).
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// What the command line asks for.
 #[derive(Debug, PartialEq, Eq)]
@@ -48,6 +53,7 @@ enum Command {
     Run { theme_file: Option<PathBuf> },
     CheckTheme(PathBuf),
     CheckBackend,
+    Version,
     Help,
 }
 
@@ -68,6 +74,7 @@ fn parse_args(args: &[String]) -> Option<Command> {
         [] => Command::Run { theme_file },
         ["--check-theme", file] => Command::CheckTheme(PathBuf::from(file)),
         ["--check-backend"] => Command::CheckBackend,
+        ["-V" | "--version"] => Command::Version,
         ["-h" | "--help"] => Command::Help,
         _ => return None,
     })
@@ -85,6 +92,10 @@ fn main() -> ExitCode {
         Some(Command::Run { theme_file }) => run_app(theme_file),
         Some(Command::CheckTheme(file)) => check_theme(file),
         Some(Command::CheckBackend) => check_backend(),
+        Some(Command::Version) => {
+            println!("seshat {VERSION}");
+            ExitCode::SUCCESS
+        }
         Some(Command::Help) => {
             println!("{USAGE}");
             ExitCode::SUCCESS
@@ -220,9 +231,21 @@ mod tests {
         };
         assert_eq!(wrapped(&["--check-backend"]), Some(Command::CheckBackend));
         assert_eq!(wrapped(&["--help"]), Some(Command::Help));
+        assert_eq!(wrapped(&["--version"]), Some(Command::Version));
         assert_eq!(
             wrapped(&["--check-theme", "/other.toml"]),
             Some(Command::CheckTheme("/other.toml".into()))
+        );
+    }
+
+    #[test]
+    fn version_has_a_short_and_a_long_form() {
+        assert_eq!(parse(&["-V"]), Some(Command::Version));
+        assert_eq!(parse(&["--version"]), Some(Command::Version));
+        assert_eq!(
+            parse(&["--version", "--help"]),
+            None,
+            "one command at a time"
         );
     }
 

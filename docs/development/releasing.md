@@ -1,6 +1,6 @@
 # Releasing
 
-Seshat's releases are numbered with [Semantic Versioning](https://semver.org). Stable releases are `X.Y.Z`; pre-releases add `-alpha.N`, `-beta.N` or `-rc.N` (`0.2.0-alpha.1 → 0.2.0-alpha.2 → 0.2.0-beta.1 → 0.2.0-rc.1 → 0.2.0`). All crates share one version, `[workspace.package] version` in `Cargo.toml`; the Nix package reads it from there.
+Seshat's releases are numbered with [Semantic Versioning](https://semver.org). Stable releases are `X.Y.Z`; pre-releases add `-alpha.N`, `-beta.N` or `-rc.N` (`0.2.0-alpha.1 → 0.2.0-alpha.2 → 0.2.0-beta.1 → 0.2.0-rc.1 → 0.2.0`). All crates share one version, `[workspace.package] version` in `Cargo.toml`; the Nix package reads it from there, and `seshat --version` prints it.
 
 ## The changelog
 
